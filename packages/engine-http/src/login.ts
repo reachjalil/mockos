@@ -13,6 +13,15 @@ const hidden = (name: string, value: string | undefined) =>
     ? ""
     : `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`;
 
+const favicon =
+  encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#14231f"/>
+  <circle cx="9.5" cy="11.5" r="5.5" fill="none" stroke="#f7f5ef" stroke-width="2.5"/>
+  <circle cx="22.5" cy="11.5" r="5.5" fill="none" stroke="#f7f5ef" stroke-width="2.5"/>
+  <path d="M15 11.5h2" fill="none" stroke="#f7f5ef" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M16 22c-3-2.5-7-3-10-1 2 4.5 6.5 5.5 10 3 3.5 2.5 8 1.5 10-3-3-2-7-1.5-10 1Z" fill="#f7f5ef"/>
+</svg>`);
+
 export const renderEntraLoginPage = (
   input: EntraAuthorizationRequest,
   options: { action: string; error?: string }
@@ -26,6 +35,7 @@ export const renderEntraLoginPage = (
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
+    <link rel="icon" href="data:image/svg+xml,${favicon}">
     <title>Sign in · mockOS test environment</title>
     <style>
       :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system,
@@ -68,8 +78,9 @@ export const renderEntraLoginPage = (
       <div class="brand" aria-label="mockOS">
         <svg viewBox="0 0 32 32" aria-hidden="true">
           <rect width="32" height="32" rx="7" fill="#14231f"></rect>
-          <circle cx="10" cy="12" r="6" fill="none" stroke="#f7f5ef" stroke-width="2.6"></circle>
-          <circle cx="22" cy="12" r="6" fill="none" stroke="#f7f5ef" stroke-width="2.6"></circle>
+          <circle cx="9.5" cy="11.5" r="5.5" fill="none" stroke="#f7f5ef" stroke-width="2.5"></circle>
+          <circle cx="22.5" cy="11.5" r="5.5" fill="none" stroke="#f7f5ef" stroke-width="2.5"></circle>
+          <path d="M15 11.5h2" fill="none" stroke="#f7f5ef" stroke-width="2.5" stroke-linecap="round"></path>
           <path d="M16 22c-3-2.5-7-3-10-1 2 4.5 6.5 5.5 10 3 3.5 2.5 8 1.5 10-3-3-2-7-1.5-10 1Z" fill="#f7f5ef"></path>
         </svg>
         <span class="wordmark">mockOS</span>

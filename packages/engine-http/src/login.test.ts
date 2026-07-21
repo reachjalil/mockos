@@ -20,6 +20,7 @@ describe("mockOS hosted login", () => {
     expect(html).toContain('aria-label="mockOS"');
     expect(html).toContain("Microsoft Entra ID simulation");
     expect(html).toContain("Never enter production credentials");
+    expect(html).toContain('<link rel="icon" href="data:image/svg+xml,');
     expect(html).toContain('aria-hidden="true">🥸</span> mockOS');
     expect(html).not.toContain('aria-label="Microsoft"');
     expect(html).not.toContain("mockOS.live");
