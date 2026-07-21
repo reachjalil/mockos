@@ -170,7 +170,10 @@ describe("Entra authorization-code flow", () => {
     expect(loginPage.status).toBe(200);
     expect(loginPage.headers.get("content-type")).toContain("text/html");
     const html = await loginPage.text();
-    expect(html).toContain("Sign in");
+    expect(html).toContain("Sign in · mockOS test environment");
+    expect(html).toContain('aria-label="mockOS"');
+    expect(html).toContain("Microsoft Entra ID simulation");
+    expect(html).toContain("Never enter production credentials");
     expect(html).toContain('name="code_challenge"');
 
     const loginAction = /<form method="post" action="([^"]+)">/.exec(html)?.[1];

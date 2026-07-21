@@ -1,6 +1,12 @@
-# mockOS
+<p align="center">
+  <img src="./assets/brand/mockos-mark.svg" width="112" alt="">
+</p>
 
-Deterministic Entra ID and Okta infrastructure for integration tests.
+<h1 align="center"><span aria-hidden="true">🥸</span> mockOS</h1>
+
+<p align="center"><strong>Mock identity infrastructure for integration tests.</strong></p>
+
+<p align="center">Deterministic Entra ID and Okta protocol surfaces for testing real integrations.</p>
 
 > **Project status:** the M0 substrate and narrow M1 Entra authorization-code slice
 > are implemented and tested locally. No hosted mockOS service, stable npm release,
@@ -66,7 +72,8 @@ and never persisted.
 Start at the [documentation index](./docs/README.md), then use
 [requirements traceability](./docs/requirements-traceability.md) and the
 [parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from
-evidence.
+evidence. The [brand guide](./docs/brand.md) defines the restrained use of 🥸 and the
+original vector assets.
 
 ## Contributing and security
 

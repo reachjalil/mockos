@@ -25,37 +25,59 @@ export const renderEntraLoginPage = (
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Sign in to your account</title>
+    <meta name="robots" content="noindex,nofollow">
+    <title>Sign in · mockOS test environment</title>
     <style>
-      :root { color-scheme: light; font-family: "Segoe UI", Arial, sans-serif; }
+      :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: #1b1b1b;
-        background: linear-gradient(135deg, #f3f2f1 0%, #e6f2fb 52%, #f8edfa 100%); }
-      main { width: min(440px, calc(100vw - 32px)); background: #fff; padding: 44px;
-        box-shadow: 0 2px 8px rgb(0 0 0 / 14%); }
-      .mark { display: grid; grid-template-columns: repeat(2, 11px); gap: 2px; width: 24px; }
-      .mark span { height: 11px; background: #f25022; }
-      .mark span:nth-child(2) { background: #7fba00; }
-      .mark span:nth-child(3) { background: #00a4ef; }
-      .mark span:nth-child(4) { background: #ffb900; }
-      h1 { font-size: 24px; font-weight: 600; margin: 28px 0 8px; }
-      .hint { margin: 0 0 24px; color: #605e5c; font-size: 14px; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: #14231f;
+        background: #eef2f0; padding: 24px; }
+      main { width: min(460px, 100%); background: #fff; padding: 40px; border: 1px solid #cdd5d1;
+        border-radius: 16px; box-shadow: 0 18px 50px rgb(20 35 31 / 10%); }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand svg { width: 40px; height: 40px; flex: 0 0 auto; }
+      .wordmark { font-size: 21px; font-weight: 750; letter-spacing: -.04em; }
+      .environment { margin-left: auto; border: 1px solid #b8cbc4; border-radius: 999px;
+        color: #2f6b5a; background: #f2f7f5; padding: 5px 9px; font-size: 10px;
+        font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+      .provider { margin: 30px 0 0; color: #2f6b5a; font-size: 12px; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase; }
+      h1 { font-size: 26px; font-weight: 700; letter-spacing: -.025em; margin: 8px 0; }
+      .hint { margin: 0 0 24px; color: #66736e; font-size: 14px; line-height: 1.5; }
       label { display: block; margin-top: 16px; font-size: 14px; }
       input[type="email"], input[type="text"], input[type="password"] { width: 100%; border: 0;
-        border-bottom: 1px solid #666; padding: 9px 2px; font: inherit; outline: none; }
-      input:focus { border-bottom: 2px solid #0067b8; }
-      button { display: block; margin: 28px 0 0 auto; border: 0; color: #fff; background: #0067b8;
-        padding: 9px 28px; font: inherit; cursor: pointer; }
-      button:hover { background: #005da6; }
-      .error { margin-top: 18px; color: #a4262c; font-size: 14px; }
-      footer { margin-top: 30px; color: #605e5c; font-size: 12px; }
+        border-bottom: 1px solid #87948f; padding: 10px 2px; font: inherit; outline: none; }
+      input:focus { border-bottom: 2px solid #2f6b5a; }
+      button { display: block; margin: 28px 0 0 auto; border: 0; border-radius: 7px; color: #fff;
+        background: #2f6b5a; padding: 10px 28px; font: inherit; font-weight: 650; cursor: pointer; }
+      button:hover { background: #245547; }
+      button:focus-visible { outline: 3px solid #2f6b5a; outline-offset: 3px; }
+      .error { margin-top: 18px; border-left: 3px solid #a53a3a; color: #7f2929;
+        background: #fcf4f3; padding: 10px 12px; font-size: 14px; }
+      footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid #e4e8e6;
+        color: #66736e; font-size: 12px; }
+      @media (max-width: 520px) {
+        body { padding: 0; background: #fff; }
+        main { min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; padding: 32px 24px; }
+      }
     </style>
   </head>
   <body>
     <main>
-      <div class="mark" aria-label="Microsoft"><span></span><span></span><span></span><span></span></div>
+      <div class="brand" aria-label="mockOS">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="7" fill="#14231f"></rect>
+          <circle cx="10" cy="12" r="6" fill="none" stroke="#f7f5ef" stroke-width="2.6"></circle>
+          <circle cx="22" cy="12" r="6" fill="none" stroke="#f7f5ef" stroke-width="2.6"></circle>
+          <path d="M16 22c-3-2.5-7-3-10-1 2 4.5 6.5 5.5 10 3 3.5 2.5 8 1.5 10-3-3-2-7-1.5-10 1Z" fill="#f7f5ef"></path>
+        </svg>
+        <span class="wordmark">mockOS</span>
+        <span class="environment">Test environment</span>
+      </div>
+      <p class="provider">Microsoft Entra ID simulation</p>
       <h1>Sign in</h1>
-      <p class="hint">Use a seeded mockOS identity. No credentials leave this environment.</p>
+      <p class="hint">Use a seeded mockOS identity. Never enter production credentials.</p>
       ${error}
       <form method="post" action="${escapeHtml(options.action)}">
         ${hidden("client_id", input.clientId)}
@@ -74,7 +96,7 @@ export const renderEntraLoginPage = (
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button type="submit">Sign in</button>
       </form>
-      <footer>mockOS.live · Entra ID test environment</footer>
+      <footer><span aria-hidden="true">🥸</span> mockOS · Synthetic identities only</footer>
     </main>
   </body>
 </html>`;

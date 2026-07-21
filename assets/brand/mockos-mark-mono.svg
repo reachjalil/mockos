@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">mockOS monochrome disguise mark</title>
+  <desc id="description">Geometric glasses and a moustache representing a mock identity.</desc>
+  <path d="M20 96h18m180 0h18" fill="none" stroke="#14231F" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="79" cy="98" r="41" fill="none" stroke="#14231F" stroke-width="14"/>
+  <circle cx="177" cy="98" r="41" fill="none" stroke="#14231F" stroke-width="14"/>
+  <path d="M120 98h16" fill="none" stroke="#14231F" stroke-width="12" stroke-linecap="round"/>
+  <path d="M128 164c-16-13-35-17-53-6 10 17 33 21 53 8 20 13 43 9 53-8-18-11-37-7-53 6Z" fill="#14231F"/>
+</svg>

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "renderer": "sharp@0.35.3",
+  "assets": [
+    {
+      "source": "assets/brand/mockos-mark.svg",
+      "output": "assets/brand/mockos-mark-512.png",
+      "width": 512,
+      "height": 512,
+      "sourceSha256": "77b552ea461d69e04e51c5057abb0cbc08b6f4b83a797d006c331a68b5d7a19a",
+      "outputSha256": "cde6335e57b4d203bf628aaf3e4496542a43ffe97a28783de9f4e3eb878a3001"
+    },
+    {
+      "source": "assets/brand/mockos-mark.svg",
+      "output": "assets/brand/mockos-mark-1024.png",
+      "width": 1024,
+      "height": 1024,
+      "sourceSha256": "77b552ea461d69e04e51c5057abb0cbc08b6f4b83a797d006c331a68b5d7a19a",
+      "outputSha256": "df232ea0695cb16a277a436b329efe0996d7ad1db148246ac97a0b57da4c305d"
+    },
+    {
+      "source": "assets/brand/mockos-social-card.svg",
+      "output": "assets/brand/mockos-social-card.png",
+      "width": 1280,
+      "height": 640,
+      "sourceSha256": "d0ef99560f91cfe7ab0ecbca5e5ce7628a10b51fa8e94e044cf9e674be2609b0",
+      "outputSha256": "7547e1042ebde728c0beedb6773daaef94d754e75f1e6ec4ebb78085b4020695"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ catalog:
   "@types/node": 26.1.1
   agents: 0.17.4
   hono: 4.12.31
+  sharp: 0.35.3
   turbo: 2.10.5
   typescript: 5.9.3
   vitest: 4.1.10

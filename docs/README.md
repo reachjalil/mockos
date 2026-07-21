@@ -1,4 +1,4 @@
-# mockOS documentation
+<h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
 Status: M0/M1 evidence index; no live deployment is claimed  
 Last reviewed: 2026-07-22
@@ -32,3 +32,4 @@ fixture alone.
   [provisioning cycle](./quickstarts/provisioning-cycle.md)
 - Agent interfaces: [MCP](./mcp.md) and [testing skill](./skill.md)
 - [Self-hosting](./self-hosting.md)
+- [Brand and asset usage](./brand.md)

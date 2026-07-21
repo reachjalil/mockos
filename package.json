@@ -2,7 +2,7 @@
   "name": "@mockos/workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Deterministic Entra ID and Okta identity infrastructure for integration tests.",
+  "description": "Mock identity infrastructure for integration tests.",
   "type": "module",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.30.2",
@@ -10,8 +10,10 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "brand:check": "node scripts/render-brand-assets.mjs --check",
+    "brand:render": "node scripts/render-brand-assets.mjs",
     "build": "turbo run build",
-    "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
+    "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm brand:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
     "dev": "pnpm --filter @mockos/worker dev",
     "docs:check": "node scripts/check-doc-status.mjs",
     "format": "biome format --write .",
@@ -27,11 +29,15 @@
     "@biomejs/biome": "catalog:",
     "@changesets/cli": "catalog:",
     "@types/node": "catalog:",
+    "sharp": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "pnpm": {
+    "overrides": {
+      "sharp": "0.35.3"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp",

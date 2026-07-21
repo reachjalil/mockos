@@ -1,4 +1,4 @@
-# 🥸 @mockos/cli
+<h1><span aria-hidden="true">🥸</span> @mockos/cli</h1>
 
 **Package-name reservation only.**
 

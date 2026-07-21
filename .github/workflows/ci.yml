@@ -36,6 +36,8 @@ jobs:
       - run: pnpm lint
       - name: Enforce documentation evidence headers
         run: node scripts/check-doc-status.mjs
+      - name: Verify brand asset manifest
+        run: pnpm brand:check
       - name: Enforce public dependency direction
         run: node scripts/check-public-dependencies.mjs
 
