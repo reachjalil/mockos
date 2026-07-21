@@ -1,7 +1,7 @@
 {
-  "name": "mockos",
+  "name": "@mockos/cli",
   "version": "0.0.1",
-  "description": "Reserved npm package for mockOS, mock identity infrastructure for integration tests.",
+  "description": "Reserved CLI package for mockOS, mock identity infrastructure for integration tests.",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Jalil Laaraichi",
@@ -9,12 +9,13 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/reachjalil/mockos.git",
-    "directory": "packages/mockos"
+    "directory": "packages/cli"
   },
   "bugs": {
     "url": "https://github.com/reachjalil/mockos/issues"
   },
   "keywords": [
+    "cli",
     "entra-id",
     "identity",
     "mock",
