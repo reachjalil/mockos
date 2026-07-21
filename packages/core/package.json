@@ -1,0 +1,23 @@
+{
+  "name": "@mockos/core",
+  "version": "0.0.0",
+  "description": "Runtime-independent deterministic identity engine.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Unsupported response mode",
+  "description": "AADSTS70007 documents unsupported response_mode behavior; wire text remains unverified-live.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/authorize",
+    "query": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "response_type": "code",
+      "redirect_uri": "https://client.example/callback",
+      "response_mode": "unsupported",
+      "scope": "openid",
+      "state": "state-08"
+    }
+  },
+  "expected": {
+    "status": 302
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@mockos/engine-http",
+  "version": "0.0.0",
+  "description": "Provider-accurate HTTP routers and hosted login pages.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@mockos/core": "workspace:*",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@mockos/testkit": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mockos:schema:conformance-fixture",
+  "title": "mockOS conformance fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "provider",
+    "area",
+    "request",
+    "expected",
+    "provenance",
+    "sourceUrl",
+    "lastVerified",
+    "status"
+  ],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "provider": { "enum": ["entra", "okta"] },
+    "area": {
+      "enum": ["oidc", "scim", "directory", "errors", "provisioning"]
+    },
+    "request": {
+      "type": "object",
+      "required": ["method", "path"],
+      "properties": {
+        "method": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^/" },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "query": { "type": "object", "additionalProperties": { "type": "string" } },
+        "form": { "type": "object", "additionalProperties": { "type": "string" } },
+        "body": true
+      },
+      "additionalProperties": false
+    },
+    "expected": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "body": true,
+        "bodyContains": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "enum": ["official-docs", "rfc", "sanitized-live-capture"]
+    },
+    "sourceUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "lastVerified": { "type": "string", "format": "date" },
+    "status": { "enum": ["documented", "implemented", "verified-live"] },
+    "notes": { "type": "string" }
+  }
+}

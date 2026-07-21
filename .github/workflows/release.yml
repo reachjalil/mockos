@@ -1,0 +1,52 @@
+name: Release packages (publishing gate)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: 24.11.1
+  PNPM_VERSION: 10.30.2
+
+jobs:
+  release:
+    name: Version or publish packages
+    if: vars.NPM_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Create version pull request or publish
+        uses: changesets/action@d94a5c301145045a0960133674e003b265942a22 # v1.8.0
+        with:
+          version: pnpm exec changeset version
+          publish: pnpm --recursive publish --access public --no-git-checks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Record publishing prerequisite
+        run: >-
+          printf '%s\n'
+          'This gate must remain disabled until @mockos scope ownership and npm
+          authentication are confirmed. Workflow presence is not evidence that any
+          package was published.'

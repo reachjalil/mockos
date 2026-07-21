@@ -1,0 +1,31 @@
+{
+  "name": "Reject redirect URI mismatch",
+  "description": "The redirect URI used for redemption must exactly match the one used to obtain the code.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+    "headers": {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    "form": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "grant_type": "authorization_code",
+      "code": "fixture-code-15",
+      "redirect_uri": "https://attacker.example/callback",
+      "client_secret": "fixture-secret"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "error": "invalid_grant"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

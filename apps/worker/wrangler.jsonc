@@ -1,0 +1,68 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mockos",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-07-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "send_metrics": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "HOSTING_MODE": "path",
+    "PATH_PREFIX": "/e",
+    "BASE_DOMAIN": "id.mockos.live",
+    "ENTRA_HOST": "login.id.mockos.live",
+    "PUBLIC_ORIGIN": "https://mockos.workers.dev",
+    "SENTRY_ENVIRONMENT": "production"
+  },
+  "secrets": {
+    "required": ["API_KEY"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ENVIRONMENTS",
+        "class_name": "EnvironmentDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-environment",
+      "new_sqlite_classes": ["EnvironmentDurableObject"]
+    }
+  ],
+  "env": {
+    "staging": {
+      "name": "mockos-staging",
+      "workers_dev": true,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "vars": {
+        "HOSTING_MODE": "path",
+        "PATH_PREFIX": "/e",
+        "BASE_DOMAIN": "id.mockos.live",
+        "ENTRA_HOST": "login.id.mockos.live",
+        "PUBLIC_ORIGIN": "https://mockos-staging.workers.dev",
+        "SENTRY_ENVIRONMENT": "staging"
+      },
+      "secrets": {
+        "required": ["API_KEY"]
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ENVIRONMENTS",
+            "class_name": "EnvironmentDurableObject"
+          }
+        ]
+      }
+    }
+  }
+}

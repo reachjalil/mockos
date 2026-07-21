@@ -1,0 +1,26 @@
+{
+  "name": "@mockos/worker-kit",
+  "version": "0.0.0",
+  "description": "Cloudflare Durable Object composition for mockOS.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@mockos/core": "workspace:*",
+    "@mockos/engine-http": "workspace:*",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

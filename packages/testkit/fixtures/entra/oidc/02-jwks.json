@@ -1,0 +1,21 @@
+{
+  "name": "Signing keys",
+  "description": "The discovery keys endpoint returns a JWKS object. The empty list is a fixture setup state, not an Entra default.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/00000000-0000-4000-8000-000000000001/discovery/v2.0/keys"
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "keys": []
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

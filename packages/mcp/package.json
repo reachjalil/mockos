@@ -1,0 +1,23 @@
+{
+  "name": "@mockos/mcp",
+  "version": "0.0.0",
+  "description": "Handler-agnostic MCP tool registry for mockOS.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

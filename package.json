@@ -1,0 +1,41 @@
+{
+  "name": "@mockos/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deterministic Entra ID and Okta identity infrastructure for integration tests.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.30.2",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
+    "dev": "pnpm --filter @mockos/worker dev",
+    "docs:check": "node scripts/check-doc-status.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "public-boundary:check": "node scripts/check-public-dependencies.mjs",
+    "test": "turbo run test",
+    "types": "turbo run types",
+    "worker:check": "node scripts/check-worker-wrangler.mjs --allow-workers-dev",
+    "worker:dry-run": "pnpm --filter @mockos/worker exec wrangler deploy --dry-run --env= --outdir .wrangler/dry-run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@types/node": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  }
+}

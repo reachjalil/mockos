@@ -1,0 +1,27 @@
+{
+  "name": "@mockos/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Self-hostable mockOS Cloudflare Worker.",
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --env= --outdir .wrangler/dry-run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "API_KEY=mockos-integration-test-key vitest run",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@mockos/worker-kit": "workspace:*",
+    "@sentry/cloudflare": "catalog:",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

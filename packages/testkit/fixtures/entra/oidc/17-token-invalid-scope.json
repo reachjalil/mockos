@@ -1,0 +1,30 @@
+{
+  "name": "Reject invalid token scope",
+  "description": "AADSTS70011 documents invalid scope.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+    "headers": {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    "form": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "grant_type": "client_credentials",
+      "client_secret": "fixture-secret",
+      "scope": "api://unknown/.default"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "error": "invalid_scope"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

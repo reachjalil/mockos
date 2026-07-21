@@ -1,0 +1,31 @@
+{
+  "name": "Redeem authorization code",
+  "description": "A valid confidential-client code redemption returns a bearer token response.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+    "headers": {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    "form": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "grant_type": "authorization_code",
+      "code": "fixture-code-11",
+      "redirect_uri": "https://client.example/callback",
+      "client_secret": "fixture-secret"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "token_type": "Bearer"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

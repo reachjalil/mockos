@@ -1,0 +1,25 @@
+{
+  "name": "Invalid authorization scope",
+  "description": "AADSTS70011 documents invalid scopes; the authorization endpoint reports redirect-safe errors through Location.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/authorize",
+    "query": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "response_type": "code",
+      "redirect_uri": "https://client.example/callback",
+      "scope": "not-a-resource/.invalid",
+      "state": "state-09"
+    }
+  },
+  "expected": {
+    "status": 302
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

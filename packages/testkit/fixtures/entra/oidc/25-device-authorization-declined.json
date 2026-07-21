@@ -1,0 +1,29 @@
+{
+  "name": "Device authorization declined",
+  "description": "The polling protocol reports authorization_declined when the user rejects the request.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+    "headers": {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    "form": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "device_code": "declined-device-25"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "error": "authorization_declined"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

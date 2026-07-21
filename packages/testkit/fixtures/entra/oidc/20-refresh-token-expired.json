@@ -1,0 +1,29 @@
+{
+  "name": "Reject expired refresh token",
+  "description": "AADSTS70008 documents expired or revoked grants.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/token",
+    "headers": {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    "form": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "grant_type": "refresh_token",
+      "refresh_token": "expired-refresh-20"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "error": "invalid_grant"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

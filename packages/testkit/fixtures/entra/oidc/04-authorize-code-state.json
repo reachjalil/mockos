@@ -1,0 +1,27 @@
+{
+  "name": "Authorization state round trip",
+  "description": "The authorization response preserves state; the Location value is asserted in the M1 engine integration test.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/00000000-0000-4000-8000-000000000001/oauth2/v2.0/authorize",
+    "query": {
+      "client_id": "00000000-0000-4000-8000-000000000002",
+      "response_type": "code",
+      "redirect_uri": "https://client.example/callback",
+      "scope": "openid",
+      "state": "opaque-state-04",
+      "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      "code_challenge_method": "S256"
+    }
+  },
+  "expected": {
+    "status": 200
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

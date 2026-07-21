@@ -1,0 +1,4 @@
+interface:
+  display_name: "mockOS Testing"
+  short_description: "Test identity integrations with mockOS"
+  default_prompt: "Use $mockos-testing to test my app against deterministic Entra ID and Okta identity scenarios."

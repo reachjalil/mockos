@@ -1,0 +1,21 @@
+{
+  "name": "Discovery document",
+  "description": "The tenant-scoped authority exposes an OpenID Provider Configuration document.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/00000000-0000-4000-8000-000000000001/v2.0/.well-known/openid-configuration"
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "issuer": "https://login.mockos.test/00000000-0000-4000-8000-000000000001/v2.0"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

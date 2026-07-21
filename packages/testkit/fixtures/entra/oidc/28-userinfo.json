@@ -1,0 +1,24 @@
+{
+  "name": "UserInfo bearer request",
+  "description": "Microsoft Graph UserInfo returns standard identity claims for an access token with OIDC scopes.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/oidc/userinfo",
+    "headers": {
+      "authorization": "Bearer fixture-access-token-28"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "sub": "fixture-subject-28"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/userinfo",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}

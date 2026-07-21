@@ -1,0 +1,18 @@
+{
+  "name": "UserInfo requires bearer token",
+  "description": "UserInfo is a bearer-token API. Error-body fidelity remains an M1 verification item.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/oidc/userinfo"
+  },
+  "expected": {
+    "status": 401
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/userinfo",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+}
