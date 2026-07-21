@@ -1,0 +1,51 @@
+{
+  "name": "mockos",
+  "version": "0.0.1",
+  "description": "Reserved npm package for mockOS, mock identity infrastructure for integration tests.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Jalil Laaraichi",
+  "homepage": "https://github.com/reachjalil/mockos#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reachjalil/mockos.git",
+    "directory": "packages/mockos"
+  },
+  "bugs": {
+    "url": "https://github.com/reachjalil/mockos/issues"
+  },
+  "keywords": [
+    "entra-id",
+    "identity",
+    "mock",
+    "oauth2",
+    "oidc",
+    "okta",
+    "scim",
+    "testing"
+  ],
+  "sideEffects": false,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepublishOnly": "node --check index.js"
+  }
+}
