@@ -3,6 +3,7 @@ import {
   SCIM_CORE_GROUP_SCHEMA,
   SCIM_CORE_USER_SCHEMA,
   SCIM_ENTERPRISE_USER_SCHEMA,
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_PATCH_OP_SCHEMA,
 } from "@mockos/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -81,6 +82,7 @@ const serviceFor = async (provider: "entra" | "okta") => {
       groups: engine.groups,
       lifecycle: engine.lifecycle,
       provider: engine.provider,
+      scenarios: engine.scenarios,
     }),
   };
 };
@@ -475,5 +477,179 @@ describe("SCIM persistence service mutations", () => {
       lifecycleState: "deleted",
       resourceVersion: 2,
     });
+  });
+});
+
+describe("M6 deterministic SCIM edge scenarios", () => {
+  it("returns a replay-safe 409 conflict without partially applying a mixed patch", async () => {
+    const { engine, service } = await serviceFor("entra");
+    const created = await service.createUser(
+      {
+        schemas: [SCIM_CORE_USER_SCHEMA],
+        userName: "conflict@example.test",
+        displayName: "Before conflict",
+      },
+      baseUrl
+    );
+    engine.setScenario({
+      id: "scim-conflict-once",
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+      action: { type: "scim_conflict" },
+      probability: 1,
+      remaining: 1,
+      enabled: true,
+    });
+    const patch = {
+      schemas: [SCIM_PATCH_OP_SCHEMA] as [typeof SCIM_PATCH_OP_SCHEMA],
+      Operations: [
+        { op: "replace" as const, path: "displayName", value: "After conflict" },
+        { op: "replace" as const, path: "active", value: false },
+      ],
+    };
+
+    await expect(
+      service.patchUser(created.resource.id, patch, 'W/"1"', baseUrl)
+    ).rejects.toMatchObject({ status: 409, scimType: "uniqueness" });
+    expect(engine.users.requireById(created.resource.id)).toMatchObject({
+      displayName: "Before conflict",
+      lifecycleState: "active",
+      resourceVersion: 1,
+    });
+
+    await expect(
+      service.patchUser(created.resource.id, patch, 'W/"1"', baseUrl)
+    ).resolves.toMatchObject({
+      etag: 'W/"2"',
+      resource: { displayName: "After conflict", active: false },
+    });
+  });
+
+  it("serializes a soft-delete race and concurrent replay into one fail-closed state", async () => {
+    const { engine, service } = await serviceFor("entra");
+    const created = await service.createUser(
+      {
+        schemas: [SCIM_CORE_USER_SCHEMA],
+        userName: "race@example.test",
+        displayName: "Before race",
+      },
+      baseUrl
+    );
+    const group = await service.createGroup(
+      {
+        schemas: [SCIM_CORE_GROUP_SCHEMA],
+        displayName: "Race members",
+        members: [{ value: created.resource.id }],
+      },
+      baseUrl
+    );
+    engine.setScenario({
+      id: "scim-soft-delete-once",
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+      action: { type: "scim_soft_delete_race" },
+      probability: 1,
+      remaining: 1,
+      enabled: true,
+    });
+    const patch = {
+      schemas: [SCIM_PATCH_OP_SCHEMA] as [typeof SCIM_PATCH_OP_SCHEMA],
+      Operations: [
+        { op: "replace" as const, path: "displayName", value: "Partial write" },
+      ],
+    };
+
+    const outcomes = await Promise.allSettled([
+      service.patchUser(created.resource.id, patch, 'W/"1"', baseUrl),
+      service.patchUser(created.resource.id, patch, 'W/"1"', baseUrl),
+    ]);
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) {
+      expect(outcome.status).toBe("rejected");
+      if (outcome.status === "rejected") {
+        expect(outcome.reason).toMatchObject({ status: 404 });
+      }
+    }
+    expect(engine.users.requireById(created.resource.id)).toMatchObject({
+      userName: "race@example.test",
+      displayName: "Before race",
+      lifecycleState: "deleted",
+      resourceVersion: 2,
+    });
+    expect(engine.groups.requireById(group.resource.id)).toMatchObject({
+      displayName: "Race members",
+      resourceVersion: 2,
+    });
+    expect(engine.groups.listMembers(group.resource.id)).toEqual([]);
+    expect(service.getUser(created.resource.id, baseUrl)).toBeUndefined();
+  });
+
+  it("rejects a stale precondition before consuming or applying a delete race", async () => {
+    const { engine, service } = await serviceFor("okta");
+    const created = await service.createUser(
+      {
+        schemas: [SCIM_CORE_USER_SCHEMA],
+        userName: "stale-race@example.test",
+        displayName: "Stale race",
+      },
+      baseUrl
+    );
+    engine.setScenario({
+      id: "stale-soft-delete-once",
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+      action: { type: "scim_soft_delete_race" },
+      probability: 1,
+      remaining: 1,
+      enabled: true,
+    });
+    const patch = {
+      schemas: [SCIM_PATCH_OP_SCHEMA] as [typeof SCIM_PATCH_OP_SCHEMA],
+      Operations: [
+        { op: "replace" as const, path: "displayName", value: "Must not persist" },
+      ],
+    };
+
+    await expect(
+      service.patchUser(created.resource.id, patch, 'W/"9"', baseUrl)
+    ).rejects.toMatchObject({ status: 412 });
+    expect(engine.users.requireById(created.resource.id)).toMatchObject({
+      displayName: "Stale race",
+      lifecycleState: "active",
+      resourceVersion: 1,
+    });
+    expect(engine.scenarios.list()).toEqual([
+      expect.objectContaining({
+        id: "stale-soft-delete-once",
+        enabled: true,
+        remaining: 1,
+      }),
+    ]);
+
+    await expect(
+      service.patchUser(created.resource.id, patch, 'W/"1"', baseUrl)
+    ).rejects.toMatchObject({ status: 404 });
+    expect(engine.users.requireById(created.resource.id)).toMatchObject({
+      displayName: "Stale race",
+      lifecycleState: "deleted",
+      resourceVersion: 2,
+    });
+  });
+
+  it("denies a soft-delete race on create without inserting a resource", async () => {
+    const { engine, service } = await serviceFor("okta");
+    engine.setScenario({
+      id: "invalid-create-race",
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+      action: { type: "scim_soft_delete_race" },
+      probability: 1,
+      remaining: 1,
+      enabled: true,
+    });
+
+    await expect(
+      service.createGroup(
+        { schemas: [SCIM_CORE_GROUP_SCHEMA], displayName: "Must not exist" },
+        baseUrl
+      )
+    ).rejects.toMatchObject({ status: 409, scimType: "uniqueness" });
+    expect(engine.groups.list({ includeDeleted: true })).toEqual([]);
   });
 });

@@ -217,6 +217,40 @@ export class LifecycleService {
     return this.apply(userId, action, precondition);
   }
 
+  /**
+   * Internal SCIM race seam. A competing storage-level delete must tombstone the
+   * User, remove memberships, bump affected Groups, and revoke credentials in the
+   * single repository transaction even when the provider's normal API sequence has
+   * an intermediate state (for example Okta deprovision-then-delete).
+   */
+  applyConcurrentSoftDelete(
+    userId: string,
+    precondition?: VersionPrecondition
+  ): LifecycleResult {
+    const current = this.#users.requireById(userId);
+    const previousState = directoryUserStateSchema.parse(current.lifecycleState);
+    let revoked = { accessTokens: 0, refreshTokens: 0 };
+    const mutation = this.#users.transitionLifecycle(
+      userId,
+      "deleted",
+      precondition,
+      () => {
+        revoked = this.#revokeTokens(userId);
+      }
+    );
+    return {
+      userId,
+      provider: this.#provider,
+      action: "delete",
+      previousState,
+      currentState: mutation.record.lifecycleState,
+      changed: mutation.changed,
+      version: mutation.record.resourceVersion,
+      etag: scimWeakEtag(mutation.record.resourceVersion),
+      revoked,
+    };
+  }
+
   #revokeTokens(userId: string): { accessTokens: number; refreshTokens: number } {
     const now = this.#clock.now().toISOString();
     const accessTokens = Number(

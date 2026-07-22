@@ -138,6 +138,7 @@ const executeScimFixture = async (fixture: ConformanceFixture) => {
       lifecycle: engine.lifecycle,
       provider: engine.provider,
       dialect: engine.provider.scimDialect,
+      scenarios: engine.scenarios,
     });
     const response = await createScimHttpApp(service).fetch(fixtureRequest(fixture));
     return {

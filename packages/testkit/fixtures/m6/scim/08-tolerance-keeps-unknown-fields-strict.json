@@ -1,0 +1,30 @@
+{
+  "name": "m6-scim-tolerance-keeps-unknown-fields-strict",
+  "description": "Selecting missing_schemas does not discard an unrelated unknown top-level field.",
+  "provider": "okta",
+  "resourceType": "User",
+  "scenario": {
+    "id": "missing-schema-not-unknown-fields",
+    "injectionPoint": "scim.patch_parse",
+    "action": { "type": "scim_patch_tolerance", "malformedCase": "missing_schemas" },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "Operations": [
+        { "op": "replace", "path": "displayName", "value": "Must not persist" }
+      ],
+      "unexpected": true
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": { "status": "400", "scimType": "invalidValue" },
+    "stored": {
+      "displayName": "Before edge case",
+      "resourceVersion": 1,
+      "deleted": false
+    }
+  }
+}

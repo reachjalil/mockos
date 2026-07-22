@@ -1,5 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
+  SCIM_PATCH_PARSE_INJECTION_POINT,
   type AssertionSpec,
   type RequestLogEntry,
   scenarioSpecSchema,
@@ -156,6 +158,15 @@ describe("scenario service", () => {
       })
     );
 
+    expect(service.decideExact(SCIM_BEFORE_COMMIT_INJECTION_POINT)).toEqual({
+      type: "pass",
+    });
+    expect(
+      store.get<{ evaluations: number }>(
+        "SELECT evaluations FROM scenarios WHERE id = 'catch-all'"
+      )
+    ).toEqual({ evaluations: 0 });
+
     expect(service.decide("oauth.token", { clientId: "client" })).toEqual({
       type: "error",
       scenarioId: "exact",
@@ -260,6 +271,47 @@ describe("scenario service", () => {
         "SELECT evaluations, remaining, enabled FROM scenarios WHERE id = 'once'"
       )
     ).toEqual({ evaluations: 1, remaining: 0, enabled: 0 });
+  });
+
+  it("persists typed SCIM decisions and disables one-shot replays", () => {
+    const { service } = scenarioService("scim-edge-decisions");
+    service.set(
+      scenarioSpecSchema.parse({
+        id: "soft-delete-once",
+        injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+        action: { type: "scim_soft_delete_race" },
+        remaining: 1,
+      })
+    );
+    service.set(
+      scenarioSpecSchema.parse({
+        id: "missing-schemas-once",
+        injectionPoint: SCIM_PATCH_PARSE_INJECTION_POINT,
+        action: {
+          type: "scim_patch_tolerance",
+          malformedCase: "missing_schemas",
+        },
+        remaining: 1,
+      })
+    );
+
+    expect(service.decide(SCIM_BEFORE_COMMIT_INJECTION_POINT)).toEqual({
+      type: "scim_soft_delete_race",
+      scenarioId: "soft-delete-once",
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+    });
+    expect(service.decide(SCIM_BEFORE_COMMIT_INJECTION_POINT)).toEqual({
+      type: "pass",
+    });
+    expect(service.decide(SCIM_PATCH_PARSE_INJECTION_POINT)).toEqual({
+      type: "scim_patch_tolerance",
+      scenarioId: "missing-schemas-once",
+      injectionPoint: SCIM_PATCH_PARSE_INJECTION_POINT,
+      malformedCase: "missing_schemas",
+    });
+    expect(service.decide(SCIM_PATCH_PARSE_INJECTION_POINT)).toEqual({
+      type: "pass",
+    });
   });
 
   it("rejects delays and serialized mutation patches above defensive caps", () => {

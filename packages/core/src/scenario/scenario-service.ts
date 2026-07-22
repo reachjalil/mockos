@@ -1,4 +1,5 @@
 import {
+  type ScimPatchToleranceCase,
   type ScenarioSpec,
   scenarioSpecSchema,
   type SemanticErrorCode,
@@ -26,6 +27,17 @@ export type ScenarioDecision =
       readonly scenarioId: string;
       readonly injectionPoint: string;
       readonly patch: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly type: "scim_conflict" | "scim_soft_delete_race";
+      readonly scenarioId: string;
+      readonly injectionPoint: string;
+    }
+  | {
+      readonly type: "scim_patch_tolerance";
+      readonly scenarioId: string;
+      readonly injectionPoint: string;
+      readonly malformedCase: ScimPatchToleranceCase;
     };
 
 type ScenarioRow = SqlRow & {
@@ -173,13 +185,29 @@ export class ScenarioService {
     injectionPoint: string,
     _context: Readonly<Record<string, unknown>> = {}
   ): ScenarioDecision {
+    return this.#decide(injectionPoint, true);
+  }
+
+  /** Reserved internal seams use exact-only evaluation and never consume `*`. */
+  decideExact(
+    injectionPoint: string,
+    _context: Readonly<Record<string, unknown>> = {}
+  ): ScenarioDecision {
+    return this.#decide(injectionPoint, false);
+  }
+
+  #decide(injectionPoint: string, includeCatchAll: boolean): ScenarioDecision {
     if (!injectionPoint || injectionPoint.length > 128) {
       throw new Error("Injection point must contain 1 to 128 characters.");
     }
     return this.#store.transaction(() => {
       const rows = this.#store.all<ScenarioRow>(
         `${selectScenarios}
-         WHERE enabled = 1 AND (injection_point = ? OR injection_point = '*')
+         WHERE enabled = 1 AND ${
+           includeCatchAll
+             ? "(injection_point = ? OR injection_point = '*')"
+             : "injection_point = ?"
+}
          ORDER BY CASE WHEN injection_point = ? THEN 0 ELSE 1 END,
            created_at, id`,
         injectionPoint,
@@ -228,6 +256,10 @@ export class ScenarioService {
               type: "mutate",
               patch: { ...spec.action.patch },
             };
+          case "scim_conflict":
+          case "scim_soft_delete_race":
+          case "scim_patch_tolerance":
+            return { ...common, ...spec.action };
         }
       }
       return { type: "pass" };

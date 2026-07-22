@@ -1,0 +1,30 @@
+{
+  "name": "m6-scim-soft-delete-group-race",
+  "description": "A Group PATCH that loses a soft-delete race returns 404 with only the tombstone committed.",
+  "provider": "okta",
+  "resourceType": "Group",
+  "scenario": {
+    "id": "group-soft-delete-once",
+    "injectionPoint": "scim.before_commit",
+    "action": { "type": "scim_soft_delete_race" },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Groups/grp_edge",
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        { "op": "replace", "path": "displayName", "value": "Must not persist" }
+      ]
+    }
+  },
+  "expected": {
+    "status": 404,
+    "bodyContains": { "status": "404" },
+    "stored": {
+      "displayName": "Before edge group",
+      "resourceVersion": 2,
+      "deleted": true
+    }
+  }
+}

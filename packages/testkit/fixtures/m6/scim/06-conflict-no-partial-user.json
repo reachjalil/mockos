@@ -1,0 +1,31 @@
+{
+  "name": "m6-scim-conflict-no-partial-user",
+  "description": "A deterministic uniqueness race returns 409 before any User field commits.",
+  "provider": "entra",
+  "resourceType": "User",
+  "scenario": {
+    "id": "user-conflict-once",
+    "injectionPoint": "scim.before_commit",
+    "action": { "type": "scim_conflict" },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        { "op": "replace", "path": "displayName", "value": "Must not persist" },
+        { "op": "replace", "path": "active", "value": false }
+      ]
+    }
+  },
+  "expected": {
+    "status": 409,
+    "bodyContains": { "status": "409", "scimType": "uniqueness" },
+    "stored": {
+      "displayName": "Before edge case",
+      "resourceVersion": 1,
+      "deleted": false
+    }
+  }
+}
