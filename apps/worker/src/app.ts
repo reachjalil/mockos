@@ -121,7 +121,7 @@ const serveMcp = async (context: Context<WorkerHonoEnv>) => {
   // the originating POST. Decline the optional stream so every response stays
   // attached to its request. Clients treat 405 as the specified fallback.
   if (context.req.method === "GET") {
-    return context.body(null, 405, { allow: "POST, DELETE" });
+    return context.body(null, 405, { allow: "POST, DELETE, OPTIONS" });
   }
   return mcpHandler.fetch(
     withoutControlCredentials(context.req.raw),

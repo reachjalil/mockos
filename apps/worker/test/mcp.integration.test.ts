@@ -155,7 +155,7 @@ describe("management MCP", () => {
     });
 
     expect(response.status).toBe(405);
-    expect(response.headers.get("allow")).toBe("POST, DELETE");
+    expect(response.headers.get("allow")).toBe("POST, DELETE, OPTIONS");
   });
 
   it("keeps reserved and deleting catalog entries out of active listings", async () => {

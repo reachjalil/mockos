@@ -58,8 +58,14 @@ export class McpToolClient implements ToolClient {
   async close(): Promise<void> {
     if (!this.#started) return;
     this.#started = false;
-    this.#connected = false;
-    await this.#client.close();
+    try {
+      if (this.#transport.sessionId) {
+        await this.#transport.terminateSession();
+      }
+    } finally {
+      this.#connected = false;
+      await this.#client.close();
+    }
   }
 
   async listTools(): Promise<ToolDescription[]> {
