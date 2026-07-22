@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   jwtParts,
+  requireActiveWorkerVersion,
   requireNoSecretLeak,
+  requireSingleActiveWorkerVersion,
   requireTrustedGroupFallback,
+  resolveTaggedWorkerVersion,
   verifyJwtSignature,
 } from "./smoke-worker-helpers.mjs";
 
@@ -77,5 +80,52 @@ test("redaction sentinel helper fails closed on a leaked secret", () => {
   assert.throws(
     () => requireNoSecretLeak("SyntheticSecret", ["SyntheticSecret"], "log"),
     /exposed a synthetic secret sentinel/
+  );
+});
+
+test("deployment evidence resolves one exact tag and requires 100% active traffic", () => {
+  const versions = [
+    { id: "version-old", annotations: { "workers/tag": "old" } },
+    { id: "version-m6", annotations: { "workers/tag": "m6-run" } },
+  ];
+  assert.equal(resolveTaggedWorkerVersion(versions, "m6-run"), "version-m6");
+  assert.throws(
+    () =>
+      resolveTaggedWorkerVersion(
+        [...versions, { id: "duplicate", annotations: { "workers/tag": "m6-run" } }],
+        "m6-run"
+      ),
+    /exactly one/
+  );
+  assert.equal(
+    requireSingleActiveWorkerVersion({
+      versions: [{ version_id: "version-old", percentage: 100 }],
+    }),
+    "version-old"
+  );
+  assert.equal(
+    requireActiveWorkerVersion(
+      { versions: [{ version_id: "version-m6", percentage: 100 }] },
+      "version-m6"
+    ),
+    "version-m6"
+  );
+  assert.throws(
+    () =>
+      requireActiveWorkerVersion(
+        { versions: [{ version_id: "version-m6", percentage: 90 }] },
+        "version-m6"
+      ),
+    /100% traffic/
+  );
+  assert.throws(
+    () =>
+      requireSingleActiveWorkerVersion({
+        versions: [
+          { version_id: "version-old", percentage: 50 },
+          { version_id: "version-m6", percentage: 50 },
+        ],
+      }),
+    /exactly one/
   );
 });

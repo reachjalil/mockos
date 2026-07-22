@@ -65,3 +65,39 @@ export const requireNoSecretLeak = (value, secrets, label) => {
     }
   }
 };
+
+export const resolveTaggedWorkerVersion = (versions, tag) => {
+  if (!Array.isArray(versions) || typeof tag !== "string" || !tag) {
+    throw new Error("Worker version evidence requires a version list and tag.");
+  }
+  const matches = versions.filter(
+    (version) => version?.annotations?.["workers/tag"] === tag
+  );
+  if (matches.length !== 1 || typeof matches[0]?.id !== "string") {
+    throw new Error(`Expected exactly one Worker version tagged ${tag}.`);
+  }
+  return matches[0].id;
+};
+
+export const requireSingleActiveWorkerVersion = (deployment) => {
+  const versions = deployment?.versions;
+  const version = Array.isArray(versions) ? versions[0] : undefined;
+  if (
+    versions?.length !== 1 ||
+    typeof version?.version_id !== "string" ||
+    !version.version_id ||
+    version.percentage !== 100
+  ) {
+    throw new Error("Expected exactly one Worker version to hold 100% traffic.");
+  }
+  return version.version_id;
+};
+
+export const requireActiveWorkerVersion = (deployment, expectedVersionId) => {
+  if (requireSingleActiveWorkerVersion(deployment) !== expectedVersionId) {
+    throw new Error(
+      `Expected Worker version ${expectedVersionId} to hold exactly 100% traffic.`
+    );
+  }
+  return expectedVersionId;
+};

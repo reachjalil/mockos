@@ -152,7 +152,11 @@ const readTarget = (label, target) => {
     );
   }
 
-  return { name: target.name, workersDev: target.workers_dev };
+  return {
+    name: target.name,
+    publicOrigin: publicOrigin.origin,
+    workersDev: target.workers_dev,
+  };
 };
 
 const production = readTarget("production", config);
@@ -163,6 +167,18 @@ requireValue(
   production.name !== staging.name,
   "production and staging must use different Worker names."
 );
+if (process.env.MOCKOS_SMOKE_ORIGIN) {
+  requireValue(
+    process.env.MOCKOS_SMOKE_ORIGIN === production.publicOrigin,
+    "MOCKOS_SMOKE_ORIGIN must match production PUBLIC_ORIGIN."
+  );
+}
+if (process.env.MOCKOS_STAGING_SMOKE_ORIGIN) {
+  requireValue(
+    process.env.MOCKOS_STAGING_SMOKE_ORIGIN === staging.publicOrigin,
+    "MOCKOS_STAGING_SMOKE_ORIGIN must match staging PUBLIC_ORIGIN."
+  );
+}
 requireValue(
   [
     "EnvironmentDurableObject",

@@ -2,6 +2,11 @@ name: Deploy worker (M6 gate)
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact full commit SHA with a successful CI run
+        required: true
+        type: string
   workflow_run:
     workflows:
       - CI
@@ -11,6 +16,7 @@ on:
       - completed
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -26,14 +32,18 @@ jobs:
     name: Deploy and run M6 sampled acceptance
     if: >-
       vars.MOCKOS_WORKER_DEPLOY_ENABLED == 'true' &&
-      (github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success')
+      ((github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment:
       name: worker-production
       url: ${{ vars.MOCKOS_WORKER_URL }}
     env:
+      EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.candidate_sha }}
+      TRIGGERING_CI_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
       MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
       MOCKOS_STAGING_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
     steps:
@@ -63,7 +73,52 @@ jobs:
       - name: Check out the CI-validated revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ env.EXPECTED_CANDIDATE_SHA }}
+      - name: Verify exact candidate and successful CI
+        id: ci_evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'candidate_sha must be a full lowercase commit SHA.\n' >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$EXPECTED_CANDIDATE_SHA"
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_CANDIDATE_SHA"
+          if [[ -n "$TRIGGERING_CI_RUN_ID" ]]; then
+            ci_payload=$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GITHUB_REPOSITORY/actions/runs/$TRIGGERING_CI_RUN_ID")
+          else
+            ci_payload=$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$EXPECTED_CANDIDATE_SHA&branch=main&event=push&status=success&per_page=100")
+          fi
+          ci_run_id=$(printf '%s' "$ci_payload" |
+            EXPECTED_CANDIDATE_SHA="$EXPECTED_CANDIDATE_SHA" node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              const payload = JSON.parse(readFileSync(0, "utf8"));
+              const runs = Array.isArray(payload.workflow_runs)
+                ? payload.workflow_runs
+                : [payload];
+              const matches = runs.filter(
+                (run) =>
+                  run.head_sha === process.env.EXPECTED_CANDIDATE_SHA &&
+                  run.head_branch === "main" &&
+                  run.event === "push" &&
+                  run.conclusion === "success" &&
+                  run.path === ".github/workflows/ci.yml"
+              );
+              if (!matches?.length) {
+                throw new Error("No successful CI run exists for the exact candidate.");
+              }
+              matches.sort((left, right) => right.id - left.id);
+              process.stdout.write(String(matches[0].id));
+            ')
+          printf 'run_id=%s\n' "$ci_run_id" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -76,12 +131,14 @@ jobs:
         run: node scripts/check-worker-wrangler.mjs --allow-workers-dev
       - name: Record candidate revision
         id: candidate
+        env:
+          CI_RUN_ID: ${{ steps.ci_evidence.outputs.run_id }}
         shell: bash
         run: |
           set -euo pipefail
           candidate_sha=$(git rev-parse HEAD)
           printf 'sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
-          printf '## M6 Worker deployment\n\n- Candidate SHA: `%s`\n' "$candidate_sha" >> "$GITHUB_STEP_SUMMARY"
+          printf '## M6 Worker deployment\n\n- Candidate SHA: `%s`\n- Successful CI run: `%s`\n' "$candidate_sha" "$CI_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify Wrangler identity
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -92,57 +149,167 @@ jobs:
       - name: Deploy staging Worker
         id: deploy_staging
         env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+          deploy_tag="m6-${CANDIDATE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-staging"
           printf 'API_KEY=%s\n' "$MOCKOS_SMOKE_API_KEY" |
             pnpm --filter @mockos/worker exec wrangler deploy \
-              --env staging --secrets-file /dev/stdin
+              --env staging --secrets-file /dev/stdin \
+              --tag "$deploy_tag" --message "mockOS M6 candidate $CANDIDATE_SHA"
           versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env staging --json)
-          version_id=$(printf '%s' "$versions" | node --input-type=module -e '
+          version_id=$(printf '%s' "$versions" | DEPLOY_TAG="$deploy_tag" node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            const versions = JSON.parse(readFileSync(0, "utf8"));
-            versions.sort((left, right) => right.number - left.number);
-            if (!versions[0]?.id) throw new Error("No staging version id returned.");
-            process.stdout.write(versions[0].id);
+            import { resolveTaggedWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            process.stdout.write(
+              resolveTaggedWorkerVersion(
+                JSON.parse(readFileSync(0, "utf8")),
+                process.env.DEPLOY_TAG
+              )
+            );
           ')
+          deployment=$(pnpm --filter @mockos/worker exec wrangler deployments status --env staging --json)
+          printf '%s' "$deployment" | EXPECTED_VERSION_ID="$version_id" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { requireActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            requireActiveWorkerVersion(
+              JSON.parse(readFileSync(0, "utf8")),
+              process.env.EXPECTED_VERSION_ID
+            );
+          '
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
-          printf -- '- Staging version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
+          printf 'tag=%s\n' "$deploy_tag" >> "$GITHUB_OUTPUT"
+          printf -- '- Staging version: `%s` (tag `%s`)\n' "$version_id" "$deploy_tag" >> "$GITHUB_STEP_SUMMARY"
       - name: Run staging M6 sampled acceptance
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_VERSION_ID: ${{ steps.deploy_staging.outputs.version_id }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
-        run: bash scripts/smoke-worker.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_active() {
+            pnpm --filter @mockos/worker exec wrangler deployments status --env staging --json |
+              EXPECTED_VERSION_ID="$EXPECTED_VERSION_ID" node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                import { requireActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+                requireActiveWorkerVersion(
+                  JSON.parse(readFileSync(0, "utf8")),
+                  process.env.EXPECTED_VERSION_ID
+                );
+              '
+          }
+          verify_active
+          bash scripts/smoke-worker.sh
+          verify_active
+      - name: Snapshot current production Worker
+        id: snapshot_production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment=$(pnpm --filter @mockos/worker exec wrangler deployments status --env= --json)
+          version_id=$(printf '%s' "$deployment" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { requireSingleActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            process.stdout.write(
+              requireSingleActiveWorkerVersion(JSON.parse(readFileSync(0, "utf8")))
+            );
+          ')
+          printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
+          printf -- '- Pre-deploy production version: `%s`.\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
       - name: Deploy production Worker
         id: deploy_production
         env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+          deploy_tag="m6-${CANDIDATE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-production"
           printf 'API_KEY=%s\n' "$MOCKOS_SMOKE_API_KEY" |
             pnpm --filter @mockos/worker exec wrangler deploy \
-              --env= --secrets-file /dev/stdin
+              --env= --secrets-file /dev/stdin \
+              --tag "$deploy_tag" --message "mockOS M6 candidate $CANDIDATE_SHA"
           versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env= --json)
-          version_id=$(printf '%s' "$versions" | node --input-type=module -e '
+          version_id=$(printf '%s' "$versions" | DEPLOY_TAG="$deploy_tag" node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            const versions = JSON.parse(readFileSync(0, "utf8"));
-            versions.sort((left, right) => right.number - left.number);
-            if (!versions[0]?.id) throw new Error("No production version id returned.");
-            process.stdout.write(versions[0].id);
+            import { resolveTaggedWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            process.stdout.write(
+              resolveTaggedWorkerVersion(
+                JSON.parse(readFileSync(0, "utf8")),
+                process.env.DEPLOY_TAG
+              )
+            );
           ')
+          deployment=$(pnpm --filter @mockos/worker exec wrangler deployments status --env= --json)
+          printf '%s' "$deployment" | EXPECTED_VERSION_ID="$version_id" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { requireActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            requireActiveWorkerVersion(
+              JSON.parse(readFileSync(0, "utf8")),
+              process.env.EXPECTED_VERSION_ID
+            );
+          '
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
-          printf -- '- Production version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
+          printf 'tag=%s\n' "$deploy_tag" >> "$GITHUB_OUTPUT"
+          printf -- '- Production version: `%s` (tag `%s`)\n' "$version_id" "$deploy_tag" >> "$GITHUB_STEP_SUMMARY"
       - name: Run production M6 sampled acceptance
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_VERSION_ID: ${{ steps.deploy_production.outputs.version_id }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
-        run: bash scripts/smoke-worker.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_active() {
+            pnpm --filter @mockos/worker exec wrangler deployments status --env= --json |
+              EXPECTED_VERSION_ID="$EXPECTED_VERSION_ID" node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                import { requireActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+                requireActiveWorkerVersion(
+                  JSON.parse(readFileSync(0, "utf8")),
+                  process.env.EXPECTED_VERSION_ID
+                );
+              '
+          }
+          verify_active
+          bash scripts/smoke-worker.sh
+          verify_active
+      - name: Roll back failed production qualification
+        if: ${{ (failure() || cancelled()) && steps.snapshot_production.outputs.version_id != '' }}
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIOUS_VERSION_ID: ${{ steps.snapshot_production.outputs.version_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @mockos/worker exec wrangler rollback "$PREVIOUS_VERSION_ID" \
+            --env= --yes --message "Rollback failed mockOS M6 candidate $CANDIDATE_SHA"
+          deployment=$(pnpm --filter @mockos/worker exec wrangler deployments status --env= --json)
+          printf '%s' "$deployment" | EXPECTED_VERSION_ID="$PREVIOUS_VERSION_ID" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { requireActiveWorkerVersion } from "./scripts/smoke-worker-helpers.mjs";
+            requireActiveWorkerVersion(
+              JSON.parse(readFileSync(0, "utf8")),
+              process.env.EXPECTED_VERSION_ID
+            );
+          '
+          printf -- '- Production rollback restored version `%s` after candidate `%s` failed qualification.\n' "$PREVIOUS_VERSION_ID" "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Record M6 acceptance boundary
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}

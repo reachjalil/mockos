@@ -309,10 +309,9 @@ export class Engine {
   }
 
   async #beforeTokenSign(): Promise<{ readonly clockSkewSeconds?: number }> {
-    const decision = this.scenarios.decideExact(
-      "token.before_sign",
-      { provider: this.providerId }
-    );
+    const decision = this.scenarios.decideExact("token.before_sign", {
+      provider: this.providerId,
+    });
     if (decision.type === "rotate_signing_key") {
       await this.keys.rotate();
       return {};

@@ -319,7 +319,6 @@ export const renderParityMarkdown = (manifest) => {
       )}](${recipeLink}) |`
     );
   }
-  lines.push("");
   return `${lines.join("\n")}\n`;
 };
 

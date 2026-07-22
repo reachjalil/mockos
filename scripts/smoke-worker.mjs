@@ -34,6 +34,7 @@ const client = new McpToolClient({
 });
 
 const environmentIds = [];
+let cleanupSuffix;
 
 const requireObject = (value, label) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -227,8 +228,9 @@ try {
   }
 
   const suffix = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  cleanupSuffix = suffix;
   const environment = await call("create_environment", {
-    name: "M3 Entra deployed smoke",
+    name: `M6 Entra deployed smoke ${suffix}`,
     provider: "entra",
     seed: `m3-entra-smoke-${suffix}`,
   });
@@ -334,8 +336,14 @@ try {
     await jwksResponse.json(),
     "pre-rotation JWKS body"
   );
-  if (requireArray(beforeRotationJwks.keys, "pre-rotation JWKS keys").length < 2) {
-    throw new Error("Pre-rotation JWKS did not publish an active and successor key.");
+  const preRotationKeys = requireArray(
+    beforeRotationJwks.keys,
+    "pre-rotation JWKS keys"
+  );
+  if (preRotationKeys.length !== 2) {
+    throw new Error(
+      "Pre-rotation JWKS did not publish exactly one active and one successor key."
+    );
   }
 
   const minted = await call("mint_token", {
@@ -453,30 +461,38 @@ try {
     afterRotationJwks.keys,
     "post-rotation JWKS keys"
   );
+  const postRotationToken = requireString(
+    tokens.id_token,
+    "authorization-code ID token"
+  );
+  const postRotationExpectedClaims = {
+    iss: urls.issuer,
+    aud: application.clientId,
+    tid: tenantId,
+    oid: userId,
+    nonce: authorizationNonce,
+  };
   const postRotationJwt = await timed("OIDC ID token signature verification", () =>
-    verifyJwt(
-      requireString(tokens.id_token, "authorization-code ID token"),
-      afterRotationJwks,
-      {
-        iss: urls.issuer,
-        aud: application.clientId,
-        tid: tenantId,
-        oid: userId,
-        nonce: authorizationNonce,
-      }
-    )
+    verifyJwt(postRotationToken, afterRotationJwks, postRotationExpectedClaims)
   );
   if (preRotationJwt.header.kid === postRotationJwt.header.kid) {
     throw new Error("Mid-session rotation did not promote a new signing kid.");
   }
   const publishedKids = new Set(postRotationKeys.map(({ kid }) => kid));
+  const prePublishedKids = new Set(preRotationKeys.map(({ kid }) => kid));
   if (
     !publishedKids.has(preRotationJwt.header.kid) ||
     !publishedKids.has(postRotationJwt.header.kid) ||
-    postRotationKeys.length < 3
+    !prePublishedKids.has(postRotationJwt.header.kid) ||
+    postRotationKeys.length !== 3
   ) {
-    throw new Error("Post-rotation JWKS did not retain the old/new overlap.");
+    throw new Error(
+      "Post-rotation JWKS did not promote the pre-published successor with an exact old/new overlap."
+    );
   }
+  await timed("pre-published successor stale JWKS verification", () =>
+    verifyJwt(postRotationToken, beforeRotationJwks, postRotationExpectedClaims)
+  );
   await timed("pre-rotation JWT overlap verification", () =>
     verifyJwt(minted.token, afterRotationJwks, {
       iss: urls.issuer,
@@ -552,11 +568,25 @@ try {
     subject: userId,
     audience: application.clientId,
   });
-  const skewedClaims = requireObject(skewed.claims, "clock-skew token claims");
+  const skewedClaims = (
+    await timed("clock-skew JWT verification", () =>
+      verifyJwt(
+        requireString(skewed.token, "clock-skew signed token"),
+        afterRotationJwks,
+        {
+          iss: urls.issuer,
+          aud: application.clientId,
+          sub: userId,
+          tid: tenantId,
+          oid: userId,
+        }
+      )
+    )
+  ).claims;
   const skewedIat = requireNumber(skewedClaims.iat, "clock-skew iat");
   const skewedNbf = requireNumber(skewedClaims.nbf, "clock-skew nbf");
   const skewedExp = requireNumber(skewedClaims.exp, "clock-skew exp");
-  const baselineClaims = requireObject(minted.claims, "baseline mint claims");
+  const baselineClaims = preRotationJwt.claims;
   const baselineIat = requireNumber(baselineClaims.iat, "baseline iat");
   const baselineExp = requireNumber(baselineClaims.exp, "baseline exp");
   if (
@@ -607,12 +637,15 @@ try {
     brokenTokens.set(variant, details.claims);
   }
   const brokenSampledAt = Math.floor(Date.now() / 1_000);
+  const expectedWrongAudience = `https://wrong-audience.mockos.invalid/${encodeURIComponent(
+    application.clientId
+  )}`;
   if (
     requireNumber(brokenTokens.get("expired")?.exp, "expired exp") >= brokenSampledAt ||
-    brokenTokens.get("wrong_audience")?.aud === application.clientId ||
+    brokenTokens.get("wrong_audience")?.aud !== expectedWrongAudience ||
     requireNumber(brokenTokens.get("not_yet_valid")?.nbf, "not-yet-valid nbf") <=
       brokenSampledAt ||
-    brokenTokens.get("wrong_issuer")?.iss === urls.issuer
+    brokenTokens.get("wrong_issuer")?.iss !== "https://wrong-issuer.mockos.invalid"
   ) {
     throw new Error("One or more deterministic broken-token claims were not broken.");
   }
@@ -662,12 +695,24 @@ try {
     subject: overageUserId,
     audience: overageApplication.clientId,
   });
-  const inlineClaims = requireObject(
-    inlineGroupsToken.claims,
-    "200-group token claims"
-  );
+  const inlineBearer = requireString(inlineGroupsToken.token, "200-group signed token");
+  const inlineClaims = (
+    await timed("200-group JWT verification", () =>
+      verifyJwt(inlineBearer, afterRotationJwks, {
+        iss: urls.issuer,
+        aud: overageApplication.clientId,
+        sub: overageUserId,
+        tid: tenantId,
+        oid: overageUserId,
+      })
+    )
+  ).claims;
+  const inlineClaimGroups = requireArray(inlineClaims.groups, "200-group inline claim");
+  const actualInlineGroupIds = new Set(inlineClaimGroups);
   if (
-    requireArray(inlineClaims.groups, "200-group inline claim").length !== 200 ||
+    inlineClaimGroups.length !== 200 ||
+    actualInlineGroupIds.size !== inlineGroupIds.length ||
+    !inlineGroupIds.every((id) => actualInlineGroupIds.has(id)) ||
     Object.hasOwn(inlineClaims, "_claim_names") ||
     Object.hasOwn(inlineClaims, "_claim_sources")
   ) {
@@ -693,13 +738,23 @@ try {
     subject: overageUserId,
     audience: overageApplication.clientId,
   });
-  const overageClaims = requireObject(overageToken.claims, "201-group token claims");
+  const overageBearer = requireString(overageToken.token, "group-overage token");
+  const overageClaims = (
+    await timed("201-group JWT verification", () =>
+      verifyJwt(overageBearer, afterRotationJwks, {
+        iss: urls.issuer,
+        aud: overageApplication.clientId,
+        sub: overageUserId,
+        tid: tenantId,
+        oid: overageUserId,
+      })
+    )
+  ).claims;
   const fallbackEndpoint = requireTrustedGroupFallback({
     claims: overageClaims,
     graphBaseUrl: requireString(urls.graphBaseUrl, "Entra graphBaseUrl"),
     userId: overageUserId,
   });
-  const overageBearer = requireString(overageToken.token, "group-overage token");
   const invalidFallback = await jsonRequest({
     url: fallbackEndpoint,
     method: "POST",
@@ -818,6 +873,14 @@ try {
       },
     ],
   };
+  const singletonPatch = {
+    schemas: [patchSchema],
+    Operations: {
+      op: "replace",
+      path: "displayName",
+      value: "M6 tolerated singleton",
+    },
+  };
   const strictMissingSchemas = await scimRequest({
     baseUrl: urls.scimBaseUrl,
     path: `Users/${encodeURIComponent(userId)}`,
@@ -835,9 +898,20 @@ try {
     injectionPoint: "scim.patch_parse",
     action: { type: "scim_patch_tolerance", malformedCase: "missing_schemas" },
     probability: 1,
-    remaining: 1,
+    remaining: 2,
     enabled: true,
   });
+  const caseSpecificRejection = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: singletonPatch,
+    expectedStatus: 400,
+    label: "missing-schemas tolerance remains case-specific",
+  });
+  if (caseSpecificRejection.body?.scimType !== "invalidValue") {
+    throw new Error("Missing-schemas tolerance also accepted singleton Operations.");
+  }
   const toleratedMissingSchemas = await scimRequest({
     baseUrl: urls.scimBaseUrl,
     path: `Users/${encodeURIComponent(userId)}`,
@@ -854,14 +928,6 @@ try {
     scenarioId: "m6-scim-tolerate-missing-schemas-once",
   });
 
-  const singletonPatch = {
-    schemas: [patchSchema],
-    Operations: {
-      op: "replace",
-      path: "displayName",
-      value: "M6 tolerated singleton",
-    },
-  };
   const strictSingleton = await scimRequest({
     baseUrl: urls.scimBaseUrl,
     path: `Users/${encodeURIComponent(userId)}`,
@@ -879,9 +945,20 @@ try {
     injectionPoint: "scim.patch_parse",
     action: { type: "scim_patch_tolerance", malformedCase: "singleton_operations" },
     probability: 1,
-    remaining: 1,
+    remaining: 2,
     enabled: true,
   });
+  const reverseCaseSpecificRejection = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: missingSchemasPatch,
+    expectedStatus: 400,
+    label: "singleton tolerance remains case-specific",
+  });
+  if (reverseCaseSpecificRejection.body?.scimType !== "invalidValue") {
+    throw new Error("Singleton tolerance also accepted a missing schemas field.");
+  }
   const toleratedSingleton = await scimRequest({
     baseUrl: urls.scimBaseUrl,
     path: `Users/${encodeURIComponent(userId)}`,
@@ -1099,7 +1176,7 @@ try {
   }
 
   const oktaEnvironment = await call("create_environment", {
-    name: "M3 Okta deployed smoke",
+    name: `M6 Okta deployed smoke ${suffix}`,
     provider: "okta",
     seed: `m3-okta-smoke-${suffix}`,
   });
@@ -1243,6 +1320,49 @@ try {
       body,
       label,
     });
+  const sameOriginPreflight = await jsonRequest({
+    url: oktaAuthnEndpoint,
+    method: "OPTIONS",
+    headers: {
+      origin: publicOrigin,
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    },
+    label: "Okta Authn same-origin preflight",
+  });
+  await expectStatus(sameOriginPreflight, 204, "Okta Authn same-origin preflight");
+  const preflightVary = new Set(
+    (sameOriginPreflight.headers.get("vary") ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  if (
+    sameOriginPreflight.headers.get("access-control-allow-origin") !== publicOrigin ||
+    sameOriginPreflight.headers.get("access-control-allow-methods") !== "POST" ||
+    sameOriginPreflight.headers.get("access-control-allow-headers") !==
+      "content-type" ||
+    sameOriginPreflight.headers.get("access-control-max-age") !== "600" ||
+    !preflightVary.has("origin") ||
+    !preflightVary.has("access-control-request-headers") ||
+    sameOriginPreflight.headers.get("access-control-allow-credentials") !== null
+  ) {
+    throw new Error("Okta Authn did not apply its same-origin-only CORS policy.");
+  }
+  const crossOriginPreflight = await jsonRequest({
+    url: oktaAuthnEndpoint,
+    method: "OPTIONS",
+    headers: {
+      origin: "https://cross-origin.invalid",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    },
+    label: "Okta Authn cross-origin preflight",
+  });
+  await expectStatus(crossOriginPreflight, 403, "Okta Authn cross-origin preflight");
+  if (crossOriginPreflight.headers.has("access-control-allow-origin")) {
+    throw new Error("Okta Authn exposed CORS headers to a cross-origin request.");
+  }
   const wrongAuthnPassword = "Wrong-Synthetic-Authn-Passw0rd!";
   for (const candidate of [
     oktaMfaUserName,
@@ -1372,9 +1492,12 @@ try {
   );
   if (
     successAuthnBody.status !== "SUCCESS" ||
-    successAuthn.headers.get("cache-control") !== "no-store"
+    successAuthn.headers.get("cache-control") !== "no-store" ||
+    successAuthn.headers.get("access-control-allow-origin") !== publicOrigin
   ) {
-    throw new Error("Okta Authn did not render SUCCESS with no-store semantics.");
+    throw new Error(
+      "Okta Authn did not render SUCCESS with no-store and same-origin CORS semantics."
+    );
   }
   const sessionToken = requireString(
     successAuthnBody.sessionToken,
@@ -1391,6 +1514,24 @@ try {
   const authnEntries = requireArray(authnLog.entries, "Okta Authn request log entries");
   if (authnEntries.length < 9) {
     throw new Error("The deployed Okta Authn sample was not logged synchronously.");
+  }
+  const successLogEntry = authnEntries.find(({ requestBody }) =>
+    String(requestBody).includes(preservedSafeField)
+  );
+  if (!successLogEntry) {
+    throw new Error("The logged Okta Authn SUCCESS request was not found.");
+  }
+  const successRequestHeaders = requireObject(
+    successLogEntry.requestHeaders,
+    "logged Okta Authn SUCCESS request headers"
+  );
+  if (
+    successRequestHeaders.cookie !== "[REDACTED]" ||
+    successRequestHeaders["proxy-authorization"] !== "[REDACTED]" ||
+    successRequestHeaders["x-auth-token"] !== "[REDACTED]" ||
+    successRequestHeaders.origin !== publicOrigin
+  ) {
+    throw new Error("Okta Authn did not redact each captured credential header.");
   }
   const serializedAuthnLog = JSON.stringify(authnEntries);
   requireNoSecretLeak(
@@ -1416,10 +1557,32 @@ try {
   }
 
   process.stdout.write(
-    "PASS  M6 sampled deployed acceptance: M3/M5 regressions plus key rotation, token edges, group overage, SCIM races/tolerance, and Okta Authn/redaction. This is sampled mockOS deployment evidence, not a broad provider-parity claim.\n"
+    "PASS  M6 sampled deployed acceptance: accepted M3 regressions plus key rotation, token edges, group overage, SCIM races/tolerance, and Okta Authn/redaction. M5 outbound provisioning is requalified separately through the hosted controlled target; this is not a broad provider-parity claim.\n"
   );
 } finally {
   const cleanupFailures = [];
+  if (cleanupSuffix) {
+    try {
+      const catalog = await call("list_environments", {});
+      for (const environment of Array.isArray(catalog.environments)
+        ? catalog.environments
+        : []) {
+        if (
+          typeof environment?.id === "string" &&
+          (String(environment.name).endsWith(cleanupSuffix) ||
+            String(environment.seed).endsWith(cleanupSuffix)) &&
+          !environmentIds.includes(environment.id)
+        ) {
+          environmentIds.push(environment.id);
+        }
+      }
+    } catch (error) {
+      cleanupFailures.push(error);
+      process.stderr.write(
+        `WARN  smoke orphan discovery failed: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    }
+  }
   for (const trackedEnvironmentId of [...environmentIds].reverse()) {
     try {
       await call("delete_environment", { environmentId: trackedEnvironmentId });
