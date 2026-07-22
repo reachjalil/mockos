@@ -1,8 +1,8 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 const controlOrigin = "https://mockos.test";
-const publicOrigin = "https://mockos.workers.dev";
+const publicOrigin = new URL(Reflect.get(env, "PUBLIC_ORIGIN") as string).origin;
 const apiKey = "mockos-integration-test-key";
 const clientId = "0oaOktaIntegrationClient";
 const clientSecret = "okta-integration-secret";

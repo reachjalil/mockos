@@ -60,6 +60,18 @@ describe("conformance fixtures", () => {
     expect(fixtures.every(({ status }) => status === "documented")).toBe(true);
   });
 
+  it("loads at least 20 individually sourced Okta OIDC fixtures", async () => {
+    const directory = fileURLToPath(new URL("../fixtures/okta/oidc", import.meta.url));
+    const files = (await readdir(directory))
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => join(directory, file));
+    const fixtures = await loadFixtures(files);
+
+    expect(fixtures.length).toBeGreaterThanOrEqual(20);
+    expect(fixtures.every(({ provider }) => provider === "okta")).toBe(true);
+    expect(fixtures.every(({ status }) => status === "documented")).toBe(true);
+  });
+
   it("reports exact and subset mismatches", async () => {
     const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
     const [file] = (await readdir(directory)).filter((name) => name.endsWith(".json"));

@@ -34,14 +34,15 @@ jobs:
       name: worker-production
       url: ${{ vars.MOCKOS_WORKER_URL }}
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
-      MOCKOS_STAGING_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
       MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
       MOCKOS_STAGING_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
     steps:
       - name: Check explicit deployment opt-in
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
+          MOCKOS_STAGING_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -73,18 +74,66 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify pre-zone Wrangler shape
         run: node scripts/check-worker-wrangler.mjs --allow-workers-dev
+      - name: Record candidate revision
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_sha=$(git rev-parse HEAD)
+          printf 'sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
+          printf '## Worker deployment\n\n- Candidate SHA: `%s`\n' "$candidate_sha" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify Wrangler identity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @mockos/worker exec wrangler whoami
       - name: Build the smoke client
         run: pnpm --filter @mockos/cli build
       - name: Deploy staging Worker
-        run: pnpm --filter @mockos/worker exec wrangler deploy --env staging
+        id: deploy_staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @mockos/worker exec wrangler deploy --env staging
+          versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env staging --json)
+          version_id=$(printf '%s' "$versions" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const versions = JSON.parse(readFileSync(0, "utf8"));
+            versions.sort((left, right) => right.number - left.number);
+            if (!versions[0]?.id) throw new Error("No staging version id returned.");
+            process.stdout.write(versions[0].id);
+          ')
+          printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
+          printf -- '- Staging version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
       - name: Run staging M2 acceptance
         env:
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
         run: bash scripts/smoke-worker.sh
       - name: Deploy production Worker
-        run: pnpm --filter @mockos/worker exec wrangler deploy --env=
+        id: deploy_production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @mockos/worker exec wrangler deploy --env=
+          versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env= --json)
+          version_id=$(printf '%s' "$versions" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const versions = JSON.parse(readFileSync(0, "utf8"));
+            versions.sort((left, right) => right.number - left.number);
+            if (!versions[0]?.id) throw new Error("No production version id returned.");
+            process.stdout.write(versions[0].id);
+          ')
+          printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
+          printf -- '- Production version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
       - name: Run production M2 acceptance
+        env:
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
+          MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
         run: bash scripts/smoke-worker.sh

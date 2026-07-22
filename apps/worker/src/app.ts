@@ -115,6 +115,14 @@ const environmentCatalog = (env: CloudflareEnv) =>
 const serveMcp = async (context: Context<WorkerHonoEnv>) => {
   const failure = apiKeyFailure(context.req.raw, context.env);
   if (failure) return failure;
+  // The standalone SSE stream is optional in Streamable HTTP. The current
+  // Agents SDK can route a later POST response onto that idle stream in a
+  // deployed Worker, leaving standards-compliant clients waiting forever on
+  // the originating POST. Decline the optional stream so every response stays
+  // attached to its request. Clients treat 405 as the specified fallback.
+  if (context.req.method === "GET") {
+    return context.body(null, 405, { allow: "POST, DELETE" });
+  }
   return mcpHandler.fetch(
     withoutControlCredentials(context.req.raw),
     context.env,

@@ -16,7 +16,7 @@
     "PATH_PREFIX": "/e",
     "BASE_DOMAIN": "id.mockos.live",
     "ENTRA_HOST": "login.id.mockos.live",
-    "PUBLIC_ORIGIN": "https://mockos.workers.dev",
+    "PUBLIC_ORIGIN": "https://mockos.workspaceagent.workers.dev",
     "SENTRY_ENVIRONMENT": "production"
   },
   "secrets": {
@@ -61,7 +61,7 @@
         "PATH_PREFIX": "/e",
         "BASE_DOMAIN": "id.mockos.live",
         "ENTRA_HOST": "login.id.mockos.live",
-        "PUBLIC_ORIGIN": "https://mockos-staging.workers.dev",
+        "PUBLIC_ORIGIN": "https://mockos-staging.workspaceagent.workers.dev",
         "SENTRY_ENVIRONMENT": "staging"
       },
       "secrets": {

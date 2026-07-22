@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const apiKey = "mockos-integration-test-key";
 const origin = "https://mockos.test";
+const publicOrigin = new URL(Reflect.get(env, "PUBLIC_ORIGIN") as string).origin;
 const worker = (exports as unknown as { default: Fetcher }).default;
 
 type JsonRpcResponse = {
@@ -142,6 +143,19 @@ describe("management MCP", () => {
       "Bearer realm=mockos-control"
     );
     expect(await response.json()).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("declines the optional standalone SSE stream after authentication", async () => {
+    const response = await worker.fetch(`${origin}/mcp`, {
+      headers: {
+        accept: "text/event-stream",
+        authorization: `Bearer ${apiKey}`,
+        "mcp-session-id": "unused-session-id",
+      },
+    });
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST, DELETE");
   });
 
   it("keeps reserved and deleting catalog entries out of active listings", async () => {
@@ -352,7 +366,7 @@ describe("management MCP", () => {
           tokenEndpoint?: string;
         }
       | undefined;
-    const managementBase = `https://mockos.workers.dev/e/${environment?.id}`;
+    const managementBase = `${publicOrigin}/e/${environment?.id}`;
     const managementIssuer = `${managementBase}/${environment?.tenantId}/v2.0`;
     expect(wellKnownData).toMatchObject({
       issuer: managementIssuer,
