@@ -1,13 +1,14 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; F-series runtime implementation is gated on M2
+Status: Approved target design; M2 gate satisfied, F0 may begin
 Last reviewed: 2026-07-22
 
 This document turns the approved F-series product direction into an executable
 roadmap. It is a target design, not implementation evidence. The current evidence
-ledger remains [Implementation status](./IMPLEMENTATION_STATUS.md): M0 and the M1
-vertical slice pass locally, while M2 and every F-series runtime phase remain
-unimplemented.
+ledger remains [Implementation status](./IMPLEMENTATION_STATUS.md): M0 through M2 pass
+locally and in hosted CI, and the exact M2 candidate passed staging and production
+workers.dev smoke. The M2 prerequisite is satisfied; every F-series runtime phase
+remains unimplemented and begins with F0.
 
 ## Outcome
 
@@ -26,10 +27,10 @@ trace row points to implementation evidence.
 
 ## Non-negotiable delivery rules
 
-1. **M2 is the merge gate for all F-series code.** Before M2 is CI-green and its
-   workers.dev smoke evidence is linked, F-series work may only land as design docs,
-   ADRs, fixture research, or non-production spike evidence. No F0 contract module,
-   client package, runtime route, catalog pin, migration, or feature flag may merge.
+1. **M2 is the merge gate for all F-series code.** Exact candidate
+   `358045b03161280bb3312e918130d148341104cf` has linked green hosted CI and passed
+   staging/production workers.dev smoke, so this gate is satisfied and F0 may begin.
+   Any regression in the M2 tests or deployed smoke closes the gate again.
 2. F-series work is additive. It does not modify an M-critical path until that
    milestone's exit evidence is green.
 3. Every compatibility claim needs a real client test and a sourced wire fixture.
@@ -363,9 +364,9 @@ the open-core package.
 
 | Phase | Scope | Hard gate | Exit evidence |
 | --- | --- | --- | --- |
-| Design-0 | This roadmap, ADRs, sourced fixture research, spike plans | Current M0/M1 state | Docs checks pass; no F-series runtime or dependency change is merged. |
-| F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **M2 green with deployed smoke evidence** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
-| F-CLI-A | First public CLI with only capabilities that exist after M2 | F0 plus M2 server capabilities | CLI Stage A matrix passes against local Wrangler and deployed staging. |
+| Design-0 | This roadmap, ADRs, sourced fixture research, spike plans | Current M0-M2 candidate | Docs checks pass; no F-series runtime or dependency change is merged. |
+| F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
+| M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
 | F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Official SDK client passes in-process and Worker tests; July 28 version checkpoint recorded. |
 | F2 | Neutral LLM planner, OpenAI and Anthropic dialects, edge streaming, tools and errors | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
@@ -397,28 +398,30 @@ remains open without blocking mock MCP value.
 
 ## CLI delivery matrix
 
-The CLI begins immediately after M2 instead of waiting for the original F7 bundle. It
-uses capability discovery and produces a clear unsupported-capability error; a command
-is never advertised as working before its server operation exists.
+The CLI Stage A implementation landed with M2 instead of waiting for the original F7
+bundle. It uses capability discovery and produces a clear unsupported-capability
+error; a command is never advertised as working before its server operation exists.
 
 | Stage | Gate | Commands delivered | Boundary |
 | --- | --- | --- | --- |
-| A: operator loop | M2 + F0 | `doctor`; `env create`; `env list`; `env delete`; `seed`; `scenario set`; `scenario clear`; `mint-token`; `logs dump`; `wait` | Access Key or self-host API key; existing M2 capabilities only. `doctor` reports server/version/capability mismatches. |
+| A: operator loop | M2 implementation and hosted CI complete; staging command matrix pending | `doctor`; `env create/list/delete/configure/wait`; `seed`; `app create`; `scenario set/clear`; `mint-token`; `logs dump`; `assert`; `wellknown`; `report` | Access Key or self-host API key; existing M2 capabilities only. `doctor` reports server information and advertised tools; invoking an unavailable command fails with a missing-capability error. |
 | B1: governed desired state | F4 | `env ensure`; version preconditions; scoped-key diagnostics | Uses the same idempotency records, slug rules, and ACL checks as MCP and HTTP. |
-| B2: reusable tests | F5, plus M3 assertion capability | `blueprint validate`; `blueprint export`; `blueprint apply`; `assert --junit`; `report` | Validation is local where possible; apply/assert/report verify server capabilities and emit machine-readable failures. |
+| B2: reusable tests | F5, plus M3 assertion capability | `blueprint validate`; `blueprint export`; `blueprint apply`; blueprint-aware extensions to `assert --junit` and `report` | Validation is local where possible; apply/assert/report verify server capabilities and emit machine-readable failures. |
 | C: keyless CI | F7 OIDC | `login` or `auth exchange`; CI token handling; GitHub setup/teardown; GitLab template | No long-lived key in CI. Tokens are short-lived, scope-intersected, never printed, and torn down with uploaded JSONL/JUnit evidence. |
 
-Every stage tests non-interactive exit codes, JSON output, redaction, retries, partial
-failure, and server-version mismatch. Stage A is a public package and is not held back
-for hosted governance.
+Stage A tests non-interactive exit codes, JSON output, redaction, and missing-capability
+failure. Its command-by-command staging matrix remains qualification evidence. Later
+stages add explicit retry, partial-failure, and server-version mismatch matrices as
+their corresponding runtime contracts land. Stage A is a public package and is not
+held back for hosted governance.
 
 ## Acceptance gates
 
 ### Merge and compatibility
 
-- Before M2, a review of changed paths proves no F-series package, migration, catalog
-  pin, route, or runtime flag landed. Design documents identify themselves as target
-  design.
+- The M2 prerequisite review proves no F-series package, migration, catalog pin,
+  route, or runtime flag landed. Design documents identify themselves as target
+  design. The linked hosted CI and deployed-smoke evidence satisfy the F0 entry gate.
 - Every phase starts with an additive contract freeze and ends with existing M tests,
   format, types, tests, builds, Wrangler dry-run, and documentation honesty gates
   green.

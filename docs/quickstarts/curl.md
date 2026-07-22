@@ -1,14 +1,18 @@
-# Local Entra OIDC curl walkthrough
+# Entra OIDC curl walkthrough
 
-Status: Implemented M1 routes; automated and raw local runtime checks pass  
+Status: M2 source and workers.dev path-mode flow implemented; evidence linked below
 Last reviewed: 2026-07-22
 
-This walkthrough uses only synthetic data. It exercises the same control and protocol
-routes as the [Worker integration test](../../apps/worker/test/oidc.integration.test.ts).
+This walkthrough uses only synthetic data. It exercises the authenticated HTTP control
+routes and the same public protocol routes as the
+[Worker integration test](../../apps/worker/test/oidc.integration.test.ts). The M2
+remote MCP interface is the preferred automation surface; the source-built CLI is
+documented in the [CLI guide](../../packages/cli/README.md).
 
-## Start the Worker
+## Choose a Worker
 
-Create an ignored `apps/worker/.dev.vars` containing a development-only key:
+For a local Worker, create an ignored `apps/worker/.dev.vars` containing a
+development-only key:
 
 ```dotenv
 API_KEY=local-mockos-only
@@ -25,12 +29,24 @@ In a second terminal, define stable fixture values:
 ```sh
 export MOCKOS_ORIGIN=http://127.0.0.1:8787
 export MOCKOS_API_KEY=local-mockos-only
-export MOCKOS_ENV=oidc-curl-01
+export MOCKOS_ENV="env_$(node --input-type=module -e 'process.stdout.write(crypto.randomUUID().replaceAll("-", "").slice(0, 20))')"
 export MOCKOS_TENANT=0f6f4756-741d-4a4b-83b2-5f2e37ec621d
 export MOCKOS_CLIENT=mockos-curl-client
 export MOCKOS_CLIENT_SECRET=mockos-curl-secret
 export MOCKOS_REDIRECT=https://client.example/callback
 ```
+
+To target the live staging path-mode Worker instead, replace `MOCKOS_ORIGIN` with:
+
+```sh
+export MOCKOS_ORIGIN=https://mockos-staging.workspaceagent.workers.dev
+```
+
+The production origin is `https://mockos.workspaceagent.workers.dev`. Either live
+target also requires its operator-provided Access Key in `MOCKOS_API_KEY`; no shared
+key is published. Never enter a Cloudflare credential, production identity, or real
+application secret into this walkthrough. A missing server-side `API_KEY` fails closed
+with `503`, while a missing or incorrect client credential receives `401`.
 
 ## Configure synthetic state
 
@@ -148,7 +164,9 @@ curl --fail-with-body --request DELETE \
   "$MOCKOS_ORIGIN/__mockos/v1/environments/$MOCKOS_ENV"
 ```
 
-These commands passed in the recorded
-[M1 Wrangler smoke](../evidence/m1-wrangler-dev-smoke.md). They prove a local M1 flow
-only. There is no published workers.dev origin; deployed MCP/scenario smoke remains
-M2.
+The raw control commands passed in the recorded
+[M1 Wrangler smoke](../evidence/m1-wrangler-dev-smoke.md). The later
+[M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) proves authenticated MCP
+setup and cleanup, OIDC/JWKS verification, deterministic scenario injection, request
+logging, and assertions against both staging and production. It does not establish
+general Entra SDK parity.

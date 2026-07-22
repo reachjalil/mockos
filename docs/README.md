@@ -1,6 +1,6 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: M0/M1 evidence index; no live deployment is claimed  
+Status: M0-M2 evidence index; M2 workers.dev smoke and hosted CI passed
 Last reviewed: 2026-07-22
 
 mockOS is an open-core, deterministic identity-platform test double for Entra ID and
@@ -23,6 +23,8 @@ fixture alone.
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
 - [M1 Wrangler dev smoke evidence](./evidence/m1-wrangler-dev-smoke.md)
+- [M2 staging and production workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md)
+- [M2 hosted CI run](https://github.com/reachjalil/mockos/actions/runs/29881568591)
 - Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
   [SCIM](./identity/scim.md)
 - Security: [threat model](./security/threat-model.md) and

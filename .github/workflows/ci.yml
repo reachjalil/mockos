@@ -113,11 +113,13 @@ jobs:
         run: >-
           pnpm --filter @mockos/worker exec wrangler deploy
           --dry-run --env staging --outdir /tmp/mockos-worker-staging
-      - name: Record acceptance boundary
+      - name: Record CI and deployment boundary
         run: >-
           printf '%s\n'
-          'Wrangler configuration and bundle dry runs passed. No Worker was deployed,
-          no protocol smoke was run, and M2 live acceptance remains open.'
+          'Wrangler configuration and bundle dry runs passed. This CI job does not
+          deploy or run a remote smoke. The separately recorded M2 workers.dev smoke
+          is deployment evidence. Automated deployment remains separately gated by
+          the explicit opt-in and secrets in the deploy-worker workflow.'
 
   secret-scan:
     name: Secret scan

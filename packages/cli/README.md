@@ -1,30 +1,31 @@
 # 🥸 mockOS CLI
 
-The `mockos` command manages mockOS through its remote MCP interface. It is designed
-for local development, deterministic integration tests, and keyless CI once the
-hosted control plane is enabled.
+The `mockos` command manages mockOS through its authenticated remote MCP interface. It
+is designed for local development, deterministic integration tests, and
+Access-Key-authenticated CI.
 
-Status: M2 command surface implemented; later-phase commands capability-negotiate
-with the server.
-
+Status: M2 source command surface locally tested; MCP client used in live smoke; npm package unpublished
 Last reviewed: 2026-07-22
 
-## Install and run
+## Build and run from source
+
+From the repository root:
 
 ```bash
 pnpm --filter @mockos/cli build
 node packages/cli/dist/bin.js --help
 ```
 
-Published-package usage:
+The source CLI defaults to `http://127.0.0.1:8787/mcp`. Override that endpoint with
+`--endpoint`, `MOCKOS_ENDPOINT`, or a saved profile. The live M2 endpoints are:
 
-```bash
-pnpm add --global @mockos/cli
-mockos doctor --endpoint https://your-worker.example/mcp
-```
+- staging: `https://mockos-staging.workspaceagent.workers.dev/mcp`
+- production: `https://mockos.workspaceagent.workers.dev/mcp`
 
-The default endpoint is `http://127.0.0.1:8787/mcp`. Override it with
-`--endpoint` or `MOCKOS_ENDPOINT`. Supply an Access Key with `MOCKOS_API_KEY` in CI.
+Both live endpoints require an operator-provided Access Key. Supply
+`MOCKOS_API_KEY` in CI or save a local profile; a missing or incorrect key is rejected.
+The keys used for the
+[M2 workers.dev smoke](../../docs/evidence/m2-workers-dev-smoke.md) are not published.
 
 ## Profiles
 
@@ -32,44 +33,88 @@ Profiles live in `${XDG_CONFIG_HOME:-~/.config}/mockos/config.json` with owner-o
 permissions. Pipe the key over stdin to keep it out of shell history:
 
 ```bash
-printf '%s' "$MOCKOS_API_KEY" | mockos login \
-  --endpoint https://your-worker.example/mcp \
+printf '%s' "$MOCKOS_API_KEY" | node packages/cli/dist/bin.js login \
+  --endpoint https://mockos-staging.workspaceagent.workers.dev/mcp \
   --profile staging \
   --api-key-stdin
 
-mockos doctor --profile staging
-mockos logout --profile staging
+node packages/cli/dist/bin.js doctor --profile staging
+node packages/cli/dist/bin.js logout --profile staging
 ```
 
-Environment variables override saved profiles, and command options override both.
-The CLI never prints an Access Key.
+Command options override environment variables, which override saved profiles. The
+relevant variables are `MOCKOS_ENDPOINT`, `MOCKOS_API_KEY`, `MOCKOS_PROFILE`, and
+`MOCKOS_CONFIG`. The CLI never prints an Access Key. Keep the config file out of Git
+and use a separate key for each deployment target.
 
-## Core loop
+## M2 core loop
+
+The examples below deliberately invoke the built source file because `@mockos/cli` is
+not published. Replace the sample environment ID with the `id` returned by
+`env create`.
 
 ```bash
-mockos env create --name integration --provider entra --seed pull-123 --json
-mockos seed --env env_12345678 --file identities.json
-mockos app create --env env_12345678 --file application.json
-mockos scenario set --env env_12345678 --file mfa-required.json
-mockos mint-token \
+node packages/cli/dist/bin.js env create \
+  --profile staging \
+  --name integration \
+  --provider entra \
+  --seed pull-123 \
+  --json
+
+node packages/cli/dist/bin.js seed \
+  --profile staging \
+  --env env_12345678 \
+  --file identities.json
+node packages/cli/dist/bin.js app create \
+  --profile staging \
+  --env env_12345678 \
+  --file application.json
+node packages/cli/dist/bin.js scenario set \
+  --profile staging \
+  --env env_12345678 \
+  --file mfa-required.json
+node packages/cli/dist/bin.js mint-token \
+  --profile staging \
   --env env_12345678 \
   --client-id client_123 \
   --subject alex@example.test
-mockos logs dump --env env_12345678 --out requests.jsonl
-mockos assert \
+node packages/cli/dist/bin.js logs dump \
+  --profile staging \
+  --env env_12345678 \
+  --out requests.jsonl
+node packages/cli/dist/bin.js assert \
+  --profile staging \
   --env env_12345678 \
   --spec assertion.json \
   --junit mockos-results.xml
-mockos env delete --env env_12345678
+node packages/cli/dist/bin.js env delete \
+  --profile staging \
+  --env env_12345678
 ```
 
 `mockos assert` exits `3` when the assertion executes but does not pass, which keeps
-usage errors (`2`) and transport/runtime failures (`1`) distinct.
+usage errors (`2`) and transport/runtime failures (`1`) distinct. Use `--timeout` for a
+slower remote target and `--json` for machine-readable command output.
 
 ## Later-phase commands
 
-`env ensure`, `blueprint export`, and `blueprint apply` are already present in the
-CLI contract. They inspect the server's advertised MCP tools and fail with a clear
-upgrade message until the governance and blueprint phases provide those capabilities.
-This keeps one CLI stable while the server grows without pretending an unavailable
-feature is implemented.
+`env ensure`, `blueprint export`, and `blueprint apply` are already present in the CLI
+contract. They inspect the server's advertised MCP tools and fail with a clear upgrade
+message until the governance and blueprint phases provide those capabilities.
+`blueprint validate` is local-only. This capability negotiation keeps the source CLI
+stable without claiming that unavailable server features work.
+
+## Future npm usage
+
+The `@mockos/cli` package has not been published and the `@mockos` scope is not
+confirmed registered. The following is the intended post-publication workflow, not a
+command that works today:
+
+```bash
+# Future only, after an announced npm release:
+pnpm add --global @mockos/cli
+mockos doctor --profile staging
+```
+
+Until that release, build and run `node packages/cli/dist/bin.js` from a source
+checkout as shown above.
