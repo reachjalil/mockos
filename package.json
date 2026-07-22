@@ -16,6 +16,7 @@
     "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm brand:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
     "dev": "pnpm --filter @mockos/worker dev",
     "docs:check": "node scripts/check-doc-status.mjs",
+    "e2e:provisioning": "node scripts/e2e-provisioning.mjs",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",

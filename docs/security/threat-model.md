@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M2 baseline accepted; M3 directory, refresh, and lifecycle controls are a locally tested source candidate
+Status: M3 baseline accepted; M5 outbound controls are locally qualified source pending hosted and deployed acceptance
 Last reviewed: 2026-07-22
 
 ## Assets and trust boundaries
@@ -27,13 +27,18 @@ Primary threats are environment-ID guessing, cross-environment SQL access, OAuth
 redirect abuse, code replay, refresh-token theft, signing-key confusion, stored XSS in
 hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, parser or body resource exhaustion, secret leakage
-through logs, unbounded SQLite growth, denial of service, and SSRF from future outbound
-provisioning.
+through logs, unbounded SQLite growth, denial of service, and SSRF through outbound
+provisioning targets.
 
 ## Implemented controls and evidence boundaries
 
 - Authenticated MCP and HTTP control routes compare against the configured Access Key,
   fail closed when it is absent, and remove control credentials before forwarding.
+- Outbound provisioning rejects a target credential equal to the current self-hosted
+  `API_KEY` regardless of prefix. The CLI checks file/stdin input before MCP, Worker
+  ingress checks the authenticated request, and the Environment Durable Object checks
+  before save/stage/use. A key-rotation collision with an existing saved target fails
+  before outbound execution without echoing the credential.
 - MCP-created environment identifiers are unguessable, and each routed request binds
   to exactly one environment Durable Object and its SQLite state.
 - Redirect URIs are compared exactly. Authorization codes are short-lived, one-time,
@@ -58,18 +63,18 @@ provisioning.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
 
-The [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) exercises authenticated
-MCP, environment isolation by identifier, OIDC/JWKS verification, scenario injection,
-request logging, assertions, and cleanup in staging and production. It is focused
-acceptance evidence, not a penetration test or a claim that every threat is closed.
-The M3 refresh, lifecycle, SCIM, Graph, Okta directory, 14-tool MCP, and CLI paths have
-focused local tests only; the M2 smoke does not qualify them.
+The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) exercises a bounded
+authenticated MCP, environment isolation, OIDC/JWKS, refresh/lifecycle, directory,
+scenario, logging, assertion, and cleanup sample in staging and production. It is
+focused acceptance evidence, not a penetration test, full fixture run, live-provider
+comparison, or evidence for the M5 outbound source candidate.
 
 ## Residual and future work
 
 The reference self-hosted deployment uses one coarse operator key per target.
-Per-environment authorization, automated key rotation, account governance, abuse
-protection, and private hosted-control-plane policy are later milestones. workers.dev
+Per-environment authorization, automated key rotation, account governance, and abuse
+protection remain outside the public M3 deployment. Operated-service policy is a
+separate private boundary and does not change this self-hosted threat model. workers.dev
 path mode also lacks provider-shaped wildcard hosts, so client compatibility remains
 intentionally bounded.
 
@@ -78,8 +83,11 @@ assertion is the product. This is not permission to send production secrets, acc
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
 
-Outbound SSRF-specific controls are in
-[outbound provisioning](./outbound-provisioning.md). That feature is not implemented
-in the M3 source candidate; a target control listed there is not evidence that its
-mitigation has landed. UserInfo, Okta Classic `/api/v1/authn`, broad Graph/Okta API
-parity, and custom-domain routing likewise remain outside the current boundary.
+M5 outbound SSRF and credential controls are described in
+[outbound provisioning](./outbound-provisioning.md). The Worker and worker-kit suites,
+full repository gate, independent source review, and two-process controlled-target e2e
+are green locally. An immutable revision, hosted CI, and deployed controlled-target
+smoke remain pending. Workers cannot pin DNS answers, so operators must restrict
+targets and add external egress enforcement where required. UserInfo, Okta Classic
+`/api/v1/authn`, broad Graph/Okta API parity, and custom-domain routing likewise remain
+outside the accepted boundary.

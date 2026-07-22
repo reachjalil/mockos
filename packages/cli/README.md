@@ -4,7 +4,7 @@ The `mockos` command manages mockOS through its authenticated remote MCP interfa
 is designed for local development, deterministic integration tests, and
 Access-Key-authenticated CI.
 
-Status: M3 source-candidate command surface locally tested; deployed evidence remains M2; npm package unpublished
+Status: M5 command source is locally qualified; exact hosted/deployed evidence remains pending; npm package unpublished
 Last reviewed: 2026-07-22
 
 ## Build and run from source
@@ -17,9 +17,9 @@ node packages/cli/dist/bin.js --help
 ```
 
 The source CLI defaults to `http://127.0.0.1:8787/mcp`. Override that endpoint with
-`--endpoint`, `MOCKOS_ENDPOINT`, or a saved profile. The live endpoints below run the
-historical M2 candidate; do not assume they contain the M3 source candidate until a
-separate M3 deployment record says so:
+`--endpoint`, `MOCKOS_ENDPOINT`, or a saved profile. Capability discovery is
+authoritative for a connected server; do not assume that a source command is deployed
+until the exact-revision evidence ledger says so:
 
 - staging: `https://mockos-staging.workspaceagent.workers.dev/mcp`
 - production: `https://mockos.workspaceagent.workers.dev/mcp`
@@ -49,10 +49,10 @@ relevant variables are `MOCKOS_ENDPOINT`, `MOCKOS_API_KEY`, `MOCKOS_PROFILE`, an
 `MOCKOS_CONFIG`. The CLI never prints an Access Key. Keep the config file out of Git
 and use a separate key for each deployment target.
 
-## M3 source-candidate loop
+## Identity and provisioning loop
 
 The examples below deliberately invoke the built source file against a `local` profile
-pointing at the M3 source Worker because `@mockos/cli` is not published. Replace the
+pointing at the source Worker because `@mockos/cli` is not published. Replace the
 sample environment and User IDs with values returned by `env create` and `seed`.
 
 ```bash
@@ -71,6 +71,16 @@ node packages/cli/dist/bin.js app create \
   --profile local \
   --env env_12345678 \
   --file application.json
+printf '%s' "$TARGET_SCIM_TOKEN" | node packages/cli/dist/bin.js provision run \
+  --profile local \
+  --env env_12345678 \
+  --app-id app_12345678 \
+  --mode full \
+  --target-ref target-app \
+  --target-url https://target-app.example.net/scim/v2 \
+  --target-token-file - \
+  --save-target \
+  --json
 node packages/cli/dist/bin.js lifecycle simulate \
   --profile local \
   --env env_12345678 \
@@ -111,6 +121,20 @@ revocation counts. Use only synthetic identities and credentials.
 for Entra or `oktaApiBaseUrl` for Okta. The directory endpoints use test-only mock
 credential boundaries (SCIM/Graph Bearer and Okta SSWS); the MCP Access Key must never
 be sent to them.
+
+`provision run` likewise requires the server to advertise
+`run_provisioning_cycle`. It accepts either a previously saved `--target-ref`, or an
+inline `--target-url` with an optional synthetic Bearer value read only from
+`--target-token-file <path>` or `--target-token-file -` for standard input. There is no
+target-token argv option. `--save-target` retains the inline target in that environment
+for subsequent cycles; omit it for run-scoped credentials. Platform `mk_` Access Keys
+and the exact active configured self-host Access Key are rejected as target credentials.
+The CLI uses a constant-time value comparison before the MCP call. This covers the
+active profile or environment key and target tokens read from a file or standard input;
+the value is not echoed on rejection. The command returns a queued run, so automation
+must poll bounded log/assertion evidence rather than treating command return as Workflow
+completion. See the [provisioning quickstart](../../docs/quickstarts/provisioning-cycle.md)
+and [outbound security boundary](../../docs/security/outbound-provisioning.md).
 
 `mockos assert` exits `3` when the assertion executes but does not pass, which keeps
 usage errors (`2`) and transport/runtime failures (`1`) distinct. Use `--timeout` for a

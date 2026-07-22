@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
+export * from "./provisioning";
 export * from "./scim";
 
 export const providerIdSchema = z.enum(["entra", "okta"]);
@@ -180,21 +182,74 @@ export const requestLogEntrySchema = z
   .strict();
 export type RequestLogEntry = z.infer<typeof requestLogEntrySchema>;
 
+const assertionMethodSchema = z.string().trim().min(1).max(32);
+const assertionPathSchema = z.string().min(1).max(2048);
+const assertionBodyIncludesSchema = z.string().min(1).max(8192);
+
+const assertionCountSchema = z
+  .object({
+    atLeast: z.number().int().min(0).optional(),
+    atMost: z.number().int().min(0).optional(),
+    exactly: z.number().int().min(0).optional(),
+  })
+  .strict()
+  .superRefine((count, context) => {
+    if (
+      count.atLeast === undefined &&
+      count.atMost === undefined &&
+      count.exactly === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "An assertion count must contain atLeast, atMost, or exactly.",
+      });
+    }
+    if (
+      count.exactly !== undefined &&
+      (count.atLeast !== undefined || count.atMost !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "exactly cannot be combined with atLeast or atMost.",
+      });
+    }
+    if (
+      count.atLeast !== undefined &&
+      count.atMost !== undefined &&
+      count.atLeast > count.atMost
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "atLeast cannot be greater than atMost.",
+      });
+    }
+  });
+
+export const assertionSequenceStepSchema = z
+  .object({
+    source: requestLogSourceSchema.optional(),
+    method: assertionMethodSchema.optional(),
+    path: assertionPathSchema.optional(),
+    status: z.number().int().min(100).max(599).optional(),
+    bodyIncludes: assertionBodyIncludesSchema.optional(),
+    responseBodyIncludes: assertionBodyIncludesSchema.optional(),
+  })
+  .strict()
+  .refine((step) => Object.values(step).some((value) => value !== undefined), {
+    message: "Each assertion sequence step must contain at least one matcher.",
+  });
+export type AssertionSequenceStep = z.infer<typeof assertionSequenceStepSchema>;
+
 export const assertionSpecSchema = z
   .object({
     source: requestLogSourceSchema.optional(),
-    method: z.string().optional(),
-    path: z.string().optional(),
+    method: assertionMethodSchema.optional(),
+    path: assertionPathSchema.optional(),
     status: z.number().int().min(100).max(599).optional(),
-    bodyIncludes: z.string().optional(),
-    count: z
-      .object({
-        atLeast: z.number().int().min(0).optional(),
-        atMost: z.number().int().min(0).optional(),
-        exactly: z.number().int().min(0).optional(),
-      })
-      .strict()
-      .default({ atLeast: 1 }),
+    bodyIncludes: assertionBodyIncludesSchema.optional(),
+    responseBodyIncludes: assertionBodyIncludesSchema.optional(),
+    sequence: z.array(assertionSequenceStepSchema).min(2).max(100).optional(),
+    count: assertionCountSchema.default({ atLeast: 1 }),
   })
   .strict();
 export type AssertionSpec = z.infer<typeof assertionSpecSchema>;
@@ -505,6 +560,7 @@ export const mockosMcpToolNames = [
   "seed_identities",
   "create_application",
   "mint_token",
+  "run_provisioning_cycle",
   "set_scenario",
   "clear_scenario",
   "get_request_log",
@@ -522,6 +578,7 @@ export type MockosMcpToolInputs = {
   configure_environment: ConfigureEnvironmentToolInput;
   seed_identities: SeedIdentitiesToolInput;
   create_application: CreateApplicationToolInput;
+  run_provisioning_cycle: RunProvisioningCycleToolInput;
   mint_token: MintTokenToolInput;
   set_scenario: SetScenarioToolInput;
   clear_scenario: ClearScenarioToolInput;
@@ -539,6 +596,7 @@ export type MockosMcpToolData = {
   configure_environment: EnvironmentConfig;
   seed_identities: SeedIdentitiesResult;
   create_application: ApplicationRegistration;
+  run_provisioning_cycle: ProvisioningRun;
   mint_token: MintedToken;
   set_scenario: ScenarioSpec;
   clear_scenario: ClearScenarioResult;

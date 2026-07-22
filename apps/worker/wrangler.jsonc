@@ -16,6 +16,8 @@
     "PATH_PREFIX": "/e",
     "BASE_DOMAIN": "id.mockos.live",
     "ENTRA_HOST": "login.id.mockos.live",
+    "E2E_INTROSPECTION_ENABLED": "false",
+    "OUTBOUND_BLOCKED_HOSTS": "mockos.workspaceagent.workers.dev,mockos-staging.workspaceagent.workers.dev,mockos-edge.workspaceagent.workers.dev,mockos-edge-staging.workspaceagent.workers.dev,mockos-control.workspaceagent.workers.dev,mockos-control-staging.workspaceagent.workers.dev,mockos.live,id.mockos.live",
     "PUBLIC_ORIGIN": "https://mockos.workspaceagent.workers.dev",
     "SENTRY_ENVIRONMENT": "production"
   },
@@ -38,6 +40,13 @@
       }
     ]
   },
+  "workflows": [
+    {
+      "name": "mockos-provisioning",
+      "binding": "PROVISIONING_WORKFLOW",
+      "class_name": "ProvisioningWorkflow"
+    }
+  ],
   "migrations": [
     {
       "tag": "v1-environment",
@@ -61,6 +70,8 @@
         "PATH_PREFIX": "/e",
         "BASE_DOMAIN": "id.mockos.live",
         "ENTRA_HOST": "login.id.mockos.live",
+        "E2E_INTROSPECTION_ENABLED": "false",
+        "OUTBOUND_BLOCKED_HOSTS": "mockos.workspaceagent.workers.dev,mockos-staging.workspaceagent.workers.dev,mockos-edge.workspaceagent.workers.dev,mockos-edge-staging.workspaceagent.workers.dev,mockos-control.workspaceagent.workers.dev,mockos-control-staging.workspaceagent.workers.dev,mockos.live,id.mockos.live",
         "PUBLIC_ORIGIN": "https://mockos-staging.workspaceagent.workers.dev",
         "SENTRY_ENVIRONMENT": "staging"
       },
@@ -82,7 +93,14 @@
             "class_name": "MockosMcpAgent"
           }
         ]
-      }
+      },
+      "workflows": [
+        {
+          "name": "mockos-provisioning-staging",
+          "binding": "PROVISIONING_WORKFLOW",
+          "class_name": "ProvisioningWorkflow"
+        }
+      ]
     }
   }
 }

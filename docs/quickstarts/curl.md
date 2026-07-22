@@ -1,13 +1,13 @@
 # Entra OIDC curl walkthrough
 
-Status: M2 path-mode OIDC flow deployed; M3 directory, refresh, and lifecycle examples target the local source candidate only
+Status: Accepted M3 path-mode OIDC, directory, refresh, and lifecycle walkthrough; M5 outbound provisioning is documented separately as an unaccepted source candidate
 Last reviewed: 2026-07-22
 
 This walkthrough uses only synthetic data. It exercises the authenticated HTTP control
 routes and the same public protocol routes as the
 [Worker integration test](../../apps/worker/test/oidc.integration.test.ts). The main
-hosted-login sequence has historical M2 deployment evidence. A later section probes
-M3 source-candidate SCIM, Graph, refresh, and lifecycle behavior against a local Worker.
+hosted-login and bounded directory/lifecycle sequence has exact-revision M3 deployment
+evidence. A later section probes accepted M3 SCIM, Graph, refresh, and lifecycle behavior.
 The source-built CLI is documented in the [CLI guide](../../packages/cli/README.md).
 
 ## Choose a Worker
@@ -49,9 +49,9 @@ key is published. Never enter a Cloudflare credential, production identity, or r
 application secret into this walkthrough. A missing server-side `API_KEY` fails closed
 with `503`, while a missing or incorrect client credential receives `401`.
 
-Those live origins have only the recorded M2 evidence. Do not run the M3-specific
-commands below against them unless a later M3 deployment record explicitly qualifies
-the same revision.
+Those live origins passed the bounded M3 acceptance recorded in
+[M3 workers.dev smoke evidence](../evidence/m3-workers-dev-smoke.md). That smoke did
+not exercise every command or fixture, and it is not a live-provider parity result.
 
 ## Configure synthetic state
 
@@ -161,7 +161,7 @@ curl --fail-with-body \
 The automated integration test additionally verifies the ID-token RS256 signature and
 the `iss`, `aud`, `tid`, `oid`, `upn`, and `nonce` claims.
 
-## Probe the local M3 source candidate
+## Probe the accepted M3 directory and lifecycle surface
 
 Keep `MOCKOS_ORIGIN=http://127.0.0.1:8787` for this section. SCIM and Graph use
 non-empty synthetic Bearer values that check only scheme and presence; they are not
@@ -220,7 +220,7 @@ curl --fail-with-body --request POST \
 Success returns a replacement refresh token. Reusing the consumed token fails closed
 and revokes its family. A provider-valid disable, suspend, deprovision, or delete also
 revokes effective tracked credentials. The source CLI reaches that behavior through
-the 14-tool MCP candidate; copy the seeded User ID before invoking it:
+the accepted 14-tool M3 MCP runtime; copy the seeded User ID before invoking it:
 
 ```sh
 pnpm --filter @mockos/cli build
@@ -251,8 +251,9 @@ curl --fail-with-body --request DELETE \
 ```
 
 The raw control commands passed in the recorded
-[M1 Wrangler smoke](../evidence/m1-wrangler-dev-smoke.md). The later
-[M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) proves authenticated MCP
-setup and cleanup, OIDC/JWKS verification, deterministic scenario injection, request
-logging, and assertions against both staging and production. It does not establish
-general Entra SDK parity or deployment of the M3 commands in this walkthrough.
+[M1 Wrangler smoke](../evidence/m1-wrangler-dev-smoke.md). The accepted
+[M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) proves the bounded
+authenticated MCP, OIDC/JWKS, refresh/lifecycle, directory, scenario, logging,
+assertion, and cleanup samples against both staging and production. It does not
+establish general Entra SDK parity, execute every command remotely, or deploy the
+locally qualified M5 outbound provisioning source candidate.

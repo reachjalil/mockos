@@ -1,6 +1,6 @@
 # Entra ID behavior
 
-Status: M3 Entra source candidate locally tested; deployed evidence remains the bounded M2 authorization-code slice
+Status: Accepted bounded M3 Entra implementation with hosted-CI and deployed samples; live-provider parity is not claimed
 Last reviewed: 2026-07-22
 
 mockOS models a tenant-specific Microsoft identity platform authority. In path hosting,
@@ -20,18 +20,19 @@ claims include `aud`, `iss`, `iat`, `exp`, `nonce`, `oid`, `sub`, `tid`,
 and a configured username claim. The [Worker integration test](../../apps/worker/test/oidc.integration.test.ts)
 drives the full hosted-login flow and verifies the minted ID token from JWKS.
 
-The M3 source candidate also redeems the `refresh_token` grant for an authenticated
+The accepted M3 implementation also redeems the `refresh_token` grant for an authenticated
 client. Refresh tokens are stored hashed and rotate atomically within a family while
 preserving the original authentication time and absolute expiry. Scope escalation is
 rejected. Replay or concurrent double redemption revokes the family and its associated
 tracked access tokens. Disabling or deleting the User through lifecycle policy revokes
 effective access and refresh credentials in the same transaction; a later refresh
 attempt fails with Entra-shaped `invalid_grant` / `AADSTS50057` behavior. This has
-focused core, adapter, and local Worker coverage, not an M3 deployment record.
+focused core, adapter, and Worker coverage, and the M3 deployed smoke sampled the
+rotation/lifecycle path.
 
-## Directory source candidate
+## Directory surface
 
-In path mode an Entra environment exposes these local M3 candidate bases:
+In path mode an Entra environment exposes these accepted M3 bases:
 
 - `/e/<environment>/scim/v2` for SCIM discovery and versioned User/Group CRUD,
   filtering, pagination, PATCH, and ETags;
@@ -48,14 +49,17 @@ The [OIDC fixture corpus](../../packages/testkit/fixtures/entra/oidc) records ad
 documented behavior, including client credentials, device flow, UserInfo, and selected
 AADSTS cases. Those files remain `documented` until an automated engine executor passes
 them. The separate [SCIM corpus](../../packages/testkit/fixtures/entra/scim) contains
-source-reviewed M3 candidate cases but is not a live capture or a corpus-wide Worker
+source-reviewed source-implemented cases but is not a live capture or a corpus-wide Worker
 conformance run. Client credentials, device flow, UserInfo, exact Microsoft UI,
 localization, risk policy, Conditional Access, and tenant administration remain outside
 the implemented boundary.
 
-The historical [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) verifies the
-earlier hosted authorization-code/JWKS scenario. It does not qualify M3 refresh,
-lifecycle, SCIM, or Graph behavior and is not a live Entra comparison.
+The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) verifies a bounded
+hosted authorization-code/JWKS, refresh/lifecycle, SCIM, and Graph sample. It does not
+run the entire fixture corpus or compare with a live Entra tenant. M5 adds an outbound
+Entra provisioning source candidate whose Worker/full local gates and two-process
+Entra-shaped target flow are green; immutable-revision, hosted, deployed, and
+live-provider gates remain pending.
 
 ## SDK note
 

@@ -1,0 +1,30 @@
+{
+  "source": "outbound",
+  "count": { "exactly": 1 },
+  "sequence": [
+    {
+      "method": "GET",
+      "path": "/scim/v2/Users",
+      "status": 200,
+      "responseBodyIncludes": "totalResults"
+    },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Users",
+      "status": 201,
+      "bodyIncludes": "ada.provisioning@example.test"
+    },
+    {
+      "method": "GET",
+      "path": "/scim/v2/Groups",
+      "status": 200,
+      "responseBodyIncludes": "totalResults"
+    },
+    {
+      "method": "POST",
+      "path": "/scim/v2/Groups",
+      "status": 201,
+      "bodyIncludes": "Provisioning engineers"
+    }
+  ]
+}

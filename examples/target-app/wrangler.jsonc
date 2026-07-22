@@ -1,0 +1,26 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "mockos-target-app",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-07-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "send_metrics": false,
+  "secrets": {
+    "required": ["TARGET_SCIM_TOKEN", "TARGET_CONTROL_TOKEN"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TARGET_STATE",
+        "class_name": "TargetAppDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-target-state",
+      "new_sqlite_classes": ["TargetAppDurableObject"]
+    }
+  ]
+}

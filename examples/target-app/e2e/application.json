@@ -1,0 +1,7 @@
+{
+  "name": "target-app e2e",
+  "redirectUris": ["https://client.example/target-app-e2e"],
+  "grantTypes": ["authorization_code"],
+  "appRoles": [],
+  "groupClaimsMode": "none"
+}

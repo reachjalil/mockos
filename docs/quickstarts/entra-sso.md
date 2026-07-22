@@ -1,6 +1,6 @@
 # Test Entra SSO
 
-Status: M2 Entra code flow live in workers.dev path mode; M3 refresh, directory, and lifecycle follow-ons are local source candidates
+Status: Accepted M3 Entra code, refresh, directory, and lifecycle flow in workers.dev path mode; live-provider parity is not claimed
 Last reviewed: 2026-07-22
 
 1. Choose a local Worker or a live workers.dev origin from
@@ -45,11 +45,11 @@ Use the returned environment ID for `seed`, `app create`, `wellknown`, and clean
 commands described in the [CLI guide](../../packages/cli/README.md). Profiles contain
 control credentials; keep the owner-only config file out of Git.
 
-## Local M3 follow-on
+## M3 refresh and directory follow-on
 
-The staging profile above points at the historical M2 deployment. For the M3 source
-candidate, start a local Worker, save a separate `local` profile, and use `doctor` to
-confirm that the server advertises all 14 tools including `simulate_lifecycle`.
+The accepted staging deployment advertises the 14-tool M3 registry, including
+`simulate_lifecycle`. A local profile can exercise the same flow from source; always
+use `doctor` to negotiate the capability before depending on it.
 
 Register an application permitting `authorization_code` and `refresh_token`, request
 `offline_access`, and redeem the returned refresh token once. The replacement rotates
@@ -76,8 +76,9 @@ The [curl walkthrough](./curl.md) contains concise probes.
 Do not use real passwords, tenants, or tokens. The repository
 [integration test](../../apps/worker/test/oidc.integration.test.ts) demonstrates these
 steps under the Cloudflare Workers test runtime. The
-[M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) records the corresponding
-deployed production and staging flow, including JWT verification and cleanup. This
-evidence does not claim arbitrary Entra client or SDK compatibility, M3 deployment,
-or live-provider parity. Client credentials, device flow, UserInfo, outbound
-provisioning, and provider-shaped custom domains remain outside this quickstart.
+[M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) records the bounded deployed
+production and staging flow, including refresh/lifecycle behavior, JWT verification,
+directory samples, and cleanup. This evidence does not claim arbitrary Entra client or
+SDK compatibility or live-provider parity. Client credentials, device flow, UserInfo,
+the locally qualified but undeployed M5 outbound provisioning source candidate, and
+provider-shaped custom domains remain outside this quickstart.

@@ -4,6 +4,7 @@ import {
   environmentIdSchema,
   identitySeedSchema,
   type Problem,
+  type ProvisioningWorkflowParams,
 } from "@mockos/contracts";
 import {
   type EnvironmentCatalogDurableObject,
@@ -20,18 +21,26 @@ export type CloudflareEnv = {
   ENVIRONMENT_CATALOG: DurableObjectNamespace<EnvironmentCatalogDurableObject>;
   ENVIRONMENTS: DurableObjectNamespace<EnvironmentDurableObject>;
   MOCKOS_MCP: DurableObjectNamespace<MockosMcpAgent>;
+  PROVISIONING_WORKFLOW: Workflow<ProvisioningWorkflowParams>;
   TID_INDEX?: KVNamespace;
   API_KEY?: string;
+  ALLOW_INSECURE_TARGETS?: string;
   BASE_DOMAIN?: string;
   ENTRA_HOST?: string;
+  E2E_INTROSPECTION_ENABLED?: string;
+  E2E_OWNER_NONCE?: string;
   HOSTING_MODE: string;
+  OUTBOUND_BLOCKED_HOSTS?: string;
   PATH_PREFIX?: string;
+  PROVISIONING_FETCHER?: Fetcher;
   PUBLIC_ORIGIN: string;
   SENTRY_DSN?: string;
   SENTRY_ENVIRONMENT?: string;
 };
 
 type WorkerHonoEnv = { Bindings: CloudflareEnv };
+
+export const MAX_MCP_REQUEST_BODY_BYTES = 2 * 1_024 * 1_024;
 
 const mcpHandler = MockosMcpAgentClass.serve("/mcp", {
   binding: "MOCKOS_MCP",
@@ -101,6 +110,104 @@ const withoutControlCredentials = (request: Request) => {
   return new Request(request, { headers });
 };
 
+type BoundedMcpRequest = {
+  readonly request: Request;
+  readonly body?: Uint8Array;
+};
+
+const boundedMcpRequest = async (
+  request: Request
+): Promise<BoundedMcpRequest | undefined> => {
+  const contentLength = request.headers.get("content-length")?.trim();
+  if (contentLength) {
+    if (
+      !/^\d+$/.test(contentLength) ||
+      Number(contentLength) > MAX_MCP_REQUEST_BODY_BYTES
+    ) {
+      void request.body
+        ?.cancel("mockOS MCP request body limit reached")
+        .catch(() => undefined);
+      return undefined;
+    }
+  }
+  if (!request.body) return { request };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_MCP_REQUEST_BODY_BYTES) {
+        void reader
+          .cancel("mockOS MCP request body limit reached")
+          .catch(() => undefined);
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return {
+    request: new Request(request.url, {
+      method: request.method,
+      headers,
+      ...(request.method === "GET" || request.method === "HEAD" ? {} : { body }),
+      redirect: request.redirect,
+      signal: request.signal,
+    }),
+    body,
+  };
+};
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+const isPlatformCredentialToolCall = (
+  value: unknown,
+  platformApiKey: string
+): boolean => {
+  const message = record(value);
+  if (message?.method !== "tools/call") return false;
+  const params = record(message.params);
+  if (params?.name !== "run_provisioning_cycle") return false;
+  const arguments_ = record(params.arguments);
+  const target = record(arguments_?.target);
+  if (target?.kind !== "inline") return false;
+  const inlineTarget = record(target.target);
+  const auth = record(inlineTarget?.auth);
+  const token = auth?.kind === "bearer" ? auth.token : undefined;
+  return typeof token === "string" && sameSecret(token.trim(), platformApiKey);
+};
+
+const mcpBodyUsesPlatformCredential = (
+  body: Uint8Array | undefined,
+  platformApiKey: string
+): boolean => {
+  if (!body || body.byteLength === 0) return false;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    return false;
+  }
+  return Array.isArray(payload)
+    ? payload.some((message) => isPlatformCredentialToolCall(message, platformApiKey))
+    : isPlatformCredentialToolCall(payload, platformApiKey);
+};
+
 const environmentStub = (env: CloudflareEnv, environmentId: string) => {
   const parsed = environmentIdSchema.safeParse(environmentId);
   if (!parsed.success) throw new Error("Invalid environment id.");
@@ -115,6 +222,34 @@ const environmentCatalog = (env: CloudflareEnv) =>
 const serveMcp = async (context: Context<WorkerHonoEnv>) => {
   const failure = apiKeyFailure(context.req.raw, context.env);
   if (failure) return failure;
+  const bounded = await boundedMcpRequest(context.req.raw);
+  if (!bounded) {
+    const body = problem(
+      413,
+      "Request body too large",
+      "MCP request bodies cannot exceed 2 MiB.",
+      "REQUEST_BODY_TOO_LARGE",
+      context.req.raw
+    );
+    return Response.json(body, {
+      status: body.status,
+      headers: { "content-type": "application/problem+json" },
+    });
+  }
+  const platformApiKey = context.env.API_KEY?.trim();
+  if (platformApiKey && mcpBodyUsesPlatformCredential(bounded.body, platformApiKey)) {
+    const body = problem(
+      400,
+      "Outbound credential rejected",
+      "The platform Access Key cannot be used as an outbound target credential.",
+      "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+      context.req.raw
+    );
+    return Response.json(body, {
+      status: body.status,
+      headers: { "content-type": "application/problem+json" },
+    });
+  }
   // The standalone SSE stream is optional in Streamable HTTP. The current
   // Agents SDK can route a later POST response onto that idle stream in a
   // deployed Worker, leaving standards-compliant clients waiting forever on
@@ -124,7 +259,7 @@ const serveMcp = async (context: Context<WorkerHonoEnv>) => {
     return context.body(null, 405, { allow: "POST, DELETE, OPTIONS" });
   }
   return mcpHandler.fetch(
-    withoutControlCredentials(context.req.raw),
+    withoutControlCredentials(bounded.request),
     context.env,
     context.executionCtx as unknown as Parameters<typeof mcpHandler.fetch>[2]
   );
@@ -149,11 +284,35 @@ export const createWorkerApp = () => {
       ok: true,
       service: "mockos",
       hostingMode: context.env.HOSTING_MODE,
+      ...(context.env.E2E_INTROSPECTION_ENABLED === "true" &&
+      context.env.E2E_OWNER_NONCE
+        ? { e2eOwnerNonce: context.env.E2E_OWNER_NONCE }
+        : {}),
     })
   );
 
   app.all("/mcp", serveMcp);
   app.all("/mcp/*", serveMcp);
+
+  app.get(
+    "/__mockos/e2e/environments/:environmentId/provisioning-runs/:runId",
+    async (context) => {
+      if (context.env.E2E_INTROSPECTION_ENABLED !== "true") {
+        return context.notFound();
+      }
+      const failure = apiKeyFailure(context.req.raw, context.env);
+      if (failure) return failure;
+      const environmentId = environmentIdSchema.parse(
+        context.req.param("environmentId")
+      );
+      const runId = context.req.param("runId");
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(runId)) return context.notFound();
+      const run = await environmentStub(context.env, environmentId).getProvisioningRun(
+        runId
+      );
+      return run ? context.json({ data: run }) : context.notFound();
+    }
+  );
 
   app.use("/__mockos/v1/*", async (context, next) => {
     const failure = apiKeyFailure(context.req.raw, context.env);

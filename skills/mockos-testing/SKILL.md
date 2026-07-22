@@ -1,13 +1,14 @@
 ---
 name: mockos-testing
 description: >-
-  Run implemented M3 source-candidate mockOS identity-integration tests through authenticated MCP:
+  Run locally qualified M5 source-candidate mockOS identity-integration tests through authenticated MCP:
   create isolated Entra ID or Okta environments, seed identities, register OIDC
   clients, run PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider
-  directory APIs, mint broken tokens, inject deterministic scenarios, assert request
-  logs, and clean up. Use when wiring or testing an application's enterprise identity
-  integration or reproducing provider-shaped failures; do not claim hosted M3
-  qualification, Okta Classic Authn, broad provider parity, or outbound provisioning.
+  directory APIs, run outbound SCIM provisioning, mint broken tokens, inject
+  deterministic scenarios, assert ordered request/response shapes, and clean up. Use
+  when wiring or testing an application's enterprise identity integration or
+  reproducing provider-shaped failures; do not claim unrecorded hosted qualification,
+  Okta Classic Authn, or broad provider parity.
 ---
 
 # Test with mockOS
@@ -25,10 +26,10 @@ profile as metadata unless the status ledger names its runtime evidence.
 2. Choose `entra` or `okta`. Define one happy-path result and the exact application
    behavior expected for each negative case.
 3. Separate implemented surfaces from gaps. SCIM, bounded Entra Graph reads, tested
-   Okta Users/Groups lifecycle APIs, and refresh rotation are available in the M3
-   source candidate. Okta Classic `/api/v1/authn`, broad Graph/Okta parity, Entra
-   UserInfo/client credentials/device flow, SAML, and outbound provisioning remain
-   unavailable; never invent routes for them.
+   Okta Users/Groups lifecycle APIs, refresh rotation, and deterministic outbound SCIM
+   provisioning are available in the locally qualified M5 source candidate. Okta Classic
+   `/api/v1/authn`, broad Graph/Okta parity, Entra UserInfo/client credentials/device
+   flow, and SAML remain unavailable; never invent routes for them.
 
 ## Connect to management MCP
 
@@ -41,17 +42,19 @@ Treat `GET /mcp` returning 405 as the expected POST-only Streamable HTTP fallbac
 the issued session ID on later requests and close the client when finished so it sends
 the authenticated session-termination DELETE.
 
-Call `tools/list` before creating anything. The M3 source candidate defines these 14
+Call `tools/list` before creating anything. The M5 source candidate defines these 15
 tools:
 
 `create_environment`, `list_environments`, `delete_environment`,
-`configure_environment`, `seed_identities`, `create_application`, `mint_token`,
-`set_scenario`, `clear_scenario`, `get_request_log`, `assert_requests`,
-`simulate_lifecycle`, `get_wellknown_urls`, and `set_current_environment`.
+`configure_environment`, `seed_identities`, `create_application`,
+`run_provisioning_cycle`, `mint_token`, `set_scenario`, `clear_scenario`,
+`get_request_log`, `assert_requests`, `simulate_lifecycle`, `get_wellknown_urls`, and
+`set_current_environment`.
 
 Require only the tools needed by the planned workflow and tolerate additional tools
 from a newer compatible server. Report a capability mismatch before any mutation; in
-particular, do not attempt the M3 cascade unless `simulate_lifecycle` is advertised.
+particular, do not attempt the lifecycle cascade unless `simulate_lifecycle` is
+advertised or provisioning unless `run_provisioning_cycle` is advertised.
 Capability discovery is evidence about the connected server, not proof that a local
 source candidate is deployed there.
 
@@ -127,9 +130,9 @@ uses refresh tokens:
    `grant_type=refresh_token`. Never print or quote the refresh-token value from the
    captured body.
 
-The current M3 source preserves the original authentication time and absolute family
-expiry across rotation. Treat those as focused local source-candidate behaviors, not
-live-provider or deployed-M3 evidence.
+The current source preserves the original authentication time and absolute family
+expiry across rotation. Treat those as focused source behaviors, not live-provider or
+unrecorded deployed evidence.
 
 ## Exercise SCIM and provider directory surfaces
 
@@ -164,6 +167,75 @@ Use a separate directory-only User for mutating lifecycle tests so it cannot inv
 the refresh-family case. Prefer MCP `simulate_lifecycle` for the token-bearing User
 because its result reports the coordinated revocation counts. Do not call Classic
 `/api/v1/authn` or infer other Okta organization APIs.
+
+## Run the outbound provisioning loop
+
+Use a disposable SCIM receiver at a policy-accepted URL. Prefer the repository's
+`examples/target-app` harness for source qualification. A literal loopback/private URL
+is rejected even when self-host HTTP is enabled; use the e2e harness or an operator-
+controlled HTTPS test origin instead of weakening SSRF validation.
+
+When qualifying a repository checkout, run `pnpm e2e:provisioning` first. It boots the
+mockOS and Durable Object-backed target app as separate `wrangler dev` processes and
+drives the authenticated MCP/CLI/Workflow/service-binding/assertion loop. A passing
+unit or Miniflare test is not a substitute for this process-level gate.
+
+1. Keep the application registration's returned `id`; provisioning uses that ID, not
+   its OAuth `clientId`.
+2. Reset the disposable target and retain its synthetic SCIM Bearer value without
+   printing it. Never use a platform `mk_` Access Key or the exact active non-prefixed
+   self-host `API_KEY` as the target credential. The CLI and runtime reject that exact
+   reuse, and a later key-rotation collision with a saved target fails before outbound
+   execution.
+3. Call `run_provisioning_cycle` with the explicit environment ID, application ID,
+   `full` mode, and an inline target `{ref, baseUrl, auth}`. Set `save: false` unless a
+   later cycle deliberately tests saved-target reuse. The raw credential must not
+   appear in the returned run or any Workflow parameter/log evidence.
+4. Require a queued run with the same environment, application, provider, mode, and
+   target reference. This acknowledges Workflow creation only; it is not terminal
+   success.
+5. Poll `get_request_log` with `source: "outbound"` and a bounded deadline. A full
+   cycle must perform all User operations before Group operations. Let unrelated log
+   entries exist between expected steps.
+6. Call `assert_requests` with an ordered sequence that proves at least User lookup,
+   User create/update, Group lookup, and Group create/update. Match the synthetic user
+   name and Group display name with `bodyIncludes`, and target result fields with
+   `responseBodyIncludes`. Require exactly one complete sequence for a reset target.
+7. Inspect the target's protected request and state snapshots. Require its captured
+   Authorization value to be redacted, the User to exist before Group membership is
+   materialized, and the final member reference to use the target User ID.
+8. Run `incremental` against the saved target only when the first run used `save:
+   true`; otherwise resend a fresh inline target. Assert unchanged source versions do
+   not produce duplicate writes. Mutate one source resource, rerun, and require only
+   its provider-shaped update plus any dependent Group reconciliation.
+
+For a deployed acceptance run, inspect the platform Workflow instance as well as the
+request log. Platform status `complete` is necessary but not sufficient because the
+Workflow can return a failed or partial application run. Require its output to contain
+the exact retained run ID with `status: "succeeded"`, and reject rollback-failure
+metadata if present.
+
+Treat HTTP responses, including 4xx, 429, and 5xx, as recorded outcomes. A 429 may
+produce an explicit bounded wait and retry; it is not an invisible infrastructure
+retry. Report a partial or failed sequence as a failed test. Do not retry a whole run
+with changed inputs after an ambiguous client timeout. If the server returns its stable
+Workflow-reconciliation failure, retry the exact same environment, application, mode,
+target reference, target metadata, and synthetic credential. The server revalidates
+the frozen target in constant time and resumes or returns the existing fixed Workflow
+run; a mismatched retry remains a conflict and must not reveal stored metadata or
+credentials.
+
+This recovery rule applies only while the exact run remains queued or running. If the
+original run can already be terminal, do not submit another whole-cycle call: M5 has
+no caller idempotency key or terminal replay record, so that call is a new run and may
+write and consume hosted quota again. Resolve the outcome from the retained run ID,
+outbound request log, and disposable target state. Terminal request replay is deferred
+to F4.
+
+If a same-input retry returns a terminal failed run, treat it as reconciliation of a
+platform Workflow failure and do not expect its hosted quota unit to be released.
+M5 performs this cleanup on retry rather than through a background orphan sweep; keep
+the retry bounded and preserve the returned failure evidence.
 
 ## Mint focused token failures
 
@@ -212,24 +284,28 @@ the test subject. Prefer `remaining: 1` for a one-shot failure.
 
 ## Diagnose and assert requests
 
-Use `get_request_log` to inspect newest-first inbound protocol entries. Filter only by
+Use `get_request_log` to inspect newest-first inbound or outbound protocol entries. Filter only by
 supported fields: source, provider, normalized method, exact path, exact status, limit,
 and cursor.
 
-Use `assert_requests` for stable machine assertions. Supply only:
+Use `assert_requests` for stable machine assertions. Supply:
 
 - `source` for an exact source match;
 - `method`, normalized to uppercase and then matched exactly;
 - `path` for the exact public request path;
 - `status` for the exact response status;
-- `bodyIncludes` for a case-sensitive literal substring of the stored **request** body;
+- `bodyIncludes` or `responseBodyIncludes` for case-sensitive literal substrings of
+  the respective stored body;
+- `sequence` with two to 100 non-empty step matchers when append order matters; top-
+  level matchers apply to every step and unrelated requests may appear between them;
   and
 - `count.atLeast`, `count.atMost`, or `count.exactly`.
 
-Do not ask `assert_requests` to match headers, response-body subsets, regular
-expressions, ordering, or selected JSON fields. Check the returned `pass`, `matched`,
-`message`, and request IDs. Treat a failed assertion as a failed test, not merely a
-diagnostic note.
+Ordered matching greedily counts complete, non-overlapping subsequences from oldest to
+newest and returns IDs from complete matches only. Do not ask `assert_requests` to
+match headers, parsed JSON/JSONPath, regular expressions, or partial-field semantics.
+Check the returned `pass`, `matched`, `message`, and request IDs. Treat a failed
+assertion as a failed test, not merely a diagnostic note.
 
 ## Clean up and report
 
@@ -241,9 +317,9 @@ cleanup.
 Report every case as passed, failed, or unavailable. Redact the management key,
 Authorization headers, cookies, client secrets, full tokens, and synthetic passwords.
 Request-log bodies can contain test credentials and tokens, so quote only the minimum
-safe evidence. Separate local M3 source-candidate results from hosted or deployed
-evidence in the report.
+safe evidence. Confirm that outbound target Bearer values remain redacted. Separate
+local M5 source-candidate results from hosted or deployed evidence in the report.
 
-Use the [M2 workers.dev smoke record](../../docs/evidence/m2-workers-dev-smoke.md) only
-as historical deployed M2 evidence. Do not present it as M3 qualification or as a
-comparison against a live Entra ID tenant or Okta organization.
+Use only the exact-revision records linked by the implementation ledger as deployed
+evidence. Do not present an older workers.dev smoke as M5 qualification or any source
+or deployed result as comparison against a live Entra ID tenant or Okta organization.

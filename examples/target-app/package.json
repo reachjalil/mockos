@@ -1,0 +1,25 @@
+{
+  "name": "@mockos/target-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deterministic SCIM application-under-test for mockOS end-to-end runs.",
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "dev": "wrangler dev --config wrangler.local.jsonc --local --ip 127.0.0.1 --port 8792",
+    "test": "vitest run",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

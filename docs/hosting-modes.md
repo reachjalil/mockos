@@ -1,6 +1,6 @@
 # Hosting modes
 
-Status: M2 workers.dev path mode deployed; M3 path routes are a local source candidate and wildcard/subdomain mode remains planned
+Status: M3 workers.dev path mode accepted; M5 outbound provisioning is not yet deployed and wildcard/subdomain mode remains planned
 Last reviewed: 2026-07-22
 
 ## Path mode
@@ -29,10 +29,11 @@ Provider traffic is routed beneath an environment segment. Current examples are:
 - Entra- or Okta-profile SCIM:
   `/e/<env>/scim/v2/Users`
 
-The Graph, Okta directory, and SCIM paths are M3 source-candidate surfaces with focused
-local tests. They are not established by the M2 workers.dev deployment record. SCIM
-uses the environment's provider profile, so the same path exposes Entra or Okta PATCH
-and lifecycle semantics rather than a third provider.
+The Graph, Okta directory, and SCIM paths are accepted for the bounded M3 scope. The
+M3 deployed smoke sampled both SCIM profiles, an Entra Graph read, and an Okta directory
+read; it did not run every fixture or route remotely. SCIM uses the environment's
+provider profile, so the same path exposes Entra or Okta PATCH and lifecycle semantics
+rather than a third provider.
 
 Protocol endpoints are intentionally reachable test surfaces once their unguessable
 environment URL is known. OIDC/OAuth uses registered synthetic clients; SCIM and Graph
@@ -45,11 +46,12 @@ Path mode works without an account-owned zone, but some SDKs assume provider-sha
 hosts. Configure explicit authorities and never infer broad SDK compatibility from a
 curl or single-client success. The authenticated MCP, OIDC, scenario, log, assertion,
 and cleanup checks recorded for both live origins are in the
-[M2 workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md).
+[M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md).
 
 Path mode does not imply broad provider API coverage. Microsoft Graph is read-only,
-Okta Classic `/api/v1/authn` and both UserInfo routes are absent, and outbound SCIM
-provisioning remains a later milestone. See [known limitations](./known-limitations.md).
+Okta Classic `/api/v1/authn` and both UserInfo routes are absent. M5 outbound SCIM
+provisioning is locally qualified source but is not part of the accepted live Worker
+revision. See [known limitations](./known-limitations.md).
 
 ## Subdomain mode
 

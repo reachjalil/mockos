@@ -279,6 +279,258 @@ describe("mockOS CLI", () => {
     ]);
   });
 
+  it("runs provisioning without placing the target credential in argv", async () => {
+    const test = harness();
+    test.files.set("target-token.txt", "synthetic-scim-token\n");
+    const client = new FakeClient();
+    client.tools = [{ name: "run_provisioning_cycle" }];
+    client.results.set("run_provisioning_cycle", {
+      data: {
+        id: "run_12345678",
+        unsafeDependencyEcho: "synthetic-scim-token",
+      },
+    });
+
+    const exitCode = await runCli(
+      [
+        "provision",
+        "run",
+        "--env",
+        "env_12345678",
+        "--app-id",
+        "app_12345678",
+        "--mode",
+        "full",
+        "--target-ref",
+        "target-app",
+        "--target-url",
+        "https://target.example/scim/v2",
+        "--target-token-file",
+        "target-token.txt",
+        "--save-target",
+      ],
+      dependencies(client, test.io)
+    );
+
+    expect(exitCode).toBe(0);
+    expect(client.calls).toEqual([
+      {
+        name: "run_provisioning_cycle",
+        input: {
+          environmentId: "env_12345678",
+          appId: "app_12345678",
+          mode: "full",
+          target: {
+            kind: "inline",
+            target: {
+              ref: "target-app",
+              baseUrl: "https://target.example/scim/v2",
+              auth: { kind: "bearer", token: "synthetic-scim-token" },
+            },
+            save: true,
+          },
+        },
+      },
+    ]);
+    expect(test.stdout.join("")).not.toContain("synthetic-scim-token");
+    expect(test.stdout.join("")).toContain("[REDACTED]");
+    expect(test.stderr).toEqual([]);
+  });
+
+  it("rejects platform keys from stdin before calling the provisioning tool", async () => {
+    const platformKey = "mk_platform_key_must_stay_private";
+    const test = harness({ stdin: `${platformKey}\n` });
+    const client = new FakeClient();
+    client.tools = [{ name: "run_provisioning_cycle" }];
+
+    const exitCode = await runCli(
+      [
+        "provision",
+        "run",
+        "--env",
+        "env_12345678",
+        "--app-id",
+        "app_12345678",
+        "--target-ref",
+        "target-app",
+        "--target-url",
+        "https://target.example/scim/v2",
+        "--target-token-file",
+        "-",
+      ],
+      dependencies(client, test.io)
+    );
+
+    expect(exitCode).toBe(2);
+    expect(client.calls).toEqual([]);
+    expect(test.stdout.join("")).not.toContain(platformKey);
+    expect(test.stderr.join("")).not.toContain(platformKey);
+    expect(test.stderr.join("")).toContain("Access Key cannot be used");
+  });
+
+  it.each(["stdin", "file"] as const)(
+    "rejects an exact non-prefixed active platform key read from %s",
+    async (source) => {
+      const platformKey = "local-mockos-only";
+      const test = harness({
+        ...(source === "stdin" ? { stdin: `${platformKey}\n` } : {}),
+      });
+      if (source === "file") {
+        test.files.set("target-token.txt", `${platformKey}\n`);
+      }
+      const client = new FakeClient();
+      client.tools = [{ name: "run_provisioning_cycle" }];
+      const baseDependencies = dependencies(client, test.io);
+      const configuredDependencies =
+        source === "stdin"
+          ? {
+              ...baseDependencies,
+              environment: { MOCKOS_API_KEY: platformKey },
+            }
+          : {
+              ...baseDependencies,
+              loadConfig: async (): Promise<CliConfig> => ({
+                version: 1,
+                activeProfile: "default",
+                profiles: {
+                  default: {
+                    endpoint: "https://mockos.example.test/mcp",
+                    apiKey: platformKey,
+                  },
+                },
+              }),
+            };
+
+      const exitCode = await runCli(
+        [
+          "provision",
+          "run",
+          "--env",
+          "env_12345678",
+          "--app-id",
+          "app_12345678",
+          "--target-ref",
+          "target-app",
+          "--target-url",
+          "https://target.example/scim/v2",
+          "--target-token-file",
+          source === "stdin" ? "-" : "target-token.txt",
+        ],
+        configuredDependencies
+      );
+
+      expect(exitCode).toBe(2);
+      expect(client.calls).toEqual([]);
+      expect(test.stdout.join("")).not.toContain(platformKey);
+      expect(test.stderr.join("")).not.toContain(platformKey);
+      expect(test.stderr.join("")).toContain("Access Key cannot be used");
+    }
+  );
+
+  it("does not offer a target-token argv option", async () => {
+    const targetToken = "synthetic-token-must-not-appear";
+    const test = harness();
+    const client = new FakeClient();
+    client.tools = [{ name: "run_provisioning_cycle" }];
+
+    const exitCode = await runCli(
+      [
+        "provision",
+        "run",
+        "--env",
+        "env_12345678",
+        "--app-id",
+        "app_12345678",
+        "--target-ref",
+        "target-app",
+        "--target-url",
+        "https://target.example/scim/v2",
+        "--target-token",
+        targetToken,
+      ],
+      dependencies(client, test.io)
+    );
+
+    expect(exitCode).toBe(2);
+    expect(client.calls).toEqual([]);
+    expect(test.stderr.join("")).toContain("Unknown option --target-token");
+    expect(test.stderr.join("")).not.toContain(targetToken);
+  });
+
+  it("redacts a target credential echoed by a remote provisioning error", async () => {
+    const targetToken = "synthetic-target-token";
+    const test = harness({ stdin: targetToken });
+    const client = new FakeClient();
+    client.tools = [{ name: "run_provisioning_cycle" }];
+    client.callTool = async (name, input) => {
+      client.calls.push({ name, input });
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Remote target rejected ${targetToken}`,
+          },
+        ],
+      };
+    };
+
+    const exitCode = await runCli(
+      [
+        "provision",
+        "run",
+        "--env",
+        "env_12345678",
+        "--app-id",
+        "app_12345678",
+        "--target-ref",
+        "target-app",
+        "--target-url",
+        "https://target.example/scim/v2",
+        "--target-token-file",
+        "-",
+      ],
+      dependencies(client, test.io)
+    );
+
+    expect(exitCode).toBe(1);
+    expect(test.stderr.join("")).toContain("[REDACTED]");
+    expect(test.stderr.join("")).not.toContain(targetToken);
+  });
+
+  it("runs a saved provisioning target without reading stdin", async () => {
+    const test = harness({ stdin: "must-not-be-read" });
+    const client = new FakeClient();
+    client.tools = [{ name: "run_provisioning_cycle" }];
+
+    expect(
+      await runCli(
+        [
+          "provision",
+          "run",
+          "--env",
+          "env_12345678",
+          "--app-id",
+          "app_12345678",
+          "--target-ref",
+          "saved-target",
+        ],
+        dependencies(client, test.io)
+      )
+    ).toBe(0);
+    expect(client.calls).toEqual([
+      {
+        name: "run_provisioning_cycle",
+        input: {
+          environmentId: "env_12345678",
+          appId: "app_12345678",
+          mode: "incremental",
+          target: { kind: "saved", targetRef: "saved-target" },
+        },
+      },
+    ]);
+  });
+
   it("returns a distinct assertion exit code and writes JUnit", async () => {
     const test = harness();
     test.files.set("assertion.json", JSON.stringify({ path: "/token" }));

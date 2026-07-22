@@ -34,6 +34,11 @@ type RequestLogRow = SqlRow & {
   correlation_id: string;
 };
 
+type AssertionMatch = Pick<
+  AssertionSpec,
+  "source" | "method" | "path" | "status" | "bodyIncludes" | "responseBodyIncludes"
+>;
+
 const selectRequestLog = `SELECT sequence, id, timestamp, source, provider,
   method, path, request_headers, request_body, response_status,
   response_headers, response_body, duration_ms, correlation_id FROM request_log`;
@@ -216,6 +221,37 @@ const countExpectation = (spec: AssertionSpec): string => {
   return expected.join(" and ") || "any number of";
 };
 
+const assertionWhere = (
+  match: AssertionMatch,
+  where: string[],
+  bindings: SqlValue[]
+) => {
+  if (match.source) {
+    where.push("source = ?");
+    bindings.push(match.source);
+  }
+  if (match.method !== undefined) {
+    where.push("method = ?");
+    bindings.push(match.method.trim().toUpperCase());
+  }
+  if (match.path !== undefined) {
+    where.push("path = ?");
+    bindings.push(match.path);
+  }
+  if (match.status !== undefined) {
+    where.push("response_status = ?");
+    bindings.push(match.status);
+  }
+  if (match.bodyIncludes !== undefined) {
+    where.push("request_body IS NOT NULL AND instr(request_body, ?) > 0");
+    bindings.push(match.bodyIncludes);
+  }
+  if (match.responseBodyIncludes !== undefined) {
+    where.push("response_body IS NOT NULL AND instr(response_body, ?) > 0");
+    bindings.push(match.responseBodyIncludes);
+  }
+};
+
 /**
  * Synchronous append-only request log with a transactionally trimmed ring.
  * Pagination follows append sequence newest-first, independent of timestamps.
@@ -358,32 +394,75 @@ export class RequestLogService {
 
   /**
    * Matches request attributes exactly; bodyIncludes is a literal,
-   * case-sensitive substring search over the stored request body.
+   * case-sensitive substring search over the stored request body. Sequence
+   * assertions count greedy-earliest, non-overlapping subsequences in append
+   * order; request IDs are returned only for complete sequence matches.
    */
   assertRequests(input: AssertionSpec): AssertionResult {
     const spec = assertionSpecSchema.parse(input);
+    if (spec.sequence) {
+      const { matched, requestIds, partialSteps, truncated } = this.#store.transaction(
+        () => {
+          const requestIds: string[] = [];
+          let matched = 0;
+          let afterSequence = 0;
+          let partialSteps = 0;
+          let truncated = false;
+          while (true) {
+            const candidateIds: string[] = [];
+            let candidateAfterSequence = afterSequence;
+            for (const step of spec.sequence ?? []) {
+              const where = ["sequence > ?"];
+              const bindings: SqlValue[] = [candidateAfterSequence];
+              assertionWhere(spec, where, bindings);
+              assertionWhere(step, where, bindings);
+              const row = this.#store.get<{ id: string; sequence: number } & SqlRow>(
+                `SELECT id, sequence FROM request_log
+                 WHERE ${where.join(" AND ")}
+                 ORDER BY sequence ASC LIMIT 1`,
+                ...bindings
+              );
+              if (!row) {
+                partialSteps = candidateIds.length;
+                return { matched, requestIds, partialSteps, truncated };
+              }
+              candidateIds.push(row.id);
+              candidateAfterSequence = Number(row.sequence);
+            }
+            matched += 1;
+            afterSequence = candidateAfterSequence;
+            const remainingIds = MAX_ASSERTION_REQUEST_IDS - requestIds.length;
+            if (remainingIds > 0) {
+              requestIds.push(...candidateIds.slice(0, remainingIds));
+            }
+            if (candidateIds.length > remainingIds) truncated = true;
+          }
+        }
+      );
+      const pass =
+        (spec.count.exactly === undefined || matched === spec.count.exactly) &&
+        (spec.count.atLeast === undefined || matched >= spec.count.atLeast) &&
+        (spec.count.atMost === undefined || matched <= spec.count.atMost);
+      const expected = countExpectation(spec);
+      const partial =
+        partialSteps > 0
+          ? ` The next candidate matched ${partialSteps} of ${spec.sequence.length} step(s).`
+          : "";
+      const returned = truncated
+        ? ` Returning the first ${MAX_ASSERTION_REQUEST_IDS} request IDs from complete matches.`
+        : "";
+      return {
+        pass,
+        matched,
+        message: pass
+          ? `Matched ${matched} non-overlapping ordered request sequence(s); expected ${expected}.${partial}${returned}`
+          : `Expected ${expected} non-overlapping ordered request sequence(s), found ${matched}.${partial}${returned}`,
+        requestIds,
+      };
+    }
     const where: string[] = [];
     const bindings: SqlValue[] = [];
-    if (spec.source) {
-      where.push("source = ?");
-      bindings.push(spec.source);
-    }
-    if (spec.method !== undefined) {
-      where.push("method = ?");
-      bindings.push(spec.method.trim().toUpperCase());
-    }
-    if (spec.path !== undefined) {
-      where.push("path = ?");
-      bindings.push(spec.path);
-    }
-    if (spec.status !== undefined) {
-      where.push("response_status = ?");
-      bindings.push(spec.status);
-    }
-    if (spec.bodyIncludes !== undefined) {
-      where.push("request_body IS NOT NULL AND instr(request_body, ?) > 0");
-      bindings.push(spec.bodyIncludes);
-    }
+    assertionWhere(spec, where, bindings);
     const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
     const { matched, rows } = this.#store.transaction(() => {
       const matched = Number(

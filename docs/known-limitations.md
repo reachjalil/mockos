@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Current accepted M3 limitations; deliberately candid
+Status: Accepted M3 limitations plus locally qualified, unaccepted M5 source boundaries; deliberately candid
 Last reviewed: 2026-07-22
 
 - The Entra OIDC fixtures are source-reviewed expectations marked `documented`.
@@ -40,15 +40,56 @@ Last reviewed: 2026-07-22
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
   combination are not claimed.
-- The accepted M3 implementation supports bounded deterministic delay, semantic error, and
-  JSON-object mutation actions at known injection points, including directory-specific
-  `scim.request`, `graph.request`, and `okta.api` error/delay routing. It does not yet
-  provide scheduled lifecycle events, outbound-provisioning failures, or the F-series
-  behavior system.
+- The accepted M3 implementation supports bounded deterministic delay, semantic error,
+  and JSON-object mutation actions at known injection points, including
+  directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
+  routing. The M5 source candidate interprets outbound HTTP and rate-limit responses,
+  but it does not add a scheduler, recurring provisioning cycles, scheduled lifecycle
+  events, or the F-series behavior system.
 - The authenticated M3 MCP registry contains 14 management tools, including
-  `simulate_lifecycle`. It does not yet host
+  `simulate_lifecycle`. The M5 source candidate adds `run_provisioning_cycle` as tool
+  15. Its authenticated Worker mount, full local gate, and process e2e are green, but
+  acceptance still requires an immutable revision, hosted CI, and deployment checks.
+  The registry does not yet host
   user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
   OIDC-federated CI access.
+- M5 outbound provisioning is a locally qualified source candidate only.
+  The Worker and worker-kit suites, full `pnpm check`, and fresh two-process
+  `wrangler dev` e2e are green, but an immutable candidate, hosted CI, and exact-
+  candidate staging/production smoke remain pending.
+- Outbound targets require a public HTTPS origin in the supported production path.
+  Loopback, private/special IP literals, dotless and special-use names, userinfo,
+  product/control hosts, redirects, oversized bodies, and unsafe operation headers are
+  denied. A self-host-only insecure-HTTP switch exists as an escape hatch, but private
+  address literals remain blocked and that switch is not a hosted qualification claim.
+- Cloudflare Workers do not expose a way for this runtime to resolve and pin a DNS
+  answer for the subsequent fetch. The M5 policy revalidates the URL at save and fetch
+  time and rejects literal/special targets, but it cannot by itself eliminate DNS
+  rebinding risk for an otherwise public hostname. Operators must allow only controlled
+  test targets and enforce egress policy outside the Worker where stronger pinning is
+  required.
+- The repository target app is a deterministic local test surface, not a production
+  SCIM server. Direct loopback provisioning remains intentionally blocked; the local
+  end-to-end harness uses the Worker test/service-binding seam, while deployed
+  acceptance requires a controlled public HTTPS target.
+- M5 start recovery can resume or return an exact fixed-ID run only while that run is
+  still active. There is no caller-supplied idempotency key or terminal-result replay:
+  a retry after the original run finishes is treated as a new cycle and can provision
+  again and consume another hosted quota unit. Full request idempotency is deferred to
+  F4; clients must retain run IDs and resolve ambiguous terminal outcomes from the
+  request log and controlled-target evidence instead of blindly retrying.
+- Reconciliation of a platform-level errored or terminated Workflow is retry-driven,
+  not a background sweep. If platform failure bypasses the Workflow's application
+  cleanup, its active lock and staged run credential remain fail-closed until an exact
+  same-input retry observes and atomically reconciles the terminal instance, or until
+  the environment is expired/deleted.
+- Raw outbound target credentials are intended to remain in the environment Durable
+  Object and are excluded from Workflow parameters, plans, logs, and returned records.
+  Worker/full local tests and the process e2e cover isolation and reflection/capture
+  redaction. `mk_` credentials and the exact active self-host `API_KEY` are rejected
+  regardless of prefix; if rotation makes a saved target credential equal the current
+  key, execution fails before any outbound call. Hosted/deployed security evidence is
+  still pending. Use synthetic target credentials only.
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
@@ -70,8 +111,9 @@ Last reviewed: 2026-07-22
 - The fixture runner compares HTTP status, exact selected headers, exact bodies, and
   object subsets. It executes all 113 SCIM fixtures against the local HTTP composition,
   not every fixture through the Worker runtime; focused Worker coverage is a separate
-  suite. The runner does not yet understand JSONPath, regex, JWT claims, or ordered
-  request traces.
+  suite. The runner does not yet understand JSONPath, regex, or JWT claims. The M5
+  request-log assertion candidate can count repeated non-overlapping ordered sequences,
+  but that capability is separate from the fixture runner and is not yet deployed.
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.

@@ -1,14 +1,15 @@
 # MCP interface
 
-Status: M3 authenticated management MCP source candidate locally tested; deployed evidence remains M2
+Status: M5 authenticated management MCP source candidate; deployed evidence is tracked by exact revision
 Last reviewed: 2026-07-22
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
 MCP TypeScript client. Automated integration tests cover `initialize`, `tools/list`,
 authenticated `tools/call`, session-local environment selection, lifecycle cascades,
-and cleanup. The 14-tool M3 registry is a source-candidate claim; the live workers.dev
-targets have only the separately recorded M2 deployment evidence.
+outbound provisioning startup, and cleanup. The 15-tool M5 registry is a source-
+candidate claim until the exact-revision CI and deployment records accept it. Its
+Worker suite, full repository gate, and two-process target-app e2e are green locally.
 
 ## Authentication fails closed
 
@@ -43,9 +44,9 @@ environment clears it. Most tools accept an explicit `environmentId` and otherwi
 resolve the session cursor. Prefer the explicit ID in saved automation because the
 cursor does not cross sessions.
 
-## Exact M3 source-candidate tool registry
+## Exact M5 source-candidate tool registry
 
-The source candidate exposes these 14 tools:
+The source candidate exposes these 15 tools:
 
 | Tool | Implemented behavior |
 | --- | --- |
@@ -55,6 +56,7 @@ The source candidate exposes these 14 tools:
 | `configure_environment` | Update name, idle TTL, or request-log row limit |
 | `seed_identities` | Create synthetic users and groups, including named group membership |
 | `create_application` | Register an OIDC/OAuth client and return its synthetic client credentials |
+| `run_provisioning_cycle` | Queue a deterministic outbound SCIM cycle against a saved or inline validated test target |
 | `mint_token` | Mint an ID-token-shaped bearer JWT for a seeded subject, optionally broken |
 | `set_scenario` | Create or completely replace a deterministic injected behavior by scenario ID |
 | `clear_scenario` | Clear one scenario or all scenarios in an environment |
@@ -164,24 +166,61 @@ newest-first and cursor-bound to its filters. The row ring and byte budget are b
 capturing a log is fail-open for protocol availability.
 
 `get_request_log` filters by `source`, `provider`, normalized method, exact path, and
-exact status. `assert_requests` supports only:
+exact status. `assert_requests` supports:
 
 - exact `source`, method, path, and status matching (method is normalized to uppercase),
-- a case-sensitive literal `bodyIncludes` substring of the stored **request** body, and
+- case-sensitive literal `bodyIncludes` and `responseBodyIncludes` substrings of the
+  stored request and response bodies,
+- an optional two-to-100-step ordered `sequence`; top-level filters constrain every
+  step, unrelated requests may appear between steps, and complete non-overlapping
+  sequences are counted in append order, and
 - `count.atLeast`, `count.atMost`, or `count.exactly` constraints.
 
-It does not currently assert headers, response-body subsets, ordering, or regular
-expressions. Use synthetic identities and tokens: captured protocol bodies can contain
-test credentials or tokens even though management API keys are redacted.
+It does not currently assert headers, parsed JSON/JSONPath, or regular expressions.
+Use synthetic identities and tokens: captured protocol bodies can contain test
+credentials or tokens even though management API keys and outbound target Bearer
+values are redacted.
+
+## Outbound provisioning
+
+`run_provisioning_cycle` requires an application `id`, `full` or `incremental` mode,
+and either a saved target reference or an inline target. An inline target contains a
+reference, base SCIM URL, optional synthetic Bearer credential, and optional provider
+behavior flags. Setting `save: true` retains it inside the environment; otherwise its
+credential is scoped to that run. The raw token is ingress-only and never appears in a
+run record, Workflow parameter, MCP result, or request log. Platform `mk_` Access Keys
+and the exact active configured self-host Access Key are rejected as target credentials.
+The runtime repeats that exact comparison at the Environment Durable Object boundary,
+so a later `API_KEY` rotation that collides with a saved target fails before an
+outbound request.
+
+The result is the queued run record. Execution is asynchronous: resolving and
+revalidating the target, snapshotting the environment directory, planning deterministic
+User-before-Group operations, executing them, interpreting explicit 429 waits/retries,
+updating the watermark, and summarizing happen in `ProvisioningWorkflow`. Use bounded
+polling of `get_request_log` and `assert_requests` for completion evidence. There is no
+claim that a queued result means every target operation has completed.
+
+Every target is checked at acceptance and again per fetch. HTTPS, private-address and
+special-host denial, own-host denial, redirect errors, timeout, body limits, scoped
+headers, and credential redaction are described in
+[outbound provisioning security](./security/outbound-provisioning.md). The public
+self-hosted Worker performs this loop without a private service dependency. The hosted
+composition adds tenant-bound strong quota reservation before Workflow creation.
+
+Start reconciliation is fixed-ID and secret-safe while the exact run remains active.
+It is not request-level idempotency after terminal completion: M5 accepts no caller
+idempotency key, so a later call is a new cycle and may provision and consume quota
+again. Retain returned run IDs and do not blindly replay a whole cycle after an
+ambiguous terminal outcome; terminal response replay is deferred to F4.
 
 ## Evidence
 
-The [M2 workers.dev smoke record](./evidence/m2-workers-dev-smoke.md) covers health,
-authenticated MCP initialization and tool discovery, environment creation, identity and
-application seeding, discovery, hosted Entra PKCE login, token/JWKS verification, a
-one-shot MFA-required scenario, request-log query/assertion, scenario clearing, and
-environment cleanup against staging and production Worker targets. This proves the
-deployed M2 mockOS loop, not the M3 source candidate or parity with a live Entra or
-Okta provider. M3-focused local evidence lives in the core refresh/lifecycle tests,
-SCIM/filter/PATCH/HTTP suites, provider directory Worker suite, and OAuth lifecycle
-cascade Worker test; repository-wide, hosted-CI, and deployed M3 gates remain pending.
+The evidence ledger links immutable public and hosted candidates to their CI and
+workers.dev smoke records. Treat the newest listed deployment record as authoritative;
+the [M5 local source record](./evidence/m5-local-source-qualification.md) establishes
+only the local source gate and two-process flow. It does not establish that a
+connected endpoint contains the M5 registry or Workflow. Deployed provisioning
+qualification must include an actual public-HTTPS target, ordered outbound assertion,
+terminal Workflow state, credential-safe evidence, and cleanup. None of these source
+or deployed tests constitute comparison with a live Entra tenant or Okta organization.

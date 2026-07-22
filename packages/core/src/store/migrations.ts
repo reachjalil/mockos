@@ -241,11 +241,44 @@ const migrationV4 = [
     ON oauth_access_tokens(family_id)`,
 ] as const;
 
+const migrationV5 = [
+  `ALTER TABLE provisioning_runs ADD COLUMN target_ref TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS provisioning_runs_active_target_idx
+    ON provisioning_runs(application_id, target_ref)
+    WHERE target_ref IS NOT NULL AND status IN ('queued', 'running')`,
+  `CREATE TABLE IF NOT EXISTS provisioning_targets (
+    target_ref TEXT PRIMARY KEY,
+    target_json TEXT NOT NULL,
+    credential_ref TEXT,
+    credential_secret TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  ) WITHOUT ROWID`,
+  `CREATE TABLE IF NOT EXISTS provisioning_run_targets (
+    run_id TEXT PRIMARY KEY,
+    target_ref TEXT NOT NULL,
+    target_json TEXT NOT NULL,
+    credential_ref TEXT,
+    credential_secret TEXT,
+    created_at TEXT NOT NULL
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS provisioning_run_targets_ref_idx
+    ON provisioning_run_targets(target_ref)`,
+  `CREATE TABLE IF NOT EXISTS provisioning_watermarks (
+    application_id TEXT NOT NULL,
+    target_ref TEXT NOT NULL,
+    watermark_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (application_id, target_ref)
+  ) WITHOUT ROWID`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
   { version: 2, statements: migrationV2 },
   { version: 3, statements: migrationV3 },
   { version: 4, statements: migrationV4 },
+  { version: 5, statements: migrationV5 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };

@@ -1,27 +1,27 @@
 # SCIM 2.0 behavior
 
-Status: M3 source candidate with a green local repository gate; hosted, deployed, and live-provider gates remain pending
+Status: Accepted bounded M3 inbound SCIM implementation; live-provider parity remains pending and M5 outbound provisioning is a separate source candidate
 Last reviewed: 2026-07-22
 
-mockOS now has a source-level SCIM 2.0 candidate rather than only an M3 design.
-The candidate includes portable [wire contracts](../../packages/contracts/src/scim.ts),
+mockOS has an accepted bounded inbound SCIM 2.0 implementation. It includes portable
+[wire contracts](../../packages/contracts/src/scim.ts),
 bounded [filter](../../packages/core/src/scim/filter.ts) and
 [PATCH](../../packages/core/src/scim/patch.ts) implementations, versioned directory
 repositories, the [SCIM HTTP adapter](../../packages/engine-http/src/scim.ts), and the
 [Worker mount](../../apps/worker/test/scim.integration.test.ts). All 113 SCIM fixtures
 execute green against the local HTTP composition, and focused Worker tests exercise the
-mounted runtime. The full repository `pnpm check` is also green. This is not an M3
-acceptance claim: hosted CI, deployment smoke, and any live-provider comparison remain
-pending.
+mounted runtime. The exact M3 revision passed the full repository gate, hosted CI, and
+a bounded staging/production deployed sample. This is not a live-provider comparison
+or a claim that all fixtures ran remotely.
 
-## Source-candidate endpoint contract
+## Accepted endpoint contract
 
 Every route below is relative to `/scim/v2` and requires a non-empty mock Bearer
 credential. The credential check is intentionally bounded protocol-test authentication;
 it does not validate an external identity-provider token and must not be treated as
 production authorization.
 
-| Route | Methods | Candidate behavior |
+| Route | Methods | Accepted M3 behavior |
 | --- | --- | --- |
 | `/ServiceProviderConfig` | `GET` | Advertises PATCH, filter, and ETag support, a filter result maximum of 200, and no Bulk or sort support |
 | `/ResourceTypes`, `/ResourceTypes/{id}` | `GET` | Lists and retrieves the advertised User and Group resource types |
@@ -43,7 +43,7 @@ SCIM Error schema with a string HTTP status and, when applicable, `invalidFilter
 The filter parser produces a typed AST and supports `eq`, `ne`, `co`, `sw`, `ew`,
 `pr`, `gt`, `ge`, `lt`, and `le`, plus `and`, `or`, `not`, grouping, and one-level
 multi-valued `valuePath` expressions. Evaluation is case-insensitive unless an
-attribute is configured as case-exact. The current candidate evaluates canonical SCIM
+attribute is configured as case-exact. The current implementation evaluates canonical SCIM
 resources; it does not claim a general SCIM-to-SQL compiler.
 
 Pagination is one-based. `startIndex` must be at least 1, `count` is between 0 and 200,
@@ -64,7 +64,7 @@ Item reads support `If-None-Match` and return `304` when a supplied tag matches.
 
 ## Bounded inputs
 
-| Input | Source-candidate limit |
+| Input | Accepted M3 limit |
 | --- | --- |
 | Request body | 1 MiB, checked while streaming; malformed UTF-8 and JSON fail closed |
 | User or Group route id | 128 bytes |
@@ -109,8 +109,9 @@ group memberships and increments each affected Group version in the same transac
 Refresh-token rotation preserves family, original authentication time, and absolute
 expiry; scope escalation is denied, and replay or concurrent double redemption revokes
 the refresh family and its associated access tokens. These behaviors are exercised by
-focused local [lifecycle-cascade Worker integration](../../apps/worker/test/lifecycle-cascade.integration.test.ts),
-but are not yet deployed or compared with live providers.
+focused [lifecycle-cascade Worker integration](../../apps/worker/test/lifecycle-cascade.integration.test.ts).
+The deployed M3 smoke sampled the Entra lifecycle cascade; Okta lifecycle remained a
+local/hosted test path. Neither provider was compared with a live tenant.
 
 ## Fixture and evidence ledger
 
@@ -124,10 +125,11 @@ names, area, provider distribution, and implementation/documentation status. It 
 [fixture executor](../../packages/engine-http/src/scim-fixtures.test.ts) runs all 113
 against the local HTTP composition and is green.
 
-The corpus is not a live capture, deployed smoke, or live-provider conformance result.
-Focused Worker integration and the full local M3 gate are green, but hosted CI,
-deployment evidence, and live Entra/Okta comparison remain pending. Outbound SCIM
-provisioning remains M5 scope; see the
+The corpus is not a live capture, deployed fixture run, or live-provider conformance
+result. Focused Worker integration, the full M3 gate, and hosted CI are green; the M3
+deployed smoke sampled discovery/PATCH for both profiles rather than all 113 cases.
+Live Entra/Okta comparison remains pending. Outbound SCIM provisioning is now a
+locally qualified but unaccepted M5 source candidate; see the
 [provisioning quickstart](../quickstarts/provisioning-cycle.md),
 [outbound security design](../security/outbound-provisioning.md), and
 [known limitations](../known-limitations.md).

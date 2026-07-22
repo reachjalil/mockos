@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mockos-e2e-local",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-07-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "send_metrics": false,
+  "vars": {
+    "API_KEY": "mockos-e2e-api-key",
+    "HOSTING_MODE": "path",
+    "PATH_PREFIX": "/e",
+    "BASE_DOMAIN": "id.mockos.local",
+    "ENTRA_HOST": "login.id.mockos.local",
+    "E2E_INTROSPECTION_ENABLED": "true",
+    "PUBLIC_ORIGIN": "http://127.0.0.1:8787",
+    "SENTRY_ENVIRONMENT": "local-e2e",
+    "OUTBOUND_BLOCKED_HOSTS": "mockos.workspaceagent.workers.dev,mockos-staging.workspaceagent.workers.dev,mockos-edge.workspaceagent.workers.dev,mockos-edge-staging.workspaceagent.workers.dev,mockos-control.workspaceagent.workers.dev,mockos-control-staging.workspaceagent.workers.dev,mockos.live,id.mockos.live"
+  },
+  "services": [
+    {
+      "binding": "PROVISIONING_FETCHER",
+      "service": "mockos-target-app-local"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ENVIRONMENTS",
+        "class_name": "EnvironmentDurableObject"
+      },
+      {
+        "name": "ENVIRONMENT_CATALOG",
+        "class_name": "EnvironmentCatalogDurableObject"
+      },
+      {
+        "name": "MOCKOS_MCP",
+        "class_name": "MockosMcpAgent"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "name": "mockos-provisioning-e2e",
+      "binding": "PROVISIONING_WORKFLOW",
+      "class_name": "ProvisioningWorkflow"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1-environment",
+      "new_sqlite_classes": ["EnvironmentDurableObject"]
+    },
+    {
+      "tag": "v2-mcp-control",
+      "new_sqlite_classes": ["EnvironmentCatalogDurableObject", "MockosMcpAgent"]
+    }
+  ]
+}

@@ -5,6 +5,16 @@ import { resolve } from "node:path";
 
 const configPath = resolve(process.cwd(), "apps/worker/wrangler.jsonc");
 const allowWorkersDev = process.argv.includes("--allow-workers-dev");
+const requiredOutboundBlockedHosts = [
+  "mockos.workspaceagent.workers.dev",
+  "mockos-staging.workspaceagent.workers.dev",
+  "mockos-edge.workspaceagent.workers.dev",
+  "mockos-edge-staging.workspaceagent.workers.dev",
+  "mockos-control.workspaceagent.workers.dev",
+  "mockos-control-staging.workspaceagent.workers.dev",
+  "mockos.live",
+  "id.mockos.live",
+];
 
 const withoutJsonComments = (source) => {
   let output = "";
@@ -77,6 +87,19 @@ const readTarget = (label, target) => {
   requireValue(
     ["path", "subdomain"].includes(target.vars?.HOSTING_MODE),
     `${label} HOSTING_MODE must be path or subdomain.`
+  );
+  requireValue(
+    target.vars?.E2E_INTROSPECTION_ENABLED === "false",
+    `${label} must explicitly disable the local E2E introspection route.`
+  );
+  const blockedHosts = new Set(
+    typeof target.vars?.OUTBOUND_BLOCKED_HOSTS === "string"
+      ? target.vars.OUTBOUND_BLOCKED_HOSTS.split(",").map((value) => value.trim())
+      : []
+  );
+  requireValue(
+    requiredOutboundBlockedHosts.every((hostname) => blockedHosts.has(hostname)),
+    `${label} OUTBOUND_BLOCKED_HOSTS must contain every official public, edge, and control host.`
   );
   requireValue(
     target.secrets?.required?.includes("API_KEY"),

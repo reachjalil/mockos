@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertionSpecSchema,
   assertRequestsToolInputSchema,
   brokenTokenVariantSchema,
   configureEnvironmentToolInputSchema,
@@ -10,8 +11,8 @@ import {
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
-  scenarioSpecSchema,
   SCIM_CORE_USER_SCHEMA,
+  scenarioSpecSchema,
   scimUserInputSchema,
   scimWeakEtag,
   seedIdentitiesToolInputSchema,
@@ -72,6 +73,21 @@ describe("wire contracts", () => {
     expect(assertRequestsToolInputSchema.parse({}).count).toEqual({ atLeast: 1 });
   });
 
+  it("rejects ambiguous or empty assertion count contracts", () => {
+    expect(() => assertionSpecSchema.parse({ count: {} })).toThrow(
+      "must contain atLeast, atMost, or exactly"
+    );
+    expect(() =>
+      assertionSpecSchema.parse({ count: { atLeast: 2, atMost: 1 } })
+    ).toThrow("atLeast cannot be greater than atMost");
+    expect(() =>
+      assertionSpecSchema.parse({ count: { exactly: 1, atLeast: 1 } })
+    ).toThrow("exactly cannot be combined");
+    expect(() =>
+      assertionSpecSchema.parse({ sequence: [{ path: "/one" }, {}] })
+    ).toThrow("must contain at least one matcher");
+  });
+
   it("requires a mutable setting when configuring an environment", () => {
     expect(() => configureEnvironmentToolInputSchema.parse({})).toThrow(
       "At least one environment setting is required."
@@ -107,6 +123,7 @@ describe("wire contracts", () => {
       "seed_identities",
       "create_application",
       "mint_token",
+      "run_provisioning_cycle",
       "set_scenario",
       "clear_scenario",
       "get_request_log",

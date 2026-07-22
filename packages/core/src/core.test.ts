@@ -85,16 +85,124 @@ afterEach(() => {
 describe("core substrate", () => {
   it("applies ordered PRAGMA user_version migrations idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(4);
-    expect(getSchemaVersion(store)).toBe(4);
-    expect(applyMigrations(store)).toBe(4);
+    expect(applyMigrations(store)).toBe(5);
+    expect(getSchemaVersion(store)).toBe(5);
+    expect(applyMigrations(store)).toBe(5);
     expect(
       store.get<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"
       )?.name
     ).toBe("oauth_codes");
+    expect(
+      store
+        .all<{ name: string }>(
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name LIKE 'provisioning_%'
+           ORDER BY name`
+        )
+        .map(({ name }) => name)
+    ).toEqual([
+      "provisioning_run_targets",
+      "provisioning_runs",
+      "provisioning_steps",
+      "provisioning_targets",
+      "provisioning_watermarks",
+    ]);
+    expect(
+      store.get<{ name: string }>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'index' AND name = 'provisioning_run_targets_ref_idx'`
+      )?.name
+    ).toBe("provisioning_run_targets_ref_idx");
+    expect(
+      store.get<{ name: string }>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'index' AND name = 'provisioning_runs_active_target_idx'`
+      )?.name
+    ).toBe("provisioning_runs_active_target_idx");
+  });
+
+  it("upgrades a v4 database to provisioning persistence schema without rewriting runs", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 4))).toBe(4);
+    store.run(
+      `INSERT INTO provisioning_runs (
+        id, application_id, mode, status, summary_json, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+      "run_existing",
+      "app_existing",
+      "incremental",
+      "queued",
+      null,
+      "2026-07-22T12:00:00.000Z"
+    );
+
+    expect(applyMigrations(store)).toBe(5);
+    expect(
+      store.get<{ status: string; target_ref: string | null }>(
+        "SELECT status, target_ref FROM provisioning_runs WHERE id = ?",
+        "run_existing"
+      )
+    ).toEqual({ status: "queued", target_ref: null });
+    store.run(
+      `INSERT INTO provisioning_watermarks (
+        application_id, target_ref, watermark_json, updated_at
+      ) VALUES (?, ?, ?, ?)`,
+      "app_existing",
+      "target-app",
+      '{"users":[],"groups":[]}',
+      "2026-07-22T12:01:00.000Z"
+    );
+    expect(
+      store.get<{ target_ref: string }>(
+        `SELECT target_ref FROM provisioning_watermarks
+         WHERE application_id = ? AND target_ref = ?`,
+        "app_existing",
+        "target-app"
+      )
+    ).toEqual({ target_ref: "target-app" });
+
+    store.run(
+      `INSERT INTO provisioning_runs (
+        id, application_id, target_ref, mode, status, summary_json,
+        created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
+      "run_active",
+      "app_locked",
+      "target-locked",
+      "incremental",
+      "queued",
+      "2026-07-22T12:02:00.000Z"
+    );
+    expect(() =>
+      store.run(
+        `INSERT INTO provisioning_runs (
+          id, application_id, target_ref, mode, status, summary_json,
+          created_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
+        "run_conflict",
+        "app_locked",
+        "target-locked",
+        "incremental",
+        "running",
+        "2026-07-22T12:03:00.000Z"
+      )
+    ).toThrow();
+    store.run(
+      `INSERT INTO provisioning_runs (
+        id, application_id, target_ref, mode, status, summary_json,
+        created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+      "run_terminal",
+      "app_locked",
+      "target-locked",
+      "incremental",
+      "succeeded",
+      "2026-07-22T11:00:00.000Z",
+      "2026-07-22T11:01:00.000Z"
+    );
   });
 
   it("keeps deterministic identifiers stable and seed-specific", () => {

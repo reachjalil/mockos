@@ -59,6 +59,7 @@ Environment lifecycle:
   env configure                 Apply environment configuration
   env wait                      Wait until an environment is visible
   app create                    Create an OAuth/OIDC application registration
+  provision run                Run outbound SCIM provisioning against a test target
   lifecycle simulate           Apply an Entra or Okta user lifecycle action
 
 Mock configuration and evidence:
@@ -347,6 +348,69 @@ async function runConnectedCommand(
         args,
         io
       );
+    }
+    case "provision run": {
+      assertOptions(args, [
+        "env",
+        "app-id",
+        "mode",
+        "target-ref",
+        "target-url",
+        "target-token-file",
+        "save-target",
+      ]);
+      const environmentId = requiredOption(args, "env");
+      const appId = requiredOption(args, "app-id");
+      const mode = valueOption(args, "mode") ?? "incremental";
+      if (mode !== "full" && mode !== "incremental") {
+        throw new CliUsageError("--mode must be full or incremental");
+      }
+      const targetRef = requiredOption(args, "target-ref");
+      const targetUrl = valueOption(args, "target-url");
+      const targetTokenFile = valueOption(args, "target-token-file");
+      const saveTarget = booleanOption(args, "save-target");
+      if (!targetUrl && (targetTokenFile || saveTarget)) {
+        throw new CliUsageError(
+          "--target-token-file and --save-target require --target-url"
+        );
+      }
+
+      let target: Record<string, unknown>;
+      let bearerToken: string | undefined;
+      if (targetUrl) {
+        let auth: Record<string, unknown> = { kind: "none" };
+        if (targetTokenFile) {
+          bearerToken = normalizeTargetToken(
+            targetTokenFile === "-"
+              ? await io.readStdin()
+              : await io.readFile(targetTokenFile),
+            connection.apiKey
+          );
+          auth = { kind: "bearer", token: bearerToken };
+        }
+        target = {
+          kind: "inline",
+          target: { ref: targetRef, baseUrl: targetUrl, auth },
+          save: saveTarget,
+        };
+      } else {
+        target = { kind: "saved", targetRef };
+      }
+
+      let result: unknown;
+      try {
+        result = await call(client, "run_provisioning_cycle", {
+          environmentId,
+          appId,
+          mode,
+          target,
+        });
+      } catch (error) {
+        if (!bearerToken) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(message.replaceAll(bearerToken, "[REDACTED]"));
+      }
+      return emitTool(redactSecret(result, bearerToken), args, io);
     }
     case "lifecycle simulate": {
       assertOptions(args, ["env", "user", "action"]);
@@ -659,6 +723,58 @@ function compact(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined)
   );
+}
+
+function sameSecret(left: string, right: string): boolean {
+  const length = Math.max(left.length, right.length);
+  let difference = left.length ^ right.length;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+function normalizeTargetToken(value: string, platformApiKey?: string): string {
+  const token = value.trim();
+  if (token.length === 0) throw new CliUsageError("Target token file is empty");
+  if (token.length < 8 || token.length > 4096) {
+    throw new CliUsageError("Target token must contain between 8 and 4096 characters");
+  }
+  if (
+    /\s/u.test(token) ||
+    [...token].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f);
+    })
+  ) {
+    throw new CliUsageError("Target token cannot contain whitespace or controls");
+  }
+  if (
+    token.startsWith("mk_") ||
+    (platformApiKey !== undefined && sameSecret(token, platformApiKey.trim()))
+  ) {
+    throw new CliUsageError(
+      "A platform Access Key cannot be used as a SCIM target credential"
+    );
+  }
+  return token;
+}
+
+function redactSecret(value: unknown, secret: string | undefined): unknown {
+  if (!secret) return value;
+  if (typeof value === "string") return value.replaceAll(secret, "[REDACTED]");
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactSecret(entry, secret));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key.replaceAll(secret, "[REDACTED]"),
+        redactSecret(entry, secret),
+      ])
+    );
+  }
+  return value;
 }
 
 function valueOption(args: ParsedArgs, name: string): string | undefined {

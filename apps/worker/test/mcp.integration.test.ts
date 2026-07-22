@@ -113,6 +113,9 @@ const callTool = async (
           data?: Record<string, unknown>;
           meta?: { requestId?: string };
         };
+        _meta?: {
+          "mockos/problem"?: { code?: string; status?: number };
+        };
       }
     | undefined;
 };
@@ -156,6 +159,93 @@ describe("management MCP", () => {
 
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("POST, DELETE, OPTIONS");
+  });
+
+  it("rejects an authenticated MCP body above the announced 2 MiB limit", async () => {
+    const maxBytes = 2 * 1_024 * 1_024;
+    const body = "x".repeat(maxBytes + 1);
+    const response = await worker.fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-length": String(body.length),
+        "content-type": "application/json",
+      },
+      body,
+    });
+
+    expect(response.status).toBe(413);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    expect(await response.json()).toMatchObject({
+      code: "REQUEST_BODY_TOO_LARGE",
+      status: 413,
+    });
+  });
+
+  it("streams and rejects an oversized MCP body without Content-Length", {
+    timeout: 5_000,
+  }, async () => {
+    const maxBytes = 2 * 1_024 * 1_024;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(maxBytes));
+        controller.enqueue(new Uint8Array(1));
+        controller.close();
+      },
+    });
+    const response = await worker.fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body,
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({
+      code: "REQUEST_BODY_TOO_LARGE",
+      status: 413,
+    });
+  });
+
+  it("rejects the exact non-prefixed platform key as an outbound target credential", async () => {
+    const sessionId = await initialize();
+    const response = await mcpRequest(
+      {
+        jsonrpc: "2.0",
+        id: 99,
+        method: "tools/call",
+        params: {
+          name: "run_provisioning_cycle",
+          arguments: {
+            environmentId: "env_missing01",
+            appId: "app-missing",
+            mode: "full",
+            target: {
+              kind: "inline",
+              save: false,
+              target: {
+                ref: "platform-key-target",
+                baseUrl: "https://target.example.com/scim/v2",
+                auth: { kind: "bearer", token: apiKey },
+                behavior: {},
+              },
+            },
+          },
+        },
+      },
+      sessionId
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    const body = await response.text();
+    expect(body).not.toContain(apiKey);
+    expect(JSON.parse(body)).toMatchObject({
+      code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+      status: 400,
+    });
   });
 
   it("keeps reserved and deleting catalog entries out of active listings", async () => {
@@ -215,6 +305,7 @@ describe("management MCP", () => {
         "get_wellknown_urls",
         "list_environments",
         "mint_token",
+        "run_provisioning_cycle",
         "seed_identities",
         "set_current_environment",
         "set_scenario",
@@ -318,6 +409,92 @@ describe("management MCP", () => {
       name: "MCP integration client",
       clientId,
     });
+    const applicationId = application?.structuredContent?.data?.id as
+      | string
+      | undefined;
+    expect(applicationId).toBeTruthy();
+
+    const missingProvisioningApp = await callTool(
+      sessionId,
+      21,
+      "run_provisioning_cycle",
+      {
+        appId: "missing-provisioning-app",
+        mode: "incremental",
+        target: {
+          kind: "inline",
+          save: false,
+          target: {
+            ref: "missing-app-target",
+            baseUrl: "https://target.example.com/scim/v2",
+            auth: { kind: "none" },
+            behavior: {},
+          },
+        },
+      }
+    );
+    expect(missingProvisioningApp?.isError).toBe(true);
+    expect(missingProvisioningApp?._meta?.["mockos/problem"]).toMatchObject({
+      code: "PROVISIONING_APPLICATION_NOT_FOUND",
+      status: 404,
+    });
+
+    const environmentNamespace = Reflect.get(env, "ENVIRONMENTS") as {
+      get(id: DurableObjectId): {
+        compensateProvisioningRun(runId: string, message: string): Promise<void>;
+        queueProvisioningRun(
+          params: Record<string, unknown>,
+          target: Record<string, unknown>
+        ): Promise<unknown>;
+      };
+      idFromName(name: string): DurableObjectId;
+    };
+    const environmentStub = environmentNamespace.get(
+      environmentNamespace.idFromName(environment?.id ?? "")
+    );
+    const heldRunId = "run_mcp_active_conflict";
+    await environmentStub.queueProvisioningRun(
+      {
+        envId: environment?.id,
+        appId: applicationId,
+        runId: heldRunId,
+        mode: "incremental",
+        targetRef: "mcp-active-target",
+      },
+      {
+        kind: "inline",
+        save: false,
+        target: {
+          ref: "mcp-active-target",
+          baseUrl: "https://held-target.example.com/scim/v2",
+          auth: { kind: "none" },
+          behavior: {},
+        },
+      }
+    );
+    const activeConflict = await callTool(sessionId, 20, "run_provisioning_cycle", {
+      appId: applicationId,
+      mode: "incremental",
+      target: {
+        kind: "inline",
+        save: false,
+        target: {
+          ref: "mcp-active-target",
+          baseUrl: "https://target.example.com/scim/v2",
+          auth: { kind: "none" },
+          behavior: {},
+        },
+      },
+    });
+    expect(activeConflict?.isError).toBe(true);
+    expect(activeConflict?._meta?.["mockos/problem"]).toMatchObject({
+      code: "ACTIVE_PROVISIONING_RUN",
+      status: 409,
+    });
+    await environmentStub.compensateProvisioningRun(
+      heldRunId,
+      "MCP integration conflict fixture complete."
+    );
 
     const normalToken = await callTool(sessionId, 9, "mint_token", {
       clientId,

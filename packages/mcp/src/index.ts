@@ -34,10 +34,14 @@ import {
   mintedTokenSchema,
   mintTokenToolInputSchema,
   type Problem,
+  type ProvisioningRun,
   problemSchema,
+  provisioningRunSchema,
   type RequestLogPage,
   type RequestLogQuery,
+  type RunProvisioningCycleToolInput,
   requestLogPageSchema,
+  runProvisioningCycleToolInputSchema,
   type ScenarioSpec,
   type SeedIdentitiesResult,
   scenarioSpecSchema,
@@ -97,6 +101,11 @@ export type MockosToolDependencies = {
     input: CreateApplicationInput,
     context: MockosToolRequestContext
   ): Promise<ApplicationRegistration>;
+  runProvisioningCycle(
+    environmentId: string,
+    input: Omit<RunProvisioningCycleToolInput, "environmentId">,
+    context: MockosToolRequestContext
+  ): Promise<ProvisioningRun>;
   mintToken(
     environmentId: string,
     input: MintTokenRequest,
@@ -167,6 +176,12 @@ const mutationAnnotations = {
   openWorldHint: false,
 } satisfies ToolAnnotations;
 
+const outboundMutationAnnotations = {
+  ...mutationAnnotations,
+  destructiveHint: true,
+  openWorldHint: true,
+} satisfies ToolAnnotations;
+
 const idempotentMutationAnnotations = {
   ...mutationAnnotations,
   idempotentHint: true,
@@ -233,14 +248,33 @@ const errorResult = (problem: Problem): CallToolResult => ({
   _meta: { "mockos/problem": problem },
 });
 
+const redactProblem = (problem: Problem, secrets: readonly string[]): Problem => {
+  const redact = (value: string): string => {
+    return secrets.reduce(
+      (result, secret) => result.replaceAll(secret, "[REDACTED]"),
+      value
+    );
+  };
+  return {
+    ...problem,
+    type: redact(problem.type),
+    title: redact(problem.title),
+    requestId: redact(problem.requestId),
+    ...(problem.detail === undefined ? {} : { detail: redact(problem.detail) }),
+    ...(problem.instance === undefined ? {} : { instance: redact(problem.instance) }),
+    ...(problem.code === undefined ? {} : { code: redact(problem.code) }),
+  };
+};
+
 const execute = async <T>(
   context: MockosToolRequestContext,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  secrets: readonly string[] = []
 ): Promise<CallToolResult> => {
   try {
     return successResult(await operation(), context);
   } catch (error) {
-    return errorResult(normalizedProblem(error, context));
+    return errorResult(redactProblem(normalizedProblem(error, context), secrets));
   }
 };
 
@@ -427,6 +461,39 @@ export const registerMockosTools = (
     }
   );
 
+  const runProvisioningCycle = server.registerTool(
+    "run_provisioning_cycle",
+    {
+      title: "Run outbound provisioning cycle",
+      description:
+        "Starts a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target.",
+      inputSchema: runProvisioningCycleToolInputSchema,
+      outputSchema: envelopeSchema(provisioningRunSchema),
+      annotations: outboundMutationAnnotations,
+    },
+    async ({ environmentId, ...input }, extra) => {
+      const context = requestContext(dependencies, extra);
+      const secrets =
+        input.target.kind === "inline" && input.target.target.auth.kind === "bearer"
+          ? [input.target.target.auth.token]
+          : [];
+      return execute(
+        context,
+        async () => {
+          const resolvedId = await requireEnvironmentId(
+            environmentId,
+            dependencies,
+            context
+          );
+          return provisioningRunSchema.parse(
+            await dependencies.runProvisioningCycle(resolvedId, input, context)
+          );
+        },
+        secrets
+      );
+    }
+  );
+
   const setScenario = server.registerTool(
     "set_scenario",
     {
@@ -591,6 +658,7 @@ export const registerMockosTools = (
     configure_environment: configureEnvironment,
     seed_identities: seedIdentities,
     create_application: createApplication,
+    run_provisioning_cycle: runProvisioningCycle,
     mint_token: mintToken,
     set_scenario: setScenario,
     clear_scenario: clearScenario,
@@ -602,4 +670,4 @@ export const registerMockosTools = (
   };
 };
 
-export const MCP_IMPLEMENTATION_MILESTONE = "M3" as const;
+export const MCP_IMPLEMENTATION_MILESTONE = "M5" as const;

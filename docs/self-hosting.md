@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide for the M3 candidate; reference deployment evidence remains M2 and npm/custom-domain distribution remains unavailable
+Status: Source-build guide with accepted M3 reference deployment; M5 provisioning is locally qualified but unaccepted and npm/custom-domain distribution remains unavailable
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -33,13 +33,16 @@ The control plane fails closed. `/mcp` and `/__mockos/v1/*` return `503` if `API
 is not configured and reject a missing or incorrect key with `401`. `/health` and the
 mock provider protocol routes do not require that control credential.
 
-The current source candidate exposes 14 authenticated MCP management tools, including
-`simulate_lifecycle`. Its path-mode provider surfaces include SCIM for both provider
+The accepted M3 source exposes 14 authenticated MCP management tools, including
+`simulate_lifecycle`. The current M5 source candidate adds `run_provisioning_cycle` as tool
+15; its Worker suite, full repository gate, and two-process provisioning e2e are green
+locally. Path-mode provider
+surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
 `/e/<environment>/api/v1`. Entra and Okta token endpoints also have local refresh
-redemption/rotation coverage. These are source claims, not evidence about the live
-workers.dev revisions.
+redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
+deployed evidence; the M5 provisioning additions do not.
 
 Save a local CLI profile without putting the key directly in the command line:
 
@@ -73,9 +76,15 @@ node packages/cli/dist/bin.js lifecycle simulate \
 
 SCIM and Graph accept non-empty synthetic Bearer values; the Okta directory API accepts
 a non-empty synthetic SSWS value. Those checks are for protocol tests, not production
-authorization. Never use the MCP Access Key as a directory token. UserInfo, Okta
-Classic `/api/v1/authn`, outbound provisioning, and broad Graph/Okta API compatibility
-remain unavailable; see [known limitations](./known-limitations.md).
+authorization. Never use the MCP Access Key as a directory or outbound target token.
+The M5 CLI and runtime reject an outbound target Bearer equal to the exact active
+self-host `API_KEY`, even when it has no `mk_` prefix. A later key rotation that
+collides with a saved target also fails before the outbound request; choose distinct,
+synthetic values rather than relying on this guard.
+UserInfo, Okta Classic `/api/v1/authn`, and broad Graph/Okta API compatibility remain
+unavailable. Outbound provisioning is locally qualified source with public-HTTPS target
+and SSRF constraints, not an accepted or deployed capability; see
+[known limitations](./known-limitations.md).
 
 ## Deploy your Worker
 
@@ -121,15 +130,16 @@ workers.dev path mode at:
 
 Its keys are deliberately not public. The sanitized production and staging results
 are recorded in the
-[M2 workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md). That record does
-not establish deployment of SCIM, Graph, Okta directory APIs, refresh rotation,
-lifecycle cascade, or the 14-tool MCP candidate.
+[M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md). That record
+establishes only the bounded sampled M3 routes and does not qualify every fixture,
+live-provider parity, the locally qualified M5 Workflow/provisioning source candidate,
+or a service-level commitment.
 
 ## Distribution limits
 
 The `@mockos` npm scope is retained as the locked package name, but it is not confirmed
 registered and npm authentication currently fails. Consume workspace packages from
-source until the M4 publishing prerequisite is resolved; do not assume
+source until npm authentication and scope registration are resolved; do not assume
 `pnpm add @mockos/...` works.
 
 workers.dev path mode cannot provide provider-shaped wildcard hosts. Custom

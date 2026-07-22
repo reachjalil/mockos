@@ -1,6 +1,6 @@
 # Okta behavior
 
-Status: M3 Okta source candidate locally tested; deployed and live-Okta parity are not claimed
+Status: Accepted bounded M3 Okta implementation with a deployed directory sample; live-Okta parity is not claimed
 Last reviewed: 2026-07-22
 
 The Okta profile parameterizes the shared identity engine and has a dedicated HTTP
@@ -17,7 +17,7 @@ workers.dev path mode cannot satisfy SDKs that insist on a bare Okta organizatio
 
 ## OIDC and OAuth surface
 
-| Method and route | Source-candidate behavior |
+| Method and route | Accepted M3 behavior |
 | --- | --- |
 | `GET /oauth2/default/.well-known/openid-configuration` | Request-derived discovery for the bounded authorization server |
 | `GET /oauth2/default/v1/keys` | JWKS for the environment signing key |
@@ -47,9 +47,9 @@ The device flow models `authorization_pending`, `slow_down`, successful activati
 integration test exercises pending and successful activation; the remaining states are
 covered at the core or HTTP-adapter boundary.
 
-## Directory source candidate
+## Directory surface
 
-An Okta environment has two local M3 directory surfaces in path mode:
+An Okta environment has two accepted M3 directory surfaces in path mode:
 
 - `/e/<environment>/scim/v2` provides the shared SCIM discovery and versioned
   User/Group surface with the Okta PUT-heavy, pathless PATCH, filtered-membership, and
@@ -78,19 +78,16 @@ Implemented subsets are exercised by:
 - [Okta HTTP-adapter tests](../../packages/engine-http/src/okta.test.ts), and
 - [Okta Worker integration](../../apps/worker/test/okta.integration.test.ts).
 
-The [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) qualifies deployment of
-the same Worker runtime and its MCP/Entra scenario loop. Okta protocol behavior remains
-qualified by the local Worker integration above; the smoke is not a live Okta-provider
-comparison.
-
-The M3 refresh, SCIM, directory, and lifecycle paths have focused local source tests.
-They are not part of that deployment record, have not been compared with a live Okta
-organization, and are not a broad Okta SDK compatibility claim.
+The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) qualifies a bounded Okta
+SCIM discovery/PATCH, directory-read, and rate-limit sample. The broader accepted M3
+Okta OAuth, refresh, device, and lifecycle behavior remains qualified by local and
+hosted tests rather than that deployed sample. None is a live Okta-provider comparison
+or broad SDK compatibility claim.
 
 ## Deliberate limits
 
-- `client_credentials` grant redemption is not mounted. The M3 source candidate mounts
-  refresh redemption locally, but the deployed M2 evidence does not.
+- `client_credentials` grant redemption is not mounted. M3 refresh redemption is
+  accepted in local/hosted tests, but the deployed acceptance did not sample it.
 - Discovery and `get_wellknown_urls` return a UserInfo URL, but `/v1/userinfo` is not
   implemented yet.
 - Classic `/api/v1/authn` is not implemented. The bounded Users/Groups routes do not
@@ -99,5 +96,8 @@ organization, and are not a broad Okta SDK compatibility claim.
   deterministic rate limiting; exact catalog parity is not claimed.
 - Exact error descriptions, cookies, hosted-login HTML, uncommon parameters, key
   rollover, and organization-host SDK behavior can differ from Okta.
-- Outbound provisioning is not implemented; inbound SCIM dialect behavior does not
-  constitute an outbound planner or delivery runtime.
+- M5 outbound provisioning now has a deterministic Okta planner and delivery source
+  candidate. Worker/full local gates are green, but the process e2e samples an
+  Entra-shaped cycle; Okta deployed and live-provider comparison remain pending.
+  Accepted inbound SCIM behavior alone is not live-provider evidence for that outbound
+  runtime.

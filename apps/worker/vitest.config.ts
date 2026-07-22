@@ -1,5 +1,8 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { createTargetApp } from "../../examples/target-app/src/app";
+
+const target = createTargetApp();
 
 export default defineConfig({
   plugins: [
@@ -7,6 +10,13 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         bindings: { API_KEY: "mockos-integration-test-key" },
+        serviceBindings: {
+          PROVISIONING_FETCHER: (request: Request) =>
+            target.app.fetch(request, {
+              TARGET_CONTROL_TOKEN: "target-control-token",
+              TARGET_SCIM_TOKEN: "target-scim-token",
+            }),
+        },
       },
     }),
   ],

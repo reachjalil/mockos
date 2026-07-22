@@ -120,8 +120,8 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(4);
-    expect(getSchemaVersion(store)).toBe(4);
+    expect(applyMigrations(store)).toBe(5);
+    expect(getSchemaVersion(store)).toBe(5);
     const service = new ScenarioService({
       store,
       seed: "upgrade",
@@ -478,6 +478,12 @@ describe("request log service", () => {
     });
     expect(
       engine.assertRequests({
+        responseBodyIncludes: '"request":"match-new"',
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({ pass: true, matched: 1, requestIds: ["match-new"] });
+    expect(
+      engine.assertRequests({
         source: "inbound",
         method: "POST",
         path: "/v1/token",
@@ -499,6 +505,132 @@ describe("request log service", () => {
       pass: false,
       matched: 2,
       requestIds: ["match-new", "match-old"],
+    });
+  });
+
+  it("asserts an ordered outbound sequence with request and response shapes", async () => {
+    const store = memoryStore();
+    const engine = Engine.create(
+      { provider: "entra", seed: "ordered-assertions", requestLogLimit: 10 },
+      { store, clock: new FixedClock("2026-07-22T12:00:00.000Z") }
+    );
+    await engine.initialize();
+    for (const entry of [
+      logEntry({
+        id: "lookup-user",
+        source: "outbound",
+        method: "GET",
+        path: "/scim/v2/Users",
+        requestBody: null,
+        responseStatus: 200,
+      }),
+      logEntry({
+        id: "create-user",
+        source: "outbound",
+        method: "POST",
+        path: "/scim/v2/Users",
+        requestBody: '{"userName":"ada@example.test"}',
+        responseStatus: 201,
+      }),
+      logEntry({
+        id: "create-group",
+        source: "outbound",
+        method: "POST",
+        path: "/scim/v2/Groups",
+        requestBody: '{"displayName":"Engineering"}',
+        responseStatus: 201,
+      }),
+    ]) {
+      engine.log.append(entry);
+    }
+
+    expect(
+      engine.assertRequests({
+        source: "outbound",
+        sequence: [
+          { method: "GET", path: "/scim/v2/Users" },
+          {
+            method: "POST",
+            path: "/scim/v2/Users",
+            bodyIncludes: "ada@example.test",
+            responseBodyIncludes: "create-user",
+          },
+          {
+            method: "POST",
+            path: "/scim/v2/Groups",
+            bodyIncludes: "Engineering",
+          },
+        ],
+        count: { exactly: 1 },
+      })
+    ).toEqual({
+      pass: true,
+      matched: 1,
+      message:
+        "Matched 1 non-overlapping ordered request sequence(s); expected exactly 1.",
+      requestIds: ["lookup-user", "create-user", "create-group"],
+    });
+
+    expect(
+      engine.assertRequests({
+        source: "outbound",
+        sequence: [{ path: "/scim/v2/Groups" }, { path: "/scim/v2/Users" }],
+        count: { atLeast: 1 },
+      })
+    ).toMatchObject({ pass: false, matched: 0, requestIds: [] });
+
+    for (const entry of [
+      logEntry({
+        id: "lookup-user-2",
+        source: "outbound",
+        method: "GET",
+        path: "/scim/v2/Users",
+        requestBody: null,
+        responseStatus: 200,
+      }),
+      logEntry({
+        id: "create-user-2",
+        source: "outbound",
+        method: "POST",
+        path: "/scim/v2/Users",
+        requestBody: '{"userName":"grace@example.test"}',
+        responseStatus: 201,
+      }),
+      logEntry({
+        id: "create-group-2",
+        source: "outbound",
+        method: "POST",
+        path: "/scim/v2/Groups",
+        requestBody: '{"displayName":"Operations"}',
+        responseStatus: 201,
+      }),
+    ]) {
+      engine.log.append(entry);
+    }
+
+    expect(
+      engine.assertRequests({
+        source: "outbound",
+        sequence: [
+          { method: "GET", path: "/scim/v2/Users" },
+          { method: "POST", path: "/scim/v2/Users" },
+          { method: "POST", path: "/scim/v2/Groups" },
+        ],
+        count: { exactly: 2 },
+      })
+    ).toEqual({
+      pass: true,
+      matched: 2,
+      message:
+        "Matched 2 non-overlapping ordered request sequence(s); expected exactly 2.",
+      requestIds: [
+        "lookup-user",
+        "create-user",
+        "create-group",
+        "lookup-user-2",
+        "create-user-2",
+        "create-group-2",
+      ],
     });
   });
 

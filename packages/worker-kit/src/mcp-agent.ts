@@ -1,4 +1,8 @@
-import type { EnvironmentConfig, ProviderId } from "@mockos/contracts";
+import type {
+  EnvironmentConfig,
+  ProviderId,
+  ProvisioningWorkflowParams,
+} from "@mockos/contracts";
 import { createTenantId } from "@mockos/core";
 import {
   type MockosToolDependencies,
@@ -9,6 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import type { EnvironmentCatalogDurableObject } from "./environment-catalog";
 import type { EnvironmentDurableObject } from "./environment-do";
+import { queueAndCreateProvisioningWorkflowInstance } from "./provisioning-start";
 
 export const SELF_HOSTED_ACCOUNT_ID = "self-hosted";
 
@@ -23,6 +28,7 @@ export type MockosMcpBindings = {
   ENVIRONMENTS: DurableObjectNamespace<EnvironmentDurableObject>;
   HOSTING_MODE: string;
   PATH_PREFIX?: string;
+  PROVISIONING_WORKFLOW: Workflow<ProvisioningWorkflowParams>;
   PUBLIC_ORIGIN: string;
   TID_INDEX?: KVNamespace;
 };
@@ -103,6 +109,46 @@ const missingEnvironment = (environmentId: string) =>
     detail: `Environment '${environmentId}' is not available to this account.`,
     code: "ENVIRONMENT_NOT_FOUND",
   });
+
+const provisioningToolError = (error: unknown): MockosToolError | undefined => {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? Reflect.get(error, "code")
+      : undefined;
+  if (code === "ACTIVE_PROVISIONING_RUN") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/active-provisioning-run",
+      title: "Provisioning run already active",
+      status: 409,
+      detail:
+        "Wait for the active run for this application and target to finish before starting another.",
+      code,
+    });
+  }
+  if (code === "PROVISIONING_APPLICATION_NOT_FOUND") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/provisioning-application-not-found",
+      title: "Provisioning application not found",
+      status: 404,
+      detail: "The application is not available in the selected environment.",
+      code,
+    });
+  }
+  if (
+    code === "PROVISIONING_WORKFLOW_START_FAILED" ||
+    code === "PROVISIONING_WORKFLOW_RECONCILIATION_FAILED"
+  ) {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/provisioning-workflow-unavailable",
+      title: "Provisioning Workflow unavailable",
+      status: 503,
+      detail:
+        "The provisioning run could not be started safely. Retry after Workflow service recovery.",
+      code,
+    });
+  }
+  return undefined;
+};
 
 /** Stateful, authenticated management MCP. Each transport session owns its cursor. */
 export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> {
@@ -196,6 +242,32 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
       createApplication: async (environmentId, input) => {
         await this.#requireEnvironment(environmentId);
         return this.#environment(environmentId).createApplication(input);
+      },
+      runProvisioningCycle: async (environmentId, input) => {
+        await this.#requireEnvironment(environmentId);
+        const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+        const targetRef =
+          input.target.kind === "saved"
+            ? input.target.targetRef
+            : input.target.target.ref;
+        const params: ProvisioningWorkflowParams = {
+          envId: environmentId,
+          appId: input.appId,
+          runId,
+          mode: input.mode,
+          targetRef,
+        };
+        const environment = this.#environment(environmentId);
+        try {
+          return await queueAndCreateProvisioningWorkflowInstance({
+            workflow: this.env.PROVISIONING_WORKFLOW,
+            environment,
+            params,
+            target: input.target,
+          });
+        } catch (error) {
+          throw provisioningToolError(error) ?? error;
+        }
       },
       mintToken: async (environmentId, input) => {
         const config = await this.#requireEnvironment(environmentId);

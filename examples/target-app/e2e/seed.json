@@ -1,0 +1,20 @@
+{
+  "users": [
+    {
+      "userName": "ada.provisioning@example.test",
+      "displayName": "Ada Provisioning",
+      "givenName": "Ada",
+      "familyName": "Lovelace",
+      "password": "Passw0rd!",
+      "active": true,
+      "mfaState": "none",
+      "roles": []
+    }
+  ],
+  "groups": [
+    {
+      "displayName": "Provisioning engineers",
+      "members": ["ada.provisioning@example.test"]
+    }
+  ]
+}

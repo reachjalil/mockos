@@ -13,8 +13,10 @@ import {
   type MintedToken,
   type MintTokenRequest,
   mockosMcpToolNames,
+  type ProvisioningRun,
   type RequestLogPage,
   type RequestLogQuery,
+  type RunProvisioningCycleToolInput,
   type ScenarioSpec,
   type SeedIdentitiesResult,
   type WellKnownUrls,
@@ -131,6 +133,27 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
       expiresAt: EXPIRES_AT,
       claims: { aud: input.audience ?? input.clientId, sub: input.subject },
       ...(input.broken === undefined ? {} : { broken: input.broken }),
+    };
+  }
+
+  async runProvisioningCycle(
+    environmentId: string,
+    input: Omit<RunProvisioningCycleToolInput, "environmentId">,
+    _context: MockosToolRequestContext
+  ): Promise<ProvisioningRun> {
+    const environment = this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: "run-provisioning" });
+    const targetRef =
+      input.target.kind === "saved" ? input.target.targetRef : input.target.target.ref;
+    return {
+      id: "run_mcp_test_01",
+      envId: environmentId,
+      appId: input.appId,
+      provider: environment.provider,
+      mode: input.mode,
+      targetRef,
+      status: "queued",
+      createdAt: CREATED_AT,
     };
   }
 
@@ -316,6 +339,14 @@ describe("registerMockosTools", () => {
     expect(
       listed.tools.every(({ outputSchema }) => outputSchema?.type === "object")
     ).toBe(true);
+    expect(
+      listed.tools.find(({ name }) => name === "run_provisioning_cycle")?.annotations
+    ).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
 
     const created = await callData<EnvironmentConfig>(client, "create_environment", {
       name: "Entra integration",
@@ -373,6 +404,30 @@ describe("registerMockosTools", () => {
     expect(application).toMatchObject({
       clientId: "client_test",
       grantTypes: ["authorization_code", "refresh_token"],
+    });
+
+    const provisioning = await callData<ProvisioningRun>(
+      client,
+      "run_provisioning_cycle",
+      {
+        appId: application.id,
+        target: {
+          kind: "inline",
+          target: {
+            ref: "target-app",
+            baseUrl: "https://target.test/scim/v2",
+          },
+        },
+      }
+    );
+    expect(provisioning).toMatchObject({
+      id: "run_mcp_test_01",
+      envId: ENVIRONMENT_ID,
+      appId: application.id,
+      provider: "entra",
+      mode: "incremental",
+      targetRef: "target-app",
+      status: "queued",
     });
 
     const token = await callData<MintedToken>(client, "mint_token", {
@@ -436,6 +491,7 @@ describe("registerMockosTools", () => {
       "configure",
       "seed",
       "create-application",
+      "run-provisioning",
       "mint:expired",
       "set-scenario:force_mfa",
       "get-request-log",
@@ -476,7 +532,119 @@ describe("registerMockosTools", () => {
         },
       ],
     });
+
+    const platformKey = "mk_platform_secret_must_not_be_forwarded";
+    const invalidTargetCredential = await client.callTool({
+      name: "run_provisioning_cycle",
+      arguments: {
+        environmentId: ENVIRONMENT_ID,
+        appId: "application_1",
+        target: {
+          kind: "inline",
+          target: {
+            ref: "target-app",
+            baseUrl: "https://target.test/scim/v2",
+            auth: { kind: "bearer", token: platformKey },
+          },
+        },
+      },
+    });
+    expect(invalidTargetCredential.isError).toBe(true);
+    expect(JSON.stringify(invalidTargetCredential)).not.toContain(platformKey);
+    const targetSecret = "synthetic-target-secret-validation";
+    const invalidTargetUrl = await client.callTool({
+      name: "run_provisioning_cycle",
+      arguments: {
+        environmentId: ENVIRONMENT_ID,
+        appId: "application_1",
+        target: {
+          kind: "inline",
+          target: {
+            ref: "target-app",
+            baseUrl: "ftp://target.test/scim/v2",
+            auth: { kind: "bearer", token: targetSecret },
+          },
+        },
+      },
+    });
+    expect(invalidTargetUrl.isError).toBe(true);
+    expect(JSON.stringify(invalidTargetUrl)).not.toContain(targetSecret);
+    expect(dependencies.calls).not.toContainEqual({
+      environmentId: ENVIRONMENT_ID,
+      operation: "run-provisioning",
+    });
     expect(dependencies.environments.size).toBe(0);
+  });
+
+  it("validates provisioning dependency output before serializing it", async () => {
+    const { client, dependencies } = await createHarness();
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "Output validation",
+      provider: "okta",
+    });
+    const leakedCredential = "synthetic-target-secret-never-return";
+    dependencies.runProvisioningCycle = async (
+      environmentId,
+      input
+    ): Promise<ProvisioningRun> =>
+      ({
+        id: "run_invalid_output",
+        envId: environmentId,
+        appId: input.appId,
+        provider: "okta",
+        mode: input.mode,
+        targetRef:
+          input.target.kind === "saved"
+            ? input.target.targetRef
+            : input.target.target.ref,
+        status: "queued",
+        createdAt: CREATED_AT,
+        credential: leakedCredential,
+      }) as ProvisioningRun;
+
+    const result = await client.callTool({
+      name: "run_provisioning_cycle",
+      arguments: {
+        appId: "application_1",
+        target: { kind: "saved", targetRef: "target-app" },
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(result._meta?.["mockos/problem"]).toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+    expect(JSON.stringify(result)).not.toContain(leakedCredential);
+
+    dependencies.runProvisioningCycle = async () => {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/target-rejected",
+        title: "Target rejected",
+        status: 400,
+        detail: `The target rejected ${leakedCredential}`,
+        code: "TARGET_REJECTED",
+      });
+    };
+    const redactedError = await client.callTool({
+      name: "run_provisioning_cycle",
+      arguments: {
+        appId: "application_1",
+        target: {
+          kind: "inline",
+          target: {
+            ref: "target-app",
+            baseUrl: "https://target.test/scim/v2",
+            auth: { kind: "bearer", token: leakedCredential },
+          },
+        },
+      },
+    });
+    expect(redactedError.isError).toBe(true);
+    expect(redactedError._meta?.["mockos/problem"]).toMatchObject({
+      status: 400,
+      detail: "The target rejected [REDACTED]",
+    });
+    expect(JSON.stringify(redactedError)).not.toContain(leakedCredential);
   });
 
   it("preserves expected dependency problems as RFC 7807 tool errors", async () => {

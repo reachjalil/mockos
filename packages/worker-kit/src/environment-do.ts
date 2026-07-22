@@ -16,8 +16,22 @@ import {
   type MintedToken,
   type MintTokenRequest,
   mintTokenRequestSchema,
+  type ProvisioningHttpOperation,
+  type ProvisioningHttpResponse,
+  type ProvisioningRun,
+  type ProvisioningSnapshot,
+  type ProvisioningSummary,
+  type ProvisioningTarget,
+  type ProvisioningTargetInput,
+  type ProvisioningWatermark,
+  type ProvisioningWorkflowParams,
+  provisioningHttpOperationSchema,
+  provisioningTargetInputSchema,
+  provisioningWorkflowParamsSchema,
   type RequestLogPage,
   type RequestLogQuery,
+  type RunProvisioningCycleToolInput,
+  runProvisioningCycleToolInputSchema,
   type ScenarioSpec,
   type WellKnownUrls,
   wellKnownUrlsSchema,
@@ -54,6 +68,22 @@ import {
   createOktaDirectoryEngine,
 } from "./directory-http";
 import { DoSqlStore } from "./do-sql-store";
+import { assertProvisioningPreparedOutputBounds } from "./provisioning-bounds";
+import { performProvisioningHttpOperation } from "./provisioning-http";
+import {
+  ProvisioningPersistence,
+  type StoredProvisioningExecution,
+} from "./provisioning-persistence";
+import type {
+  ProvisioningCompensationResult,
+  ProvisioningTerminalReconciliationResult,
+  ProvisioningTerminalWorkflowStatus,
+} from "./provisioning-start";
+import {
+  type OutboundTargetPolicy,
+  parseOutboundBlockedHostnames,
+  validateOutboundTarget,
+} from "./secure-fetch";
 
 const CONFIG_KEY = "environment_config";
 const LAST_ACTIVITY_KEY = "last_activity";
@@ -539,9 +569,126 @@ const corruptSignature = (token: string) => {
   return parts.join(".");
 };
 
+type ProvisioningEnvironmentVariables = {
+  API_KEY?: string;
+  ALLOW_INSECURE_TARGETS?: string;
+  BASE_DOMAIN?: string;
+  ENTRA_HOST?: string;
+  OUTBOUND_BLOCKED_HOSTS?: string;
+  PUBLIC_ORIGIN?: string;
+  PROVISIONING_FETCHER?: Fetcher;
+};
+
+const asProvisioningEnvironment = (
+  env: Cloudflare.Env
+): ProvisioningEnvironmentVariables => env as ProvisioningEnvironmentVariables;
+
+const sameProvisioningSecret = (left: string, right: string): boolean => {
+  const length = Math.max(left.length, right.length);
+  let difference = left.length ^ right.length;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+};
+
+const outboundTargetPolicy = (env: Cloudflare.Env): OutboundTargetPolicy => {
+  const values = asProvisioningEnvironment(env);
+  const allowInsecureTargets = values.ALLOW_INSECURE_TARGETS?.trim();
+  if (
+    allowInsecureTargets !== undefined &&
+    allowInsecureTargets !== "true" &&
+    allowInsecureTargets !== "false"
+  ) {
+    throw new Error("ALLOW_INSECURE_TARGETS must be 'true' or 'false'.");
+  }
+  const blockedHostnames = parseOutboundBlockedHostnames(values.OUTBOUND_BLOCKED_HOSTS);
+  for (const value of [values.PUBLIC_ORIGIN, values.BASE_DOMAIN, values.ENTRA_HOST]) {
+    if (!value) continue;
+    const hostname = value.includes("://")
+      ? (() => {
+          const url = new URL(value);
+          if (url.username || url.password) {
+            throw new Error("Product origins cannot contain credentials.");
+          }
+          return url.hostname;
+        })()
+      : value;
+    blockedHostnames.push(...parseOutboundBlockedHostnames(hostname));
+  }
+  return {
+    allowInsecureTargets: allowInsecureTargets === "true",
+    blockedHostnames: [...new Set(blockedHostnames)],
+  };
+};
+
+const provisioningSnapshotCursor = async (
+  snapshot: Omit<ProvisioningSnapshot, "cursor">
+): Promise<string> => {
+  const identity = {
+    users: snapshot.users.map((user) => [user.id, user.version, user.deleted]),
+    groups: snapshot.groups.map((group) => [
+      group.id,
+      group.version,
+      group.deleted,
+      group.memberIds,
+    ]),
+  };
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(identity))
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+  return `snapshot_${hex}`;
+};
+
+export type PreparedProvisioningRun = {
+  readonly run: ProvisioningRun;
+  readonly target: ProvisioningTarget;
+  readonly snapshot: ProvisioningSnapshot;
+  readonly watermark: ProvisioningWatermark;
+};
+
+export type ExecuteProvisioningOperationInput = {
+  readonly runId: string;
+  readonly targetRef: string;
+  readonly stepSequence: number;
+  readonly operation: ProvisioningHttpOperation;
+};
+
+export type ExecuteProvisioningOperationResult = {
+  readonly response: ProvisioningHttpResponse;
+  readonly receivedAtEpochMs: number;
+};
+
+export type CompleteProvisioningRunInput = {
+  readonly runId: string;
+  readonly summary: ProvisioningSummary;
+  readonly watermark: ProvisioningWatermark;
+};
+
+export class UnknownProvisioningApplicationError extends Error {
+  readonly code = "PROVISIONING_APPLICATION_NOT_FOUND";
+
+  constructor() {
+    super("The provisioning application was not found in this environment.");
+    this.name = "UnknownProvisioningApplicationError";
+  }
+}
+
 /** One isolated identity engine and SQLite database per mock environment. */
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
+  readonly #provisioning: ProvisioningPersistence;
+  readonly #provisioningEnvironment: ProvisioningEnvironmentVariables;
+  readonly #outboundTargetPolicy: OutboundTargetPolicy;
+  readonly #provisioningFetcher?: (request: Request) => Promise<Response>;
+  readonly #provisioningExecutions = new Map<
+    string,
+    Promise<ExecuteProvisioningOperationResult>
+  >();
   #enginePromise: Promise<Engine> | undefined;
   #httpApp:
     | {
@@ -556,6 +703,26 @@ export class EnvironmentDurableObject extends DurableObject {
     super(ctx, env);
     this.#store = new DoSqlStore(ctx.storage);
     this.#ensureSchema();
+    this.#provisioning = new ProvisioningPersistence(this.#store);
+    this.#provisioningEnvironment = asProvisioningEnvironment(env);
+    this.#outboundTargetPolicy = outboundTargetPolicy(env);
+    const provisioningFetcher = this.#provisioningEnvironment.PROVISIONING_FETCHER;
+    if (provisioningFetcher) {
+      this.#provisioningFetcher = (request) => provisioningFetcher.fetch(request);
+    }
+  }
+
+  #assertNotPlatformCredential(bearerToken: string | undefined): void {
+    const platformApiKey = this.#provisioningEnvironment.API_KEY?.trim();
+    if (
+      bearerToken &&
+      platformApiKey &&
+      sameProvisioningSecret(bearerToken, platformApiKey)
+    ) {
+      throw new Error(
+        "The platform Access Key cannot be used as an outbound target credential."
+      );
+    }
   }
 
   #ensureSchema() {
@@ -695,6 +862,477 @@ export class EnvironmentDurableObject extends DurableObject {
     const created = await engine.applications.create(input);
     await this.#touch();
     return applicationRegistration(created);
+  }
+
+  async queueProvisioningRun(
+    rawParams: ProvisioningWorkflowParams,
+    rawTarget: RunProvisioningCycleToolInput["target"]
+  ): Promise<ProvisioningRun> {
+    const params = provisioningWorkflowParamsSchema.parse(rawParams);
+    const config = this.#readConfig();
+    if (!config || config.id !== params.envId) {
+      throw new Error("Provisioning run environment does not match this object.");
+    }
+    const engine = await this.#engine();
+    if (!engine.applications.findById(params.appId)) {
+      throw new UnknownProvisioningApplicationError();
+    }
+    const target = runProvisioningCycleToolInputSchema.parse({
+      environmentId: params.envId,
+      appId: params.appId,
+      mode: params.mode,
+      target: rawTarget,
+    }).target;
+    if (target.kind === "saved") {
+      this.#assertNotPlatformCredential(
+        this.#provisioning.resolveTarget(target.targetRef).bearerToken
+      );
+    } else if (target.target.auth.kind === "bearer") {
+      this.#assertNotPlatformCredential(target.target.auth.token);
+    }
+    // Alarm scheduling is fallible. Do it before staging credentials or taking
+    // the active-run lock so a rejected queue RPC cannot orphan either one.
+    await this.#touch(config);
+    const now = new Date().toISOString();
+    const targetSelector =
+      target.kind === "saved"
+        ? ({ kind: "saved" } as const)
+        : ({ kind: "inline", save: target.save } as const);
+    const run = this.#store.transaction(() => {
+      const existing = this.#provisioning.getRun(params.runId);
+      if (
+        existing &&
+        (existing.status === "succeeded" ||
+          existing.status === "partial" ||
+          existing.status === "failed")
+      ) {
+        // A queued retry can race terminal Workflow cleanup between the active
+        // lookup and this RPC. Validate only immutable run/selector metadata;
+        // never re-stage a credential for a run which cannot consume it.
+        const terminal = this.#provisioning.queueRun(
+          params,
+          config.provider,
+          now,
+          targetSelector
+        );
+        this.#provisioning.deleteExecutions(terminal.id);
+        this.#provisioning.deleteStagedTarget(terminal.id);
+        return terminal;
+      }
+      let staged: ProvisioningTarget;
+      if (target.kind === "saved") {
+        staged = this.#provisioning.stageSavedTarget(
+          params.runId,
+          target.targetRef,
+          now
+        );
+      } else {
+        const input = provisioningTargetInputSchema.parse(target.target);
+        staged = this.#provisioning.stageTarget(params.runId, input, now);
+        if (target.save && !this.#provisioning.getRun(params.runId)) {
+          this.#provisioning.saveTarget(input, now);
+        }
+      }
+      if (staged.ref !== params.targetRef) {
+        throw new Error("Provisioning target and Workflow parameters do not match.");
+      }
+      validateOutboundTarget(staged.baseUrl, this.#outboundTargetPolicy);
+      return this.#provisioning.queueRun(params, config.provider, now, targetSelector);
+    });
+    return run;
+  }
+
+  async saveProvisioningTarget(
+    rawInput: ProvisioningTargetInput
+  ): Promise<ProvisioningTarget> {
+    const input = provisioningTargetInputSchema.parse(rawInput);
+    if (input.auth.kind === "bearer") {
+      this.#assertNotPlatformCredential(input.auth.token);
+    }
+    validateOutboundTarget(input.baseUrl, this.#outboundTargetPolicy);
+    const target = this.#provisioning.saveTarget(input, new Date().toISOString());
+    await this.#touch();
+    return target;
+  }
+
+  getProvisioningRun(runId: string): ProvisioningRun | undefined {
+    return this.#provisioning.getRun(runId);
+  }
+
+  getActiveProvisioningRun(
+    applicationId: string,
+    targetRef: string
+  ): ProvisioningRun | undefined {
+    return this.#provisioning.getActiveRun(applicationId, targetRef);
+  }
+
+  revalidateActiveProvisioningRun(
+    rawParams: ProvisioningWorkflowParams,
+    rawTarget: RunProvisioningCycleToolInput["target"]
+  ): ProvisioningRun {
+    const params = provisioningWorkflowParamsSchema.parse(rawParams);
+    const run = this.#provisioning.getRun(params.runId);
+    const config = this.#readConfig();
+    if (
+      !run ||
+      !config ||
+      (run.status !== "queued" && run.status !== "running") ||
+      run.envId !== params.envId ||
+      run.appId !== params.appId ||
+      run.provider !== config.provider ||
+      run.mode !== params.mode ||
+      run.targetRef !== params.targetRef
+    ) {
+      throw new Error("Provisioning retry does not match an active run.");
+    }
+    const target = runProvisioningCycleToolInputSchema.parse({
+      environmentId: params.envId,
+      appId: params.appId,
+      mode: params.mode,
+      target: rawTarget,
+    }).target;
+    const storedSelector = this.#provisioning.getRunTargetSelector(run.id);
+    const retrySelector =
+      target.kind === "saved"
+        ? { kind: "saved" as const }
+        : { kind: "inline" as const, save: target.save };
+    if (JSON.stringify(storedSelector) !== JSON.stringify(retrySelector)) {
+      throw new Error("Provisioning retry does not match an active run.");
+    }
+    if (target.kind === "saved") {
+      this.#provisioning.revalidateSavedTarget(run.id, target.targetRef);
+    } else {
+      this.#provisioning.revalidateInlineTarget(run.id, target.target);
+    }
+    return run;
+  }
+
+  async prepareProvisioningRun(
+    rawParams: ProvisioningWorkflowParams
+  ): Promise<PreparedProvisioningRun> {
+    const params = provisioningWorkflowParamsSchema.parse(rawParams);
+    const config = this.#readConfig();
+    if (!config || config.id !== params.envId) {
+      throw new Error("Provisioning run environment does not match this object.");
+    }
+    const queued = this.#provisioning.getRun(params.runId);
+    if (
+      !queued ||
+      queued.envId !== params.envId ||
+      queued.appId !== params.appId ||
+      queued.provider !== config.provider ||
+      queued.mode !== params.mode ||
+      queued.targetRef !== params.targetRef
+    ) {
+      throw new Error("Provisioning run parameters do not match queued state.");
+    }
+    const engine = await this.#engine();
+    if (!engine.applications.findById(params.appId)) {
+      throw new UnknownProvisioningApplicationError();
+    }
+    const resolvedTarget = this.#provisioning.resolveTarget(
+      params.targetRef,
+      params.runId
+    );
+    this.#assertNotPlatformCredential(resolvedTarget.bearerToken);
+    validateOutboundTarget(resolvedTarget.target.baseUrl, this.#outboundTargetPolicy);
+
+    const users = engine.users
+      .list({ includeDeleted: true })
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((user) => {
+        const deleted =
+          user.lifecycleState === "deleted" || Boolean(user.softDeletedAt);
+        return {
+          resourceType: "User" as const,
+          id: user.id,
+          ...(user.externalId ? { externalId: user.externalId } : {}),
+          userName: user.userName,
+          displayName: user.displayName,
+          ...(user.givenName ? { givenName: user.givenName } : {}),
+          ...(user.familyName ? { familyName: user.familyName } : {}),
+          active: !deleted && user.lifecycleState === "active",
+          deleted,
+          version: user.resourceVersion,
+        };
+      });
+    const groups = engine.groups
+      .list({ includeDeleted: true })
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((group) => {
+        const deleted = Boolean(group.softDeletedAt);
+        return {
+          resourceType: "Group" as const,
+          id: group.id,
+          ...(group.externalId ? { externalId: group.externalId } : {}),
+          displayName: group.displayName,
+          memberIds: deleted
+            ? []
+            : engine.groups
+                .listMembers(group.id)
+                .map((member) => member.id)
+                .sort((left, right) => left.localeCompare(right)),
+          deleted,
+          version: group.resourceVersion,
+        };
+      });
+    const snapshotBody = { users, groups };
+    const snapshot = {
+      ...snapshotBody,
+      cursor: await provisioningSnapshotCursor(snapshotBody),
+    } satisfies ProvisioningSnapshot;
+    const watermark = this.#provisioning.getWatermark(params.appId, params.targetRef);
+    const startedAt = new Date().toISOString();
+    const projectedRun: ProvisioningRun =
+      queued.status === "running"
+        ? queued
+        : { ...queued, status: "running", startedAt };
+    assertProvisioningPreparedOutputBounds({
+      run: projectedRun,
+      target: resolvedTarget.target,
+      snapshot,
+      watermark,
+    });
+    const run = this.#provisioning.startRun(params.runId, startedAt);
+    await this.#touch(config);
+    return {
+      run,
+      target: resolvedTarget.target,
+      snapshot,
+      watermark,
+    };
+  }
+
+  async #appendProvisioningLog(
+    execution: StoredProvisioningExecution,
+    provider: EnvironmentConfig["provider"]
+  ): Promise<void> {
+    const existing = this.#store.get<{ id: string }>(
+      "SELECT id FROM request_log WHERE id = ?",
+      execution.log.id
+    );
+    if (existing) return;
+    const engine = await this.#engine();
+    engine.requestLog.append({
+      ...execution.log,
+      source: "outbound",
+      provider,
+    });
+  }
+
+  async executeProvisioningOperation(
+    input: ExecuteProvisioningOperationInput
+  ): Promise<ExecuteProvisioningOperationResult> {
+    if (!Number.isSafeInteger(input.stepSequence) || input.stepSequence < 1) {
+      throw new Error("Provisioning execution ordinal must be a positive integer.");
+    }
+    const operation = provisioningHttpOperationSchema.parse(input.operation);
+    const run = this.#provisioning.getRun(input.runId);
+    const config = this.#readConfig();
+    if (
+      !run ||
+      !config ||
+      run.status !== "running" ||
+      run.targetRef !== input.targetRef ||
+      run.provider !== config.provider ||
+      operation.provider !== config.provider
+    ) {
+      throw new Error("Provisioning execution does not match a running run.");
+    }
+    const existing = this.#provisioning.readExecution(
+      run.id,
+      input.stepSequence,
+      operation
+    );
+    if (existing) {
+      await this.#appendProvisioningLog(existing, config.provider);
+      return {
+        response: existing.response,
+        receivedAtEpochMs: Date.parse(existing.log.timestamp) + existing.log.durationMs,
+      };
+    }
+
+    const key = `${run.id}:${input.stepSequence}`;
+    const inFlight = this.#provisioningExecutions.get(key);
+    if (inFlight) return inFlight;
+    const execution = (async () => {
+      const resolvedTarget = this.#provisioning.resolveTarget(input.targetRef, run.id);
+      this.#assertNotPlatformCredential(resolvedTarget.bearerToken);
+      this.#provisioning.beginExecution(
+        run.id,
+        input.stepSequence,
+        operation,
+        new Date().toISOString()
+      );
+      validateOutboundTarget(resolvedTarget.target.baseUrl, this.#outboundTargetPolicy);
+      const performed = await performProvisioningHttpOperation({
+        target: resolvedTarget.target,
+        ...(resolvedTarget.bearerToken
+          ? { bearerToken: resolvedTarget.bearerToken }
+          : {}),
+        operation,
+        policy: this.#outboundTargetPolicy,
+        ...(this.#provisioningFetcher ? { fetch: this.#provisioningFetcher } : {}),
+      });
+      const stored = this.#provisioning.finishExecution(
+        run.id,
+        input.stepSequence,
+        operation,
+        performed
+      );
+      await this.#appendProvisioningLog(stored, config.provider);
+      await this.#touch(config);
+      return {
+        response: stored.response,
+        receivedAtEpochMs: Date.parse(stored.log.timestamp) + stored.log.durationMs,
+      };
+    })();
+    this.#provisioningExecutions.set(key, execution);
+    try {
+      return await execution;
+    } finally {
+      if (this.#provisioningExecutions.get(key) === execution) {
+        this.#provisioningExecutions.delete(key);
+      }
+    }
+  }
+
+  async completeProvisioningRun(
+    input: CompleteProvisioningRunInput
+  ): Promise<ProvisioningRun> {
+    const current = this.#provisioning.getRun(input.runId);
+    if (!current) throw new Error(`Unknown provisioning run '${input.runId}'.`);
+    if (
+      current.status === "succeeded" ||
+      current.status === "partial" ||
+      current.status === "failed"
+    ) {
+      // completeRun compares the persisted summary. Never accept a different
+      // watermark on replay after the active-run lock has been released.
+      return this.#store.transaction(() => {
+        const run = this.#provisioning.completeRun(input.runId, input.summary);
+        this.#provisioning.deleteExecutions(run.id);
+        this.#provisioning.deleteStagedTarget(run.id);
+        return run;
+      });
+    }
+    const completed = this.#store.transaction(() => {
+      const run = this.#provisioning.completeRun(input.runId, input.summary);
+      this.#provisioning.saveWatermark(
+        run.appId,
+        run.targetRef,
+        input.watermark,
+        input.summary.completedAt
+      );
+      this.#provisioning.deleteExecutions(run.id);
+      this.#provisioning.deleteStagedTarget(run.id);
+      return run;
+    });
+    await this.#touch();
+    return completed;
+  }
+
+  async failProvisioningRun(
+    runId: string,
+    message: string
+  ): Promise<ProvisioningRun | undefined> {
+    const current = this.#provisioning.getRun(runId);
+    if (!current) return undefined;
+    let safeMessage = message;
+    try {
+      const secret = this.#provisioning.resolveTarget(
+        current.targetRef,
+        current.id
+      ).bearerToken;
+      if (secret) safeMessage = safeMessage.replaceAll(secret, "[REDACTED]");
+    } catch {
+      // A missing staged target must not prevent failure-state persistence.
+    }
+    const failed = this.#store.transaction(() => {
+      const run = this.#provisioning.failRun(
+        runId,
+        safeMessage,
+        new Date().toISOString()
+      );
+      this.#provisioning.deleteExecutions(runId);
+      this.#provisioning.deleteStagedTarget(runId);
+      return run;
+    });
+    await this.#touch();
+    return failed;
+  }
+
+  async reconcileTerminalProvisioningWorkflow(
+    runId: string,
+    workflowStatus: ProvisioningTerminalWorkflowStatus
+  ): Promise<ProvisioningTerminalReconciliationResult> {
+    if (
+      workflowStatus !== "complete" &&
+      workflowStatus !== "errored" &&
+      workflowStatus !== "terminated"
+    ) {
+      throw new Error("Invalid terminal Provisioning Workflow status.");
+    }
+    const result = this.#store.transaction(
+      (): ProvisioningTerminalReconciliationResult => {
+        const current = this.#provisioning.getRun(runId);
+        if (!current) {
+          this.#provisioning.deleteExecutions(runId);
+          this.#provisioning.deleteStagedTarget(runId);
+          return { outcome: "missing" };
+        }
+        if (
+          current.status === "succeeded" ||
+          current.status === "partial" ||
+          current.status === "failed"
+        ) {
+          this.#provisioning.deleteExecutions(runId);
+          this.#provisioning.deleteStagedTarget(runId);
+          return { outcome: "preserved", run: current };
+        }
+        const run = this.#provisioning.failRun(
+          runId,
+          `Provisioning Workflow reached terminal platform status '${workflowStatus}' before run completion.`,
+          new Date().toISOString()
+        );
+        this.#provisioning.deleteExecutions(runId);
+        this.#provisioning.deleteStagedTarget(runId);
+        return { outcome: "failed", run };
+      }
+    );
+    if (result.outcome === "failed") await this.#touch();
+    return result;
+  }
+
+  async compensateProvisioningRun(
+    runId: string,
+    message: string
+  ): Promise<ProvisioningCompensationResult> {
+    const result = this.#store.transaction((): ProvisioningCompensationResult => {
+      const current = this.#provisioning.getRun(runId);
+      if (!current) {
+        this.#provisioning.deleteExecutions(runId);
+        this.#provisioning.deleteStagedTarget(runId);
+        return { outcome: "missing" };
+      }
+      if (current.status !== "queued") {
+        if (
+          current.status === "succeeded" ||
+          current.status === "partial" ||
+          current.status === "failed"
+        ) {
+          this.#provisioning.deleteExecutions(runId);
+          this.#provisioning.deleteStagedTarget(runId);
+        }
+        return { outcome: "preserved", run: current };
+      }
+      const run = this.#provisioning.failRun(runId, message, new Date().toISOString());
+      this.#provisioning.deleteExecutions(runId);
+      this.#provisioning.deleteStagedTarget(runId);
+      return { outcome: "compensated", run };
+    });
+    if (result.outcome === "compensated") await this.#touch();
+    return result;
   }
 
   async getWellKnown(issuerBase: string): Promise<Record<string, unknown>> {
