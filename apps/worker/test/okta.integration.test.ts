@@ -30,6 +30,7 @@ type WellKnownUrls = {
   issuer: string;
   jwksUri: string;
   oktaApiBaseUrl: string;
+  oktaAuthnEndpoint: string;
   openidConfiguration: string;
   revocationEndpoint: string;
   scimBaseUrl: string;
@@ -183,6 +184,203 @@ const verifyJwt = async (
 };
 
 describe("Okta public identity surface", () => {
+  it("runs bounded Classic Authn states without logging credentials or tokens", {
+    timeout: 20_000,
+  }, async () => {
+    const sessionId = await initializeMcp();
+    const environment = await callTool<EnvironmentConfig>(
+      sessionId,
+      "create_environment",
+      {
+        name: "Okta Classic Authn integration",
+        provider: "okta",
+        seed: "okta-authn-worker-integration",
+      }
+    );
+    try {
+      const authnPassword = "SyntheticAuthnPassw0rd!";
+      const seeded = await callTool<{
+        users: Array<{ id: string; userName: string }>;
+      }>(sessionId, "seed_identities", {
+        environmentId: environment.id,
+        users: [
+          {
+            userName: "success.authn@example.test",
+            displayName: "Success Authn",
+            password: authnPassword,
+            passwordState: "valid",
+            active: true,
+            mfaState: "none",
+            roles: [],
+          },
+          {
+            userName: "mfa.authn@example.test",
+            displayName: "MFA Authn",
+            password: authnPassword,
+            passwordState: "expired",
+            active: true,
+            mfaState: "required",
+            roles: [],
+          },
+          {
+            userName: "expired.authn@example.test",
+            displayName: "Expired Authn",
+            password: authnPassword,
+            passwordState: "expired",
+            active: true,
+            mfaState: "none",
+            roles: [],
+          },
+          {
+            userName: "locked.authn@example.test",
+            displayName: "Locked Authn",
+            password: authnPassword,
+            passwordState: "valid",
+            active: true,
+            mfaState: "none",
+            roles: [],
+          },
+        ],
+        groups: [],
+      });
+      const lockedUser = seeded.users.find(
+        ({ userName: value }) => value === "locked.authn@example.test"
+      );
+      if (!lockedUser) throw new Error("Expected the locked Authn fixture user.");
+      await callTool(sessionId, "simulate_lifecycle", {
+        environmentId: environment.id,
+        userId: lockedUser.id,
+        action: "suspend",
+      });
+
+      const urls = await callTool<WellKnownUrls>(sessionId, "get_wellknown_urls", {
+        environmentId: environment.id,
+      });
+      expect(urls.oktaAuthnEndpoint).toBe(
+        `${publicOrigin}/e/${environment.id}/api/v1/authn`
+      );
+      const authenticate = (body: Record<string, string>) =>
+        worker.fetch(urls.oktaAuthnEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+      for (const userName of [
+        "mfa.authn@example.test",
+        "expired.authn@example.test",
+        "locked.authn@example.test",
+        "unknown.authn@example.test",
+      ]) {
+        const invalid = await authenticate({
+          username: userName,
+          password: "WrongSyntheticPassword",
+        });
+        expect(invalid.status).toBe(401);
+        expect(await invalid.json()).toMatchObject({
+          errorCode: "E0000004",
+          errorSummary: "Authentication failed",
+          errorCauses: [],
+        });
+      }
+
+      const mfaResponse = await authenticate({
+        username: "mfa.authn@example.test",
+        password: authnPassword,
+      });
+      expect(mfaResponse.status).toBe(200);
+      const mfaBody = await mfaResponse.json<{
+        stateToken: string;
+        status: string;
+      }>();
+      expect(mfaBody.status).toBe("MFA_REQUIRED");
+      expect(mfaBody.stateToken).toMatch(/^state_[a-f0-9]{48}$/);
+
+      const currentState = await authenticate({ stateToken: mfaBody.stateToken });
+      expect(await currentState.json()).toMatchObject({
+        stateToken: mfaBody.stateToken,
+        status: "MFA_REQUIRED",
+      });
+      const cancelled = await worker.fetch(`${urls.oktaAuthnEndpoint}/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stateToken: mfaBody.stateToken }),
+      });
+      expect(cancelled.status).toBe(200);
+      const replay = await authenticate({ stateToken: mfaBody.stateToken });
+      expect(replay.status).toBe(401);
+      expect(await replay.json()).toMatchObject({ errorCode: "E0000011" });
+
+      const expiredResponse = await authenticate({
+        username: "expired.authn@example.test",
+        password: authnPassword,
+      });
+      expect(await expiredResponse.json()).toMatchObject({
+        status: "PASSWORD_EXPIRED",
+        _links: { next: { name: "changePassword" } },
+      });
+
+      const lockedResponse = await authenticate({
+        username: "locked.authn@example.test",
+        password: authnPassword,
+      });
+      expect(await lockedResponse.json()).toMatchObject({
+        status: "LOCKED_OUT",
+        _links: { next: { name: "unlock" } },
+      });
+
+      const successResponse = await authenticate({
+        username: "success.authn@example.test",
+        password: authnPassword,
+      });
+      const successBody = await successResponse.json<{
+        sessionToken: string;
+        status: string;
+      }>();
+      expect(successBody.status).toBe("SUCCESS");
+      expect(successBody.sessionToken).toMatch(/^session_[a-f0-9]{48}$/);
+
+      const malformedSecret = "MalformedAuthnSecret";
+      const malformed = await worker.fetch(urls.oktaAuthnEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: `{"password":"${malformedSecret}`,
+      });
+      expect(malformed.status).toBe(400);
+
+      const primitiveSecret = "PrimitiveAuthnSecret";
+      const primitive = await worker.fetch(urls.oktaAuthnEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(primitiveSecret),
+      });
+      expect(primitive.status).toBe(400);
+
+      const log = await callTool<{
+        entries: Array<{ requestBody: string | null; responseBody: string | null }>;
+      }>(sessionId, "get_request_log", {
+        environmentId: environment.id,
+        source: "inbound",
+        method: "POST",
+        path: `/e/${environment.id}/api/v1/authn`,
+        limit: 20,
+      });
+      expect(log.entries.length).toBeGreaterThanOrEqual(10);
+      const captured = JSON.stringify(log.entries);
+      expect(captured).not.toContain(authnPassword);
+      expect(captured).not.toContain("WrongSyntheticPassword");
+      expect(captured).not.toContain(malformedSecret);
+      expect(captured).not.toContain(primitiveSecret);
+      expect(captured).not.toContain(mfaBody.stateToken);
+      expect(captured).not.toContain(successBody.sessionToken);
+      expect(captured).toContain("[REDACTED]");
+    } finally {
+      await callTool(sessionId, "delete_environment", {
+        environmentId: environment.id,
+      });
+    }
+  });
+
   it("provisions through MCP and completes authorization-code and device flows", {
     timeout: 20_000,
   }, async () => {

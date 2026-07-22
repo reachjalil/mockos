@@ -9,6 +9,7 @@ import type {
   ScenarioSpec,
   SemanticErrorCode,
 } from "@mockos/contracts";
+import { OktaAuthnService } from "./authn";
 import {
   type Clock,
   CryptoRng,
@@ -98,6 +99,7 @@ export class Engine {
   readonly groups: GroupRepository;
   readonly applications: ApplicationRepository;
   readonly apps: ApplicationRepository;
+  readonly authn: OktaAuthnService;
   readonly lifecycle: LifecycleService;
   readonly keys: SigningKeyService;
   readonly oauth: OAuthService;
@@ -126,6 +128,12 @@ export class Engine {
     this.groups = new GroupRepository(this.#store, this.clock, this.rng);
     this.applications = new ApplicationRepository(this.#store, this.clock, this.rng);
     this.apps = this.applications;
+    this.authn = new OktaAuthnService({
+      store: this.#store,
+      clock: this.clock,
+      rng: this.rng,
+      users: this.users,
+    });
     this.lifecycle = new LifecycleService({
       provider: this.providerId,
       users: this.users,

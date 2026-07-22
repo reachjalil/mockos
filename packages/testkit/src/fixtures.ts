@@ -3,6 +3,7 @@ import { basename, extname } from "node:path";
 
 export const fixtureProviders = ["entra", "okta"] as const;
 export const fixtureAreas = [
+  "authn",
   "oidc",
   "scim",
   "directory",

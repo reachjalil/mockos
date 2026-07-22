@@ -1,3 +1,4 @@
+export * from "./authn";
 export * from "./determinism";
 export * from "./directory";
 export * from "./engine";

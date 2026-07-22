@@ -60,6 +60,20 @@ describe("deterministic seams", () => {
 });
 
 describe("conformance fixtures", () => {
+  it("locks the implemented Okta Classic Authn fixture set", async () => {
+    const directory = fileURLToPath(new URL("../fixtures/okta/authn", import.meta.url));
+    const files = (await readdir(directory))
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => join(directory, file));
+    const fixtures = await loadFixtures(files);
+
+    expect(fixtures).toHaveLength(5);
+    expect(new Set(fixtures.map(({ name }) => name)).size).toBe(5);
+    expect(fixtures.every(({ provider }) => provider === "okta")).toBe(true);
+    expect(fixtures.every(({ area }) => area === "authn")).toBe(true);
+    expect(fixtures.every(({ status }) => status === "implemented")).toBe(true);
+  });
+
   it("loads at least 25 individually sourced Entra OIDC fixtures", async () => {
     const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
     const files = (await readdir(directory))

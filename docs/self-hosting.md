@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide with accepted M3 reference deployment; M5 provisioning is locally qualified but unaccepted and npm/custom-domain distribution remains unavailable
+Status: Source-build guide with accepted M3 reference deployment; M5 provisioning and M6 Classic Authn are locally qualified but unaccepted, and npm/custom-domain distribution remains unavailable
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -40,7 +40,9 @@ locally. Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
-`/e/<environment>/api/v1`. Entra and Okta token endpoints also have local refresh
+`/e/<environment>/api/v1`. The M6 source candidate also mounts bounded Okta Classic
+primary authentication at `/e/<environment>/api/v1/authn`. Entra and Okta token
+endpoints also have local refresh
 redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
 deployed evidence; the M5 provisioning additions do not.
 
@@ -81,8 +83,9 @@ The M5 CLI and runtime reject an outbound target Bearer equal to the exact activ
 self-host `API_KEY`, even when it has no `mk_` prefix. A later key rotation that
 collides with a saved target also fails before the outbound request; choose distinct,
 synthetic values rather than relying on this guard.
-UserInfo, Okta Classic `/api/v1/authn`, and broad Graph/Okta API compatibility remain
-unavailable. Outbound provisioning is locally qualified source with public-HTTPS target
+UserInfo, the rest of the Okta Classic transaction machine, and broad Graph/Okta API
+compatibility remain unavailable. Outbound provisioning is locally qualified source
+with public-HTTPS target
 and SSRF constraints, not an accepted or deployed capability; see
 [known limitations](./known-limitations.md).
 

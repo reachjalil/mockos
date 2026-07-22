@@ -631,6 +631,7 @@ describe("M5 provisioning Worker orchestration", () => {
             givenName: "Ada",
             familyName: "Lovelace",
             password: "Passw0rd!",
+            passwordState: "valid",
             active: true,
             mfaState: "none",
             roles: [],

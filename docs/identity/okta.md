@@ -1,6 +1,6 @@
 # Okta behavior
 
-Status: Accepted bounded M3 Okta implementation with a deployed directory sample; live-Okta parity is not claimed
+Status: Accepted bounded M3 implementation plus a locally qualified M6 Classic Authn source candidate; live-Okta parity is not claimed
 Last reviewed: 2026-07-22
 
 The Okta profile parameterizes the shared identity engine and has a dedicated HTTP
@@ -47,6 +47,36 @@ The device flow models `authorization_pending`, `slow_down`, successful activati
 integration test exercises pending and successful activation; the remaining states are
 covered at the core or HTTP-adapter boundary.
 
+## Classic primary authentication source candidate
+
+Okta environments now expose a bounded Classic Engine primary-authentication machine
+at `POST /e/<environment>/api/v1/authn`. `get_wellknown_urls` returns the exact URL as
+`oktaAuthnEndpoint`; callers should use that value rather than retaining an old host.
+This route is a public synthetic sign-in boundary and does not require the `SSWS`
+credential used by the adjacent management API.
+
+The M6 source candidate implements these initial transaction outcomes:
+
+| Seeded User condition after password verification | Result |
+| --- | --- |
+| active, valid password, no required MFA | `SUCCESS` with a five-minute one-time `sessionToken` |
+| `mfaState: "required"` | `MFA_REQUIRED` with an expiring `stateToken` and synthetic TOTP factor |
+| expired/reset-required password without required MFA | `PASSWORD_EXPIRED` with an expiring `stateToken` |
+| suspended User | explicit show-lockout-failures `LOCKED_OUT` shape |
+
+Credential verification always precedes policy/state evaluation. An unknown user or a
+wrong password for an MFA, expired, suspended, disabled, or deleted User returns the
+same HTTP 401 `E0000004` response and creates no transaction. Required MFA takes
+precedence over password expiry, matching the documented Classic Engine order.
+
+Raw passwords, state tokens, and session tokens are never persisted. The two bearer
+capabilities are stored only as SHA-256 hashes. `POST /api/v1/authn` can read the exact
+current transaction by `stateToken`, and `POST /api/v1/authn/cancel` deletes it;
+cancel replay and tokens at their exact expiry return HTTP 401 `E0000011`. Session
+tokens have a tested atomic consume-once core seam, although a Sessions API exchange
+route is not part of this bounded slice. Authn request/response log bodies redact all
+password and token fields.
+
 ## Directory surface
 
 An Okta environment has two accepted M3 directory surfaces in path mode:
@@ -66,11 +96,19 @@ User deletion removes Group membership and increments affected Group versions.
 
 ## Evidence boundary
 
-The [22 Okta fixtures](../../packages/testkit/fixtures/okta/oidc) document discovery,
+The [22 Okta OIDC fixtures](../../packages/testkit/fixtures/okta/oidc) document discovery,
 authorization-code tokens and claims, introspection, revocation, device-flow states,
 invalid clients, and rate-limit shapes from official Okta documentation. Every fixture
 is marked `documented`. They are source-reviewed expectations, not captures from a live
 Okta organization and not a claim that the complete corpus runs against the Worker.
+
+Five additional [Classic Authn fixtures](../../packages/testkit/fixtures/okta/authn)
+are marked `implemented` and execute against the core-backed HTTP composition. They
+cover `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, `LOCKED_OUT`, and generic invalid
+credentials. Focused core tests cover hash-only storage, expiry, cancellation replay,
+MFA precedence, and one-time session-token consumption; the Worker integration covers
+the mounted states, state retrieval/cancellation, discovery, privacy boundary, and log
+redaction.
 
 Implemented subsets are exercised by:
 
@@ -90,8 +128,13 @@ or broad SDK compatibility claim.
   accepted in local/hosted tests, but the deployed acceptance did not sample it.
 - Discovery and `get_wellknown_urls` return a UserInfo URL, but `/v1/userinfo` is not
   implemented yet.
-- Classic `/api/v1/authn` is not implemented. The bounded Users/Groups routes do not
-  imply support for the rest of the Okta Management API.
+- Classic `/api/v1/authn` is limited to primary authentication, state retrieval, and
+  cancellation. Factor verification, password change, recovery/unlock execution,
+  Sessions API exchange, password warnings, enrollment, and the rest of the Classic
+  transaction machine are not implemented. Provider-shaped links identify the next
+  operation but do not claim those linked transitions are mounted.
+  Deactivating lifecycle transitions atomically remove outstanding Classic state and
+  one-time session capabilities; later reactivation does not restore them.
 - `/api/v1` uses Okta API-shaped errors and request IDs for the tested cases, including
   deterministic rate limiting; exact catalog parity is not claimed.
 - Exact error descriptions, cookies, hosted-login HTML, uncommon parameters, key

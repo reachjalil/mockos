@@ -1,0 +1,30 @@
+{
+  "name": "okta-authn-locked-out",
+  "description": "A suspended mock user with a verified password returns the explicit show-lockout-failures transaction shape.",
+  "provider": "okta",
+  "area": "authn",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/authn",
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "username": "locked.authn@example.test",
+      "password": "SyntheticPassw0rd!"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": { "cache-control": "no-store" },
+    "bodyContains": {
+      "status": "LOCKED_OUT",
+      "_links": {
+        "next": { "name": "unlock" }
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#response-example-for-primary-authentication-with-public-application-and-show-lockout-failures",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "mockOS deterministically models the show-lockout-failures policy, but only after the supplied password is valid."
+}
