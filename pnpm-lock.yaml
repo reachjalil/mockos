@@ -99,6 +99,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 5.20260721.1
+      '@mockos/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

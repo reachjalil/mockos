@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { forwardEnvironmentRequest, resolveEnvironmentRequest } from "./host-resolver";
+import {
+  forwardEnvironmentRequest,
+  graphBaseUrlForEnvironment,
+  resolveEnvironmentRequest,
+} from "./host-resolver";
 
 const environmentId = "test-env_01";
 const tenantId = "0f6f4756-741d-4a4b-83b2-5f2e37ec621d";
@@ -13,6 +17,7 @@ describe("resolveEnvironmentRequest", () => {
     expect(result).toMatchObject({
       environmentId,
       forwardedPath: `/${tenantId}/oauth2/v2.0/authorize`,
+      graphBaseUrl: `https://mockos.example/e/${environmentId}/graph/v1.0`,
       issuerBase: `https://mockos.example/e/${environmentId}/${tenantId}/v2.0`,
       provider: "entra",
     });
@@ -98,6 +103,13 @@ describe("resolveEnvironmentRequest", () => {
       provider: "entra",
     });
     expect(result?.environmentId).toBeUndefined();
+    if (!result) throw new Error("Expected Entra tenant route.");
+    expect(
+      graphBaseUrlForEnvironment(result, environmentId, {
+        hostingMode: "subdomain",
+        baseDomain: "id.mockos.live",
+      })
+    ).toBe(`https://${environmentId}.id.mockos.live/graph/v1.0`);
   });
 
   it("removes caller-supplied internal routing headers before forwarding", () => {
@@ -107,6 +119,7 @@ describe("resolveEnvironmentRequest", () => {
         method: "POST",
         headers: {
           "x-mockos-env": "attacker-env",
+          "x-mockos-graph-base": "https://attacker.example/graph/v1.0",
           "x-mockos-issuer-base": "https://attacker.example",
           "x-mockos-public-path": "/spoofed",
           "x-mockos-private-future": "spoofed",
@@ -127,6 +140,9 @@ describe("resolveEnvironmentRequest", () => {
     );
     expect(forwarded.headers.get("x-mockos-public-path")).toBe(
       `/e/${environmentId}/${tenantId}/oauth2/v2.0/token`
+    );
+    expect(forwarded.headers.get("x-mockos-graph-base")).toBe(
+      `https://mockos.example/e/${environmentId}/graph/v1.0`
     );
     expect(forwarded.headers.has("x-mockos-private-future")).toBe(false);
   });

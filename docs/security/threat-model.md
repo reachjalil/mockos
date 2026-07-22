@@ -44,7 +44,13 @@ provisioning targets.
 - Redirect URIs are compared exactly. Authorization codes are short-lived, one-time,
   and S256-PKCE-bound where configured.
 - Application secrets, refresh tokens, and tracked OAuth access tokens are stored as
-  hashes. Signing keys remain environment-local.
+  hashes. Signing keys remain environment-local. The active and pre-published successor
+  private JWKs stay inside the signing service; rotation scrubs the previous active
+  private JWK transactionally and bounds the ring to four rows. A second rotation is
+  blocked for the exact 26-hour rollback/verification-overlap window qualified for
+  built-in Worker/MCP issuance with a fixed one-hour lifetime and bounded skew. Trusted
+  public-core test seams can create longer or overridden temporal claims and are outside
+  that guarantee.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
@@ -58,8 +64,14 @@ provisioning targets.
   implemented persistence and fault-injection paths.
 - SCIM, Graph, and Okta directory adapters bound request paths, identifiers, query or
   filter sizes, page sizes, and supported operations. SCIM and Okta writes stream
-  through 1 MiB body limits; SCIM additionally bounds filter tokens/depth/nodes and
-  PATCH operations/depth/nodes.
+  through 1 MiB body limits; Graph `getMemberObjects` streams through a 4,096-byte
+  limit even without a trustworthy `Content-Length`, queries at most 1,001 membership
+  IDs, and fails rather than returning more than 1,000; Entra token overage probes at
+  most 201 IDs. SCIM additionally bounds filter tokens/depth/nodes and PATCH
+  operations/depth/nodes.
+- The edge removes every caller-supplied `x-mockos-*` header before adding trusted
+  issuer, environment, public-path, and Graph-base routing context. Entra group-overage
+  endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
 
@@ -82,6 +94,10 @@ Environment logs intentionally retain test protocol bodies and mock tokens becau
 assertion is the product. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
+
+Active and successor private signing JWKs are stored in per-environment SQLite without
+application-level encryption. Use only synthetic environments and apply the deployment
+platform's storage and access controls; M6 hosted/deployed security evidence is pending.
 
 M5 outbound SSRF and credential controls are described in
 [outbound provisioning](./outbound-provisioning.md). The Worker and worker-kit suites,

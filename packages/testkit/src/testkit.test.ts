@@ -60,16 +60,28 @@ describe("deterministic seams", () => {
 });
 
 describe("conformance fixtures", () => {
-  it("loads at least 25 individually sourced Entra OIDC fixtures", async () => {
+  it("loads documented Entra OIDC fixtures plus implemented M6 token edges", async () => {
     const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
     const files = (await readdir(directory))
       .filter((file) => file.endsWith(".json"))
+      .sort()
       .map((file) => join(directory, file));
     const fixtures = await loadFixtures(files);
 
     expect(fixtures.length).toBeGreaterThanOrEqual(25);
     expect(fixtures.every(({ provider }) => provider === "entra")).toBe(true);
-    expect(fixtures.every(({ status }) => status === "documented")).toBe(true);
+    expect(
+      fixtures.filter(({ status }) => status === "implemented").map(({ name }) => name)
+    ).toEqual([
+      "Deterministic expired token",
+      "Deterministic wrong-audience token",
+      "Deterministic not-yet-valid token",
+      "Deterministic bad-signature token",
+      "Deterministic wrong-issuer token",
+      "Rotate signing key before token signing",
+      "Skew token claims before signing",
+      "Resolve group overage with getMemberObjects",
+    ]);
   });
 
   it("loads at least 20 individually sourced Okta OIDC fixtures", async () => {

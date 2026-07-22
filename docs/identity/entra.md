@@ -30,6 +30,42 @@ attempt fails with Entra-shaped `invalid_grant` / `AADSTS50057` behavior. This h
 focused core, adapter, and Worker coverage, and the M3 deployed smoke sampled the
 rotation/lifecycle path.
 
+The M6 token/key source stream keeps schema v5 and adds a pre-published successor key.
+Rotation atomically promotes that successor, creates another successor, and converts the
+previous active row into a metadata-only overlap: its private JWK is scrubbed to `{}` and
+it is encoded as legacy-visible `next` plus a non-null `retired_at`. `retiring` is only
+accepted while normalizing legacy rows; it is not a steady-state status. This lets the
+previous schema-v5 JWKS query keep publishing the overlap key without an unsafe migration.
+The ring is bounded to active, successor, overlap, and one retired metadata row.
+
+A second rotation is blocked for exactly 26 hours after the prior rotation. That is the
+maximum rollback/verification-overlap window mockOS qualifies for built-in Worker OIDC
+and MCP `mint_token` issuance: it covers the bounded 24-hour scenario skew, fixed
+one-hour token lifetime, and one hour of verifier/cache drift. The public core
+`IssueIdTokenInput.expiresInSeconds` and `additionalClaims` fields are trusted test seams;
+custom longer lifetimes or temporal-claim overrides through them are outside the 26-hour
+guarantee. An idle ring may continue publishing the old public key until the next
+eligible rotation, but no longer rollback guarantee is claimed. Each sign operation
+rereads the persisted active key and verifies it remained active after signing, retrying
+if rotation won the race. The internal `token.before_sign` scenario can trigger one
+rollover or apply a bounded temporal-claim skew without moving storage timestamps.
+Focused core and Worker tests cover the rollover, including multi-service and forced
+sign/rotate interleavings; hosted and deployed M6 qualification remain pending.
+
+For applications whose group-claims mode is enabled, Entra group claims remain inline
+through exactly 200 group IDs. At 201, the token omits `groups` and emits
+`_claim_names` / `_claim_sources` pointing to the same environment's
+`POST /graph/v1.0/users/<id>/getMemberObjects` endpoint. The Graph base is derived from
+trusted routing state, not token input: path mode uses `/e/<environment>/graph/v1.0`,
+while subdomain mode uses `https://<environment>.<base>/graph/v1.0` even though the
+Entra issuer is on `https://login.<base>/<tenant>/v2.0`. The endpoint accepts only a
+strict JSON body containing `securityEnabledOnly`, streams and cancels above 4,096
+bytes even when `Content-Length` is absent or false, and treats JSON media types
+case-insensitively. Token issuance uses an ID-only SQL query capped at 201 memberships.
+The fallback uses an ID-only query capped at 1,001 and returns HTTP 400 with
+`Directory_ResultSizeLimitExceeded` instead of returning more than 1,000 IDs. Callers
+cannot supply a source URL, and no outbound request is made.
+
 ## Directory surface
 
 In path mode an Entra environment exposes these accepted M3 bases:
@@ -37,7 +73,8 @@ In path mode an Entra environment exposes these accepted M3 bases:
 - `/e/<environment>/scim/v2` for SCIM discovery and versioned User/Group CRUD,
   filtering, pagination, PATCH, and ETags;
 - `/e/<environment>/graph/v1.0` for bounded read-only Users, Groups, direct group
-  membership, exact supported-property `eq` filters, projection, and cursor pages.
+  membership, exact supported-property `eq` filters, projection, cursor pages, and the
+  bounded group-overage `getMemberObjects` lookup.
 
 Entra lifecycle policy supports activate, disable, reactivate, and delete. Deletion
 also removes the User from Groups and increments affected Group versions. SCIM and
@@ -47,8 +84,10 @@ used as the directory credential.
 
 The [OIDC fixture corpus](../../packages/testkit/fixtures/entra/oidc) records additional
 documented behavior, including client credentials, device flow, UserInfo, and selected
-AADSTS cases. Those files remain `documented` until an automated engine executor passes
-them. The separate [SCIM corpus](../../packages/testkit/fixtures/entra/scim) contains
+AADSTS cases, plus eight implemented M6 token-edge fixtures executed through an
+authenticated [Worker fixture runner](../../apps/worker/test/token-fixtures.integration.test.ts).
+A fixture's own status controls its evidence level; a documented case is not promoted
+by adjacency to an implemented case. The separate [SCIM corpus](../../packages/testkit/fixtures/entra/scim) contains
 source-reviewed source-implemented cases but is not a live capture or a corpus-wide Worker
 conformance run. Client credentials, device flow, UserInfo, exact Microsoft UI,
 localization, risk policy, Conditional Access, and tenant administration remain outside

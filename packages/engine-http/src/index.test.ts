@@ -18,16 +18,18 @@ const discovery = (issuer: string) =>
   );
 
 describe("trusted issuer routing", () => {
-  it.each(["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"])(
-    "allows the loopback issuer %s for local Wrangler use",
-    async (issuer) => {
-      const response = await discovery(`${issuer}/e/local-env/${tenantId}/v2.0`);
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({
-        issuer: `${issuer}/e/local-env/${tenantId}/v2.0`,
-      });
-    }
-  );
+  it.each([
+    "http://localhost:8787",
+    "http://127.0.0.1:8787",
+    "http://127.42.19.7:8787",
+    "http://[::1]:8787",
+  ])("allows the loopback issuer %s for local Wrangler use", async (issuer) => {
+    const response = await discovery(`${issuer}/e/local-env/${tenantId}/v2.0`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      issuer: `${issuer}/e/local-env/${tenantId}/v2.0`,
+    });
+  });
 
   it("rejects non-loopback HTTP issuers", async () => {
     const response = await discovery(
@@ -36,6 +38,15 @@ describe("trusted issuer routing", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "invalid_request" });
   });
+
+  it.each(["ftp://localhost:8787", "ws://127.0.0.1:8787"])(
+    "rejects the non-HTTP issuer scheme %s even on loopback",
+    async (issuer) => {
+      const response = await discovery(`${issuer}/e/local-env/${tenantId}/v2.0`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: "invalid_request" });
+    }
+  );
 
   it.each([
     `https://user:password@mockos.example/e/local-env/${tenantId}/v2.0`,
@@ -100,10 +111,14 @@ describe("Entra authorization response modes", () => {
 
 describe("Entra token grants", () => {
   const issuer = `https://login.mockos.test/e/test/${tenantId}/v2.0`;
+  const graphBaseUrl = "https://login.mockos.test/e/test/graph/v1.0";
   const tokenPath = `https://do.internal/${tenantId}/oauth2/v2.0/token`;
   const withIssuer = (body: URLSearchParams) => ({
     method: "POST",
-    headers: { "x-mockos-issuer-base": issuer },
+    headers: {
+      "x-mockos-graph-base": graphBaseUrl,
+      "x-mockos-issuer-base": issuer,
+    },
     body,
   });
 
@@ -132,6 +147,7 @@ describe("Entra token grants", () => {
     expect(authorizationCode.status).toBe(200);
     expect(token).toHaveBeenNthCalledWith(1, {
       grantType: "authorization_code",
+      graphBaseUrl,
       issuerBase: issuer,
       clientId: "mock-client",
       clientSecret: "mock-client-secret",
@@ -162,6 +178,7 @@ describe("Entra token grants", () => {
     });
     expect(token).toHaveBeenNthCalledWith(2, {
       grantType: "refresh_token",
+      graphBaseUrl,
       issuerBase: issuer,
       clientId: "mock-client",
       clientSecret: "mock-client-secret",
@@ -187,6 +204,33 @@ describe("Entra token grants", () => {
       error: "invalid_request",
       error_description: expect.stringContaining("'refresh_token'"),
     });
+    expect(token).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "ftp://localhost:8787/graph/v1.0",
+    "ws://127.9.8.7:8787/graph/v1.0",
+    "http://graph.mockos.example/graph/v1.0",
+  ])("rejects the untrusted Graph base %s", async (graphBase) => {
+    const token = vi.fn(engine.token);
+    const response = await createEntraHttpApp({ engine: { ...engine, token } }).request(
+      tokenPath,
+      {
+        method: "POST",
+        headers: {
+          "x-mockos-graph-base": graphBase,
+          "x-mockos-issuer-base": issuer,
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "mock-client",
+          refresh_token: "current-refresh-token",
+        }),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "invalid_request" });
     expect(token).not.toHaveBeenCalled();
   });
 

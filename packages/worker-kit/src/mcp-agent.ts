@@ -14,6 +14,9 @@ import { McpAgent } from "agents/mcp";
 import type { EnvironmentCatalogDurableObject } from "./environment-catalog";
 import type { EnvironmentDurableObject } from "./environment-do";
 import { queueAndCreateProvisioningWorkflowInstance } from "./provisioning-start";
+import { publicLocationForEnvironment } from "./public-location";
+
+export { publicLocationForEnvironment } from "./public-location";
 
 export const SELF_HOSTED_ACCOUNT_ID = "self-hosted";
 
@@ -31,57 +34,6 @@ export type MockosMcpBindings = {
   PROVISIONING_WORKFLOW: Workflow<ProvisioningWorkflowParams>;
   PUBLIC_ORIGIN: string;
   TID_INDEX?: KVNamespace;
-};
-
-const normalizePathPrefix = (value: string | undefined) => {
-  const prefix = value?.trim() || "/e";
-  const withSlash = prefix.startsWith("/") ? prefix : `/${prefix}`;
-  return withSlash.replace(/\/+$/, "");
-};
-
-const normalizedOrigin = (value: string) => {
-  const url = new URL(value);
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error(
-      "PUBLIC_ORIGIN must be an origin without credentials or query data."
-    );
-  }
-  return url.origin;
-};
-
-const publicLocation = (
-  environment: EnvironmentConfig,
-  bindings: MockosMcpBindings
-) => {
-  const origin = normalizedOrigin(bindings.PUBLIC_ORIGIN);
-  if (bindings.HOSTING_MODE === "path") {
-    const publicBase = `${origin}${normalizePathPrefix(bindings.PATH_PREFIX)}/${environment.id}`;
-    return {
-      publicBase,
-      issuerBase:
-        environment.provider === "entra"
-          ? `${publicBase}/${environment.tenantId}/v2.0`
-          : `${publicBase}/oauth2/default`,
-    };
-  }
-  if (bindings.HOSTING_MODE !== "subdomain") {
-    throw new Error("HOSTING_MODE must be path or subdomain.");
-  }
-  const baseDomain = bindings.BASE_DOMAIN?.trim().toLowerCase().replace(/\.$/, "");
-  if (!baseDomain) throw new Error("BASE_DOMAIN is required in subdomain mode.");
-  const protocol = new URL(origin).protocol;
-  if (environment.provider === "entra") {
-    const entraHost =
-      bindings.ENTRA_HOST?.trim().toLowerCase().replace(/\.$/, "") ??
-      `login.${baseDomain}`;
-    const publicBase = `${protocol}//${entraHost}`;
-    return {
-      publicBase,
-      issuerBase: `${publicBase}/${environment.tenantId}/v2.0`,
-    };
-  }
-  const publicBase = `${protocol}//${environment.id}.${baseDomain}`;
-  return { publicBase, issuerBase: `${publicBase}/oauth2/default` };
 };
 
 const newEnvironmentConfig = (
@@ -271,8 +223,11 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
       },
       mintToken: async (environmentId, input) => {
         const config = await this.#requireEnvironment(environmentId);
-        const { issuerBase } = publicLocation(config, this.env);
-        return this.#environment(environmentId).mintToken(input, issuerBase);
+        const location = publicLocationForEnvironment(config, this.env);
+        return this.#environment(environmentId).mintToken(input, {
+          issuerBase: location.issuerBase,
+          ...(location.graphBaseUrl ? { graphBaseUrl: location.graphBaseUrl } : {}),
+        });
       },
       setScenario: async (environmentId, scenario) => {
         await this.#requireEnvironment(environmentId);
@@ -299,11 +254,12 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
       },
       getWellKnownUrls: async (environmentId) => {
         const config = await this.#requireEnvironment(environmentId);
-        const location = publicLocation(config, this.env);
-        return this.#environment(environmentId).getWellKnownUrls(
-          location.publicBase,
-          location.issuerBase
-        );
+        const location = publicLocationForEnvironment(config, this.env);
+        return this.#environment(environmentId).getWellKnownUrls({
+          directoryBaseUrl: location.directoryBaseUrl,
+          issuerBase: location.issuerBase,
+          ...(location.graphBaseUrl ? { graphBaseUrl: location.graphBaseUrl } : {}),
+        });
       },
       getCurrentEnvironmentId: async () => {
         const currentEnvironmentId = this.state.currentEnvironmentId;

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 
 const MAX_GRAPH_QUERY_BYTES = 2_048;
 const MAX_GRAPH_IDENTIFIER_BYTES = 512;
+const MAX_GRAPH_BODY_BYTES = 4_096;
+const MAX_MEMBER_OBJECT_IDS = 1_000;
 const textEncoder = new TextEncoder();
 
 export type GraphDirectoryUser = {
@@ -27,6 +29,7 @@ export type GraphDirectoryEngine = {
   getGroup(id: string): GraphDirectoryGroup | undefined;
   listGroupMembers(groupId: string): readonly GraphDirectoryUser[];
   listUserGroups(userId: string): readonly GraphDirectoryGroup[];
+  listUserGroupIds(userId: string, limit: number): readonly string[];
 };
 
 export type CreateGraphHttpAppOptions = {
@@ -65,6 +68,94 @@ const routeIdentifier = (value: string): string => {
     throw new GraphProtocolError("BadRequest", "The directory identifier is invalid.");
   }
   return value;
+};
+
+const graphBodyTooLarge = () =>
+  new GraphProtocolError(
+    "Request_TooLarge",
+    "The request body exceeds the supported length.",
+    413
+  );
+
+const readGraphBody = async (request: Request): Promise<Uint8Array> => {
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > MAX_GRAPH_BODY_BYTES) {
+        // Do not await cancellation: a request body may be a tee branch, whose
+        // cancellation promise can wait for the request-log branch to finish.
+        void reader.cancel("mockOS Graph request body limit reached").catch(() => {});
+        throw graphBodyTooLarge();
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+};
+
+const memberObjectsRequest = async (
+  request: Request
+): Promise<{ readonly securityEnabledOnly: boolean }> => {
+  const contentType = request.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (
+    contentType !== "application/json" &&
+    !(contentType?.startsWith("application/") && contentType.endsWith("+json"))
+  ) {
+    throw new GraphProtocolError(
+      "Request_BadRequest",
+      "getMemberObjects requires an application/json request body."
+    );
+  }
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    (!/^[0-9]+$/.test(declaredLength) || Number(declaredLength) > MAX_GRAPH_BODY_BYTES)
+  ) {
+    if (request.body) {
+      void request.body
+        .cancel("mockOS Graph declared body limit exceeded")
+        .catch(() => {});
+    }
+    throw graphBodyTooLarge();
+  }
+  const body = await readGraphBody(request);
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    throw new GraphProtocolError("Request_BadRequest", "The request body is invalid.");
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => key !== "securityEnabledOnly") ||
+    typeof Reflect.get(value, "securityEnabledOnly") !== "boolean"
+  ) {
+    throw new GraphProtocolError(
+      "Request_BadRequest",
+      "securityEnabledOnly must be the sole boolean request property."
+    );
+  }
+  return { securityEnabledOnly: Reflect.get(value, "securityEnabledOnly") as boolean };
 };
 
 const publicUrl = (request: Request): URL => {
@@ -387,6 +478,30 @@ export const createGraphHttpApp = ({
     });
   });
 
+  app.post("/graph/v1.0/users/:id/getMemberObjects", async (context) => {
+    assertSupportedQuery(context.req.raw, new Set());
+    const id = routeIdentifier(context.req.param("id"));
+    if (!engine.getUser(id)) {
+      throw new GraphProtocolError(
+        "Request_ResourceNotFound",
+        `Resource '${id}' was not found.`,
+        404
+      );
+    }
+    await memberObjectsRequest(context.req.raw);
+    const groupIds = engine.listUserGroupIds(id, MAX_MEMBER_OBJECT_IDS + 1);
+    if (groupIds.length > MAX_MEMBER_OBJECT_IDS) {
+      throw new GraphProtocolError(
+        "Directory_ResultSizeLimitExceeded",
+        `The directory result exceeds the supported limit of ${MAX_MEMBER_OBJECT_IDS} objects.`
+      );
+    }
+    return context.json({
+      "@odata.context": "$metadata#Collection(Edm.String)",
+      value: groupIds,
+    });
+  });
+
   app.get("/graph/v1.0/groups", (context) => {
     assertSupportedQuery(
       context.req.raw,
@@ -470,6 +585,7 @@ export const createGraphHttpApp = ({
   disallow("/graph/v1.0/users", "GET");
   disallow("/graph/v1.0/users/:id", "GET");
   disallow("/graph/v1.0/users/:id/memberOf", "GET");
+  disallow("/graph/v1.0/users/:id/getMemberObjects", "POST");
   disallow("/graph/v1.0/groups", "GET");
   disallow("/graph/v1.0/groups/:id", "GET");
   disallow("/graph/v1.0/groups/:id/members", "GET");

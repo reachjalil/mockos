@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 const apiKey = "mockos-integration-test-key";
@@ -143,6 +143,11 @@ describe("Entra authorization-code flow", () => {
       token_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
       jwks_uri: `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`,
     });
+    const jwksUrl = `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`;
+    const beforeRotation = await (await worker.fetch(jwksUrl)).json<{
+      keys: Array<JsonWebKey & { kid?: string }>;
+    }>();
+    expect(beforeRotation.keys).toHaveLength(2);
 
     const verifier = "mockos-pkce-verifier-with-at-least-forty-three-characters-123";
     const challenge = base64Url(
@@ -204,6 +209,21 @@ describe("Entra authorization-code flow", () => {
     const code = callback.searchParams.get("code");
     expect(code).toBeTruthy();
 
+    const namespace = Reflect.get(env, "ENVIRONMENTS") as {
+      get(id: DurableObjectId): {
+        setScenario(input: Record<string, unknown>): Promise<unknown>;
+      };
+      idFromName(name: string): DurableObjectId;
+    };
+    await namespace.get(namespace.idFromName(environmentId)).setScenario({
+      id: "rotate-mid-authorization-session",
+      injectionPoint: "token.before_sign",
+      action: { type: "rotate_signing_key" },
+      probability: 1,
+      remaining: 1,
+      enabled: true,
+    });
+
     const tokenResponse = await worker.fetch(
       `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
       {
@@ -230,16 +250,18 @@ describe("Entra authorization-code flow", () => {
     expect(token.access_token).toBeTruthy();
     expect(token.expires_in).toBeGreaterThan(0);
 
-    const jwksResponse = await worker.fetch(
-      `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`
-    );
+    const jwksResponse = await worker.fetch(jwksUrl);
     expect(jwksResponse.status).toBe(200);
-    const claims = await verifyJwt(
-      token.id_token,
-      await jwksResponse.json<{
-        keys: Array<JsonWebKey & { kid?: string }>;
-      }>()
-    );
+    const afterRotation = await jwksResponse.json<{
+      keys: Array<JsonWebKey & { kid?: string }>;
+    }>();
+    const tokenKid = decodePart<{ kid: string }>(
+      token.id_token.split(".")[0] ?? ""
+    ).kid;
+    expect(afterRotation.keys).toHaveLength(3);
+    expect(beforeRotation.keys.map(({ kid }) => kid)).toContain(tokenKid);
+    expect(afterRotation.keys.map(({ kid }) => kid)).toContain(tokenKid);
+    const claims = await verifyJwt(token.id_token, afterRotation);
     expect(claims).toMatchObject({
       iss: issuer,
       aud: clientId,

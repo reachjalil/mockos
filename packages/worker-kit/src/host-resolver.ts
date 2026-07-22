@@ -16,6 +16,7 @@ export type EnvironmentLocator =
 export type ResolvedEnvironmentRequest = {
   environmentId?: string;
   forwardedPath: string;
+  graphBaseUrl?: string;
   issuerBase: string;
   locator: EnvironmentLocator;
   provider: "entra" | "graph" | "okta" | "scim";
@@ -81,6 +82,9 @@ const pathModeResolution = (
   return {
     environmentId,
     forwardedPath,
+    ...(classification.provider === "entra"
+      ? { graphBaseUrl: `${publicBase}/graph/v1.0` }
+      : {}),
     issuerBase,
     locator: { type: "environment", environmentId },
     provider: classification.provider,
@@ -147,6 +151,25 @@ export const resolveEnvironmentRequest = (
     : subdomainModeResolution(url, config);
 };
 
+export const graphBaseUrlForEnvironment = (
+  resolution: ResolvedEnvironmentRequest,
+  environmentId: string,
+  config: HostResolverConfig
+): string | undefined => {
+  if (resolution.provider !== "entra") return undefined;
+  if (!environmentIdSchema.safeParse(environmentId).success) {
+    throw new Error("A valid environment ID is required for the Graph base URL.");
+  }
+  if (config.hostingMode === "path") {
+    return resolution.graphBaseUrl ?? `${resolution.publicBase}/graph/v1.0`;
+  }
+  const baseDomain = config.baseDomain && normalizeHost(config.baseDomain);
+  if (!baseDomain) {
+    throw new Error("baseDomain is required in subdomain hosting mode.");
+  }
+  return `${new URL(resolution.issuerBase).protocol}//${environmentId}.${baseDomain}/graph/v1.0`;
+};
+
 export const forwardEnvironmentRequest = (
   request: Request,
   resolution: ResolvedEnvironmentRequest,
@@ -160,6 +183,9 @@ export const forwardEnvironmentRequest = (
   }
   headers.set("x-mockos-issuer-base", resolution.issuerBase);
   headers.set("x-mockos-public-path", new URL(request.url).pathname);
+  if (resolution.graphBaseUrl) {
+    headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
+  }
   if (resolution.environmentId) {
     headers.set("x-mockos-env", resolution.environmentId);
   }

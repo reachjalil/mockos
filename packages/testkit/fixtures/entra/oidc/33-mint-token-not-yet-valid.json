@@ -1,0 +1,42 @@
+{
+  "name": "Deterministic not-yet-valid token",
+  "description": "The token fixture sets nbf one hour ahead of the fixture clock and exp two hours ahead.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/mcp",
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "authorization": "Bearer {{apiKey}}",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+      "mcp-session-id": "{{sessionId}}"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 33,
+      "method": "tools/call",
+      "params": {
+        "name": "mint_token",
+        "arguments": {
+          "environmentId": "fixture-tokens-01",
+          "clientId": "fixture-token-client",
+          "subject": "fixture-user@example.test",
+          "broken": "not_yet_valid"
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "result": { "structuredContent": { "data": { "broken": "not_yet_valid" } } }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "The M6 Worker fixture executor supplies the authenticated MCP session and configured client/subject; the focused core test locks exact offsets and tolerance behavior."
+}
