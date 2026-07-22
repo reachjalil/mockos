@@ -65,6 +65,17 @@ uses a login host with tenant paths; Okta environments use provider-shaped bare
 organization subdomains. Tenant/environment lookup can use a KV index, but the
 environment remains the source of identity data in its Durable Object.
 
+For Entra, the request-derived OIDC issuer is
+`https://login.<base-domain>/<tenant-guid>/v2.0`, while directory URLs remain scoped to
+the resolved environment:
+
+- `https://<environment>.<base-domain>/scim/v2`
+- `https://<environment>.<base-domain>/graph/v1.0`
+
+Unit tests cover this split for MCP direct minting, well-known URL results, routed
+group-overage claim sources, and spoofed internal routing-header replacement. Live TLS
+and wildcard-route qualification remain pending.
+
 The critical invariant is that stored state contains no absolute issuer URL. Cutover
 must be only host resolution, routes, variables, certificates, and index backfill—not a
 data rewrite.

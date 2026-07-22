@@ -1,6 +1,7 @@
 import type { EnvironmentDurableObject } from "./environment-do";
 import {
   forwardEnvironmentRequest,
+  graphBaseUrlForEnvironment,
   type HostResolverConfig,
   resolveEnvironmentRequest,
 } from "./host-resolver";
@@ -55,7 +56,11 @@ export const routeEnvironmentRequest = async (
   return stub.fetch(
     forwardEnvironmentRequest(
       request,
-      { ...resolution, environmentId },
+      {
+        ...resolution,
+        environmentId,
+        graphBaseUrl: graphBaseUrlForEnvironment(resolution, environmentId, config),
+      },
       { redactAuthorization: controlAuthorization }
     )
   );

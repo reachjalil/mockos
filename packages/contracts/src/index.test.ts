@@ -184,6 +184,48 @@ describe("wire contracts", () => {
     ).toThrow();
   });
 
+  it("locks token scenario actions to the internal before-sign boundary", () => {
+    expect(
+      scenarioSpecSchema.parse({
+        id: "rotate-once",
+        injectionPoint: "token.before_sign",
+        action: { type: "rotate_signing_key" },
+        remaining: 1,
+      })
+    ).toMatchObject({
+      action: { type: "rotate_signing_key" },
+      injectionPoint: "token.before_sign",
+    });
+    expect(
+      scenarioSpecSchema.parse({
+        id: "skew-forward",
+        injectionPoint: "token.before_sign",
+        action: { type: "token_clock_skew", seconds: 300 },
+      })
+    ).toMatchObject({ action: { type: "token_clock_skew", seconds: 300 } });
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "wrong-boundary",
+        injectionPoint: "oauth.token",
+        action: { type: "rotate_signing_key" },
+      })
+    ).toThrow(/only valid at token\.before_sign/);
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "wrong-action",
+        injectionPoint: "token.before_sign",
+        action: { type: "delay", milliseconds: 1 },
+      })
+    ).toThrow(/requires rotate_signing_key or token_clock_skew/);
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "unbounded-skew",
+        injectionPoint: "token.before_sign",
+        action: { type: "token_clock_skew", seconds: 86_401 },
+      })
+    ).toThrow();
+  });
+
   it("locks the broken-token variants and management tool names", () => {
     expect(brokenTokenVariantSchema.options).toEqual([
       "expired",

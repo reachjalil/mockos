@@ -9,17 +9,17 @@ import type {
 } from "./types";
 
 export { OAuthProtocolError, renderEntraError } from "./errors";
-export { createGraphHttpApp } from "./graph";
 export type * from "./graph";
+export { createGraphHttpApp } from "./graph";
 export { renderEntraLoginPage, renderOktaLoginPage } from "./login";
-export { createOktaDirectoryApi, OktaApiError } from "./okta-api";
-export type * from "./okta-api";
-export { createOktaAuthnApi } from "./okta-authn";
-export type * from "./okta-authn";
 export { createOktaHttpApp, renderOktaDeviceActivationPage } from "./okta";
+export type * from "./okta-api";
+export { createOktaDirectoryApi, OktaApiError } from "./okta-api";
+export type * from "./okta-authn";
+export { createOktaAuthnApi } from "./okta-authn";
 export type * from "./okta-types";
-export { createScimHttpApp, ScimHttpError } from "./scim";
 export type * from "./scim";
+export { createScimHttpApp, ScimHttpError } from "./scim";
 export type * from "./types";
 
 const noStoreHeaders = {
@@ -39,6 +39,15 @@ const required = (value: string | undefined, name: string) => {
 
 const optional = (value: string | null | undefined) => value ?? undefined;
 
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === "localhost" ||
+  hostname === "[::1]" ||
+  /^127(?:\.\d{1,3}){3}$/.test(hostname);
+
+const hasTrustedPublicProtocol = (url: URL): boolean =>
+  url.protocol === "https:" ||
+  (url.protocol === "http:" && isLoopbackHostname(url.hostname));
+
 const authorizationFromParams = (
   params: URLSearchParams
 ): EntraAuthorizationRequest => ({
@@ -54,30 +63,44 @@ const authorizationFromParams = (
   loginHint: optional(params.get("login_hint")),
 });
 
-const issuerFromRequest = (request: Request, header: string) => {
+const trustedBaseFromRequest = (
+  request: Request,
+  header: string,
+  label: string,
+  requiredPathSuffix?: string
+) => {
   const value = request.headers.get(header)?.trim();
   if (!value) {
     throw new OAuthProtocolError(
       "INVALID_REQUEST",
-      `Missing trusted ${header} routing header.`
+      `Missing trusted ${label} routing header.`
     );
   }
   try {
     const issuer = new URL(value);
-    const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-    if (issuer.protocol !== "https:" && !loopback.has(issuer.hostname)) {
-      throw new Error("Issuer must use HTTPS.");
+    if (!hasTrustedPublicProtocol(issuer)) {
+      throw new Error(`${label} must use HTTPS.`);
     }
     if (issuer.username || issuer.password || issuer.search || issuer.hash) {
-      throw new Error("Issuer must not contain credentials, query, or fragment.");
+      throw new Error(`${label} must not contain credentials, query, or fragment.`);
     }
-    return issuer.toString().replace(/\/$/, "");
+    const normalized = issuer.toString().replace(/\/$/, "");
+    if (
+      requiredPathSuffix &&
+      !new URL(normalized).pathname.endsWith(requiredPathSuffix)
+    ) {
+      throw new Error(`${label} must end in ${requiredPathSuffix}.`);
+    }
+    return normalized;
   } catch (cause) {
-    throw new OAuthProtocolError("INVALID_REQUEST", "Invalid issuer base URL.", {
+    throw new OAuthProtocolError("INVALID_REQUEST", `Invalid trusted ${label} URL.`, {
       cause,
     });
   }
 };
+
+const issuerFromRequest = (request: Request, header: string) =>
+  trustedBaseFromRequest(request, header, "issuer base");
 
 const publicActionFromRequest = (request: Request, header: string) => {
   const routedPath = request.headers.get(header);
@@ -124,7 +147,8 @@ const entraJsonError = (error: unknown) => {
 const tokenRequest = (
   form: FormData,
   request: Request,
-  issuerBase: string
+  issuerBase: string,
+  graphBaseUrl: string
 ): EntraTokenRequest => {
   const get = (key: string) => {
     const value = form.get(key);
@@ -151,6 +175,7 @@ const tokenRequest = (
   const scope = get("scope");
   const common = {
     issuerBase,
+    graphBaseUrl,
     clientId,
     ...(clientSecret !== undefined ? { clientSecret } : {}),
     ...(scope !== undefined ? { scope } : {}),
@@ -230,6 +255,7 @@ const authorizationResponse = (
 
 export const createEntraHttpApp = ({
   engine,
+  graphBaseHeader = "x-mockos-graph-base",
   issuerHeader = "x-mockos-issuer-base",
   publicPathHeader = "x-mockos-public-path",
 }: CreateEntraHttpAppOptions) => {
@@ -306,8 +332,14 @@ export const createEntraHttpApp = ({
     const form = await context.req.formData();
     try {
       const issuerBase = issuerFromRequest(context.req.raw, issuerHeader);
+      const graphBaseUrl = trustedBaseFromRequest(
+        context.req.raw,
+        graphBaseHeader,
+        "Graph base",
+        "/graph/v1.0"
+      );
       const result = await engine.token(
-        tokenRequest(form, context.req.raw, issuerBase)
+        tokenRequest(form, context.req.raw, issuerBase, graphBaseUrl)
       );
       return context.json(
         {

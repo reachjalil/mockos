@@ -185,6 +185,63 @@ const entraDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => (
   tenant_region_scope: "EU",
 });
 
+export const ENTRA_INLINE_GROUP_CLAIM_LIMIT = 200;
+
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === "localhost" ||
+  hostname === "[::1]" ||
+  /^127(?:\.\d{1,3}){3}$/.test(hostname);
+
+const hasTrustedPublicProtocol = (url: URL): boolean =>
+  url.protocol === "https:" ||
+  (url.protocol === "http:" && isLoopbackHostname(url.hostname));
+
+const graphMemberObjectsEndpoint = (context: {
+  readonly graphBaseUrl: string;
+  readonly userId: string;
+}): string => {
+  const graphBase = new URL(context.graphBaseUrl);
+  if (
+    !hasTrustedPublicProtocol(graphBase) ||
+    graphBase.username ||
+    graphBase.password ||
+    graphBase.search ||
+    graphBase.hash
+  ) {
+    throw new Error("Entra group-overage Graph base must be a trusted URL.");
+  }
+  const pathname = graphBase.pathname.replace(/\/+$/, "");
+  if (!pathname.endsWith("/graph/v1.0")) {
+    throw new Error("Entra group-overage Graph base must end in /graph/v1.0.");
+  }
+  graphBase.pathname = `${pathname}/users/${encodeURIComponent(
+    context.userId
+  )}/getMemberObjects`;
+  return graphBase.toString();
+};
+
+const entraGroupClaims = (
+  context: Parameters<ProviderProfile["claims"]>[0]
+): Readonly<Record<string, unknown>> => {
+  const groups = context.groups ?? [];
+  if (groups.length === 0) return {};
+  if (groups.length <= ENTRA_INLINE_GROUP_CLAIM_LIMIT) return { groups: [...groups] };
+  if (!context.graphBaseUrl) {
+    throw new Error("Entra group overage requires a trusted Graph base URL.");
+  }
+  return {
+    _claim_names: { groups: "src1" },
+    _claim_sources: {
+      src1: {
+        endpoint: graphMemberObjectsEndpoint({
+          graphBaseUrl: context.graphBaseUrl,
+          userId: context.user.id,
+        }),
+      },
+    },
+  };
+};
+
 export const entraProfile: ProviderProfile = {
   id: "entra",
   displayName: "Microsoft Entra ID",
@@ -206,7 +263,7 @@ export const entraProfile: ProviderProfile = {
     ...(context.user.givenName ? { given_name: context.user.givenName } : {}),
     ...(context.user.familyName ? { family_name: context.user.familyName } : {}),
     ...(context.nonce ? { nonce: context.nonce } : {}),
-    ...(context.groups?.length ? { groups: [...context.groups] } : {}),
+    ...entraGroupClaims(context),
     ...(context.roles?.length ? { roles: [...context.roles] } : {}),
   }),
   errors: entraErrorCatalog,

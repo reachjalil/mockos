@@ -59,6 +59,8 @@ type GroupRow = SqlRow & {
 };
 
 type UserMembershipRow = UserRow;
+type GroupIdRow = SqlRow & { id: string };
+const MAX_GROUP_MEMBERSHIP_ID_QUERY_LIMIT = 1_001;
 
 const selectGroups = `SELECT id, external_id, display_name, normalized_display_name,
   provider_json, scim_json, resource_version, created_at, updated_at,
@@ -225,6 +227,35 @@ export class GroupRepository {
         userId
       )
       .map(toGroup);
+  }
+
+  /**
+   * Returns only membership IDs and always applies the caller's explicit SQL
+   * limit. Threshold probes such as Entra group overage and Graph
+   * getMemberObjects must not materialize unbounded Group records first.
+   */
+  listIdsForUser(userId: string, limit: number): string[] {
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit <= 0 ||
+      limit > MAX_GROUP_MEMBERSHIP_ID_QUERY_LIMIT
+    ) {
+      throw new Error(
+        `Group membership ID limit must be an integer from 1 through ${MAX_GROUP_MEMBERSHIP_ID_QUERY_LIMIT}.`
+      );
+    }
+    return this.#store
+      .all<GroupIdRow>(
+        `SELECT g.id
+         FROM groups g
+         INNER JOIN group_members gm ON gm.group_id = g.id
+         WHERE gm.user_id = ? AND g.soft_deleted_at IS NULL
+         ORDER BY g.display_name, g.id
+         LIMIT ?`,
+        userId,
+        limit
+      )
+      .map(({ id }) => id);
   }
 
   listMembers(groupId: string): UserRecord[] {

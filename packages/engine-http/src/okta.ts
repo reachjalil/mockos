@@ -36,6 +36,15 @@ const escapeHtml = (value: string) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === "localhost" ||
+  hostname === "[::1]" ||
+  /^127(?:\.\d{1,3}){3}$/.test(hostname);
+
+const hasTrustedPublicProtocol = (url: URL): boolean =>
+  url.protocol === "https:" ||
+  (url.protocol === "http:" && isLoopbackHostname(url.hostname));
+
 const issuerFromRequest = (request: Request, header: string) => {
   const value = request.headers.get(header)?.trim();
   if (!value) {
@@ -46,8 +55,7 @@ const issuerFromRequest = (request: Request, header: string) => {
   }
   try {
     const issuer = new URL(value);
-    const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-    if (issuer.protocol !== "https:" && !loopback.has(issuer.hostname)) {
+    if (!hasTrustedPublicProtocol(issuer)) {
       throw new Error("Issuer must use HTTPS.");
     }
     if (issuer.username || issuer.password || issuer.search || issuer.hash) {

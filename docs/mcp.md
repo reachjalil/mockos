@@ -78,6 +78,13 @@ environments also return `graphBaseUrl`; Okta environments return `oktaApiBaseUr
 the M6 source candidate's exact `oktaAuthnEndpoint`. Never construct or persist an
 absolute issuer from an old host.
 
+In Entra subdomain mode, OIDC/OAuth URLs use
+`https://login.<base>/<tenant>/v2.0`, while SCIM and Graph remain environment-scoped at
+`https://<environment>.<base>/scim/v2` and
+`https://<environment>.<base>/graph/v1.0`. `mint_token` and
+`get_wellknown_urls` derive those locations from operator-owned bindings and pass them
+through typed Durable Object calls; they do not accept a caller-provided source URL.
+
 These are deliberately separate trust boundaries:
 
 - `/mcp` requires the configured management Access Key.
@@ -159,9 +166,19 @@ Routed Worker requests and the reserved internal SCIM seams use these injection 
 | `okta.api` | Okta Users/Groups and lifecycle API requests |
 | `http.request` | Any other routed environment request |
 | `*` | Catch-all considered after an exact match |
+| `token.before_sign` | Internal token-signing boundary; exact-only, not matched by `*` |
 
 Actions are a bounded delay of at most 30 seconds, a provider-rendered semantic error,
-or a shallow JSON-object mutation. Mutation is restricted to
+or a shallow JSON-object mutation. `rotate_signing_key` and
+`token_clock_skew` are restricted to `token.before_sign`; skew is bounded to plus or
+minus 86,400 seconds and changes only JWT temporal claims, not the environment clock or
+stored grant timestamps. Rotation promotes a pre-published successor and stores the
+previous public key as a schema-v5-compatible, metadata-only overlap row after scrubbing
+its private JWK. A subsequent rotation is gated for exactly 26 hours, the maximum
+rollback/verification-overlap window qualified for the built-in Worker OIDC and MCP
+`mint_token` paths with their fixed one-hour lifetime and bounded skew. Public core
+`expiresInSeconds` and `additionalClaims` inputs are trusted test seams; longer custom
+lifetimes or temporal overrides are outside that guarantee. Mutation is restricted to
 `oidc.discovery`, `oidc.jwks`, `oauth.token`, `oauth.device`, and
 `oauth.introspect`; selecting mutation for another point fails instead of attempting to
 rewrite HTML, redirects, or empty bodies. Scenario specifications and mutation patches

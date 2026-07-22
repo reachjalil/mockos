@@ -7,7 +7,7 @@ import type {
   UserRepository,
 } from "../directory";
 import type { SigningKeyService } from "../keys";
-import type { ProviderProfile } from "../providers";
+import { ENTRA_INLINE_GROUP_CLAIM_LIMIT, type ProviderProfile } from "../providers";
 import { hashSecret, oidcTokenHash, randomId } from "../security";
 import type { SqlRow, SqlStore } from "../store";
 import {
@@ -28,6 +28,8 @@ export interface RedeemAuthorizationCodeForTokensInput
   extends RedeemAuthorizationCodeInput {
   /** Request-derived final OIDC issuer. It is used for this response only. */
   readonly issuerBase: string;
+  /** Trusted request-derived Graph base used only for Entra group overage. */
+  readonly graphBaseUrl?: string;
 }
 
 export interface RedeemRefreshTokenForTokensInput {
@@ -35,6 +37,7 @@ export interface RedeemRefreshTokenForTokensInput {
   readonly clientId: string;
   readonly clientSecret?: string;
   readonly issuerBase: string;
+  readonly graphBaseUrl?: string;
   readonly scope?: string;
 }
 
@@ -51,6 +54,11 @@ export interface OAuthTokenResponse {
   readonly expiresIn: number;
   readonly scope: string;
   readonly tokenType: "Bearer";
+}
+
+export interface TokenBeforeSignEffect {
+  /** Applied to temporal JWT claims only; persistence continues to use the clock. */
+  readonly clockSkewSeconds?: number;
 }
 
 export interface IntrospectTokenInput {
@@ -167,6 +175,7 @@ export class OAuthService {
   readonly #keys: SigningKeyService;
   readonly #authorizationCodes: AuthorizationCodeService;
   readonly #deviceAuthorizations: DeviceAuthorizationService;
+  readonly #beforeTokenSign: () => Promise<TokenBeforeSignEffect>;
 
   constructor(options: {
     readonly store: SqlStore;
@@ -178,6 +187,7 @@ export class OAuthService {
     readonly users: UserRepository;
     readonly groups: GroupRepository;
     readonly keys: SigningKeyService;
+    readonly beforeTokenSign?: () => Promise<TokenBeforeSignEffect>;
   }) {
     this.#store = options.store;
     this.#clock = options.clock;
@@ -188,6 +198,7 @@ export class OAuthService {
     this.#users = options.users;
     this.#groups = options.groups;
     this.#keys = options.keys;
+    this.#beforeTokenSign = options.beforeTokenSign ?? (async () => ({}));
     this.#authorizationCodes = new AuthorizationCodeService({
       store: options.store,
       clock: options.clock,
@@ -222,6 +233,7 @@ export class OAuthService {
       userId: grant.userId,
       scope: grant.scope,
       issuerBase: input.issuerBase,
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       ...(grant.nonce ? { nonce: grant.nonce } : {}),
     });
   }
@@ -269,6 +281,7 @@ export class OAuthService {
       application,
       scope,
       issuerBase: input.issuerBase,
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       authTime,
       refresh: {
         familyId: row.family_id,
@@ -398,6 +411,7 @@ export class OAuthService {
     readonly userId: string;
     readonly scope: string;
     readonly issuerBase: string;
+    readonly graphBaseUrl?: string;
     readonly nonce?: string;
   }): Promise<OAuthTokenResponse> {
     const user = this.#users.requireById(input.userId);
@@ -409,6 +423,7 @@ export class OAuthService {
       application,
       scope: input.scope,
       issuerBase: input.issuerBase,
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       ...(input.nonce ? { nonce: input.nonce } : {}),
     });
     this.#store.transaction(() => {
@@ -427,6 +442,7 @@ export class OAuthService {
     readonly application: ApplicationRecord;
     readonly scope: string;
     readonly issuerBase: string;
+    readonly graphBaseUrl?: string;
     readonly nonce?: string;
     readonly authTime?: number;
     readonly refresh?: {
@@ -441,11 +457,20 @@ export class OAuthService {
     const scopes = scope.split(/\s+/).filter(Boolean);
     const issuer = this.#issuer(input.issuerBase);
     const issuedAt = Math.floor(this.#clock.now().getTime() / 1_000);
+    const effect = await this.#beforeTokenSign();
+    const claimIssuedAt = issuedAt + (effect.clockSkewSeconds ?? 0);
     const authTime = input.authTime ?? issuedAt;
     const accessExpiresAt =
       issuedAt + this.#profile.tokenPolicy.accessTokenLifetimeSeconds;
-    const memberships = this.#groups.listForUser(input.user.id);
-    const groups = memberships.map((group) => group.id);
+    const accessClaimExpiresAt =
+      claimIssuedAt + this.#profile.tokenPolicy.accessTokenLifetimeSeconds;
+    const entraGroupClaimsEnabled =
+      this.#profile.id === "entra" && input.application.groupClaimsMode !== "none";
+    const memberships =
+      this.#profile.id === "entra" ? [] : this.#groups.listForUser(input.user.id);
+    const groups = entraGroupClaimsEnabled
+      ? this.#groups.listIdsForUser(input.user.id, ENTRA_INLINE_GROUP_CLAIM_LIMIT + 1)
+      : memberships.map((group) => group.id);
     const groupNames = memberships.map((group) => group.displayName);
     const accessTokenId = tokenId(
       this.#profile.tokenPolicy.accessTokenIdPrefix ?? "AT_",
@@ -453,11 +478,12 @@ export class OAuthService {
     );
     const accessClaims = this.#profile.claims({
       issuer,
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       tenantId: this.#tenantId,
       clientId: input.application.clientId,
       user: input.user,
-      issuedAt,
-      expiresAt: accessExpiresAt,
+      issuedAt: claimIssuedAt,
+      expiresAt: accessClaimExpiresAt,
       tokenKind: "access",
       tokenId: accessTokenId,
       authTime,
@@ -476,13 +502,15 @@ export class OAuthService {
 
     let idToken: string | undefined;
     if (scopes.includes("openid")) {
-      const idExpiresAt = issuedAt + this.#profile.tokenPolicy.idTokenLifetimeSeconds;
+      const idExpiresAt =
+        claimIssuedAt + this.#profile.tokenPolicy.idTokenLifetimeSeconds;
       const idClaims = this.#profile.claims({
         issuer,
+        ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
         tenantId: this.#tenantId,
         clientId: input.application.clientId,
         user: input.user,
-        issuedAt,
+        issuedAt: claimIssuedAt,
         expiresAt: idExpiresAt,
         tokenKind: "id",
         tokenId: tokenId(this.#profile.tokenPolicy.idTokenIdPrefix ?? "ID_", this.#rng),

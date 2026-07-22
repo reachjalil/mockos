@@ -36,6 +36,13 @@ const engine: GraphDirectoryEngine = {
   listGroupMembers: (id) =>
     id === "grp_engineering" ? engine.listUsers().slice(0, 1) : [],
   listUserGroups: (id) => (id === "usr_ada" ? engine.listGroups() : []),
+  listUserGroupIds: (id, limit) =>
+    id === "usr_ada"
+      ? engine
+          .listGroups()
+          .slice(0, limit)
+          .map(({ id }) => id)
+      : [],
 };
 
 const app = createGraphHttpApp({
@@ -45,6 +52,39 @@ const app = createGraphHttpApp({
 });
 
 const authorization = { authorization: "Bearer mock-graph-credential" };
+
+const oversizedStreamRequest = (declaredLength?: string) => {
+  let pulls = 0;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(4_097));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const headers = new Headers({
+    ...authorization,
+    "content-type": "Application/JSON; Charset=UTF-8",
+  });
+  if (declaredLength !== undefined) headers.set("content-length", declaredLength);
+  const request = new Request(
+    "https://mockos.test/graph/v1.0/users/usr_ada/getMemberObjects",
+    {
+      method: "POST",
+      headers,
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" }
+  );
+  return {
+    request,
+    pulls: () => pulls,
+    cancelled: () => cancelled,
+  };
+};
 
 describe("Microsoft Graph read adapter", () => {
   it("requires a non-empty mock Bearer credential", async () => {
@@ -125,6 +165,86 @@ describe("Microsoft Graph read adapter", () => {
     expect(missing.headers.get("request-id")).toBe("request-1");
     expect(await missing.json()).toMatchObject({
       error: { code: "Request_ResourceNotFound" },
+    });
+  });
+
+  it("resolves group-overage IDs through bounded getMemberObjects", async () => {
+    const response = await app.request(
+      "https://mockos.test/graph/v1.0/users/usr_ada/getMemberObjects",
+      {
+        method: "POST",
+        headers: {
+          ...authorization,
+          "content-type": "Application/JSON; Charset=UTF-8",
+        },
+        body: JSON.stringify({ securityEnabledOnly: true }),
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      "@odata.context": "$metadata#Collection(Edm.String)",
+      value: ["grp_engineering"],
+    });
+
+    for (const body of [
+      "not-json",
+      JSON.stringify({ securityEnabledOnly: "yes" }),
+      JSON.stringify({ securityEnabledOnly: true, endpoint: "https://attacker.test" }),
+    ]) {
+      const invalid = await app.request(
+        "https://mockos.test/graph/v1.0/users/usr_ada/getMemberObjects",
+        {
+          method: "POST",
+          headers: { ...authorization, "content-type": "application/json" },
+          body,
+        }
+      );
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({
+        error: { code: "Request_BadRequest" },
+      });
+    }
+
+    const oversized = await app.request(
+      "https://mockos.test/graph/v1.0/users/usr_ada/getMemberObjects",
+      {
+        method: "POST",
+        headers: { ...authorization, "content-type": "application/json" },
+        body: JSON.stringify({ securityEnabledOnly: true, padding: "x".repeat(4_096) }),
+      }
+    );
+    expect(oversized.status).toBe(413);
+
+    for (const declaredLength of [undefined, "1"]) {
+      const streamed = oversizedStreamRequest(declaredLength);
+      const streamedResponse = await app.request(streamed.request);
+      expect(streamedResponse.status).toBe(413);
+      expect(streamed.cancelled()).toBe(true);
+      expect(streamed.pulls()).toBeLessThanOrEqual(2);
+    }
+
+    let requestedLimit = 0;
+    const oversizedMembershipApp = createGraphHttpApp({
+      engine: {
+        ...engine,
+        listUserGroupIds: (_userId, limit) => {
+          requestedLimit = limit;
+          return Array.from({ length: limit }, (_, index) => `grp_${index}`);
+        },
+      },
+    });
+    const tooMany = await oversizedMembershipApp.request(
+      "https://mockos.test/graph/v1.0/users/usr_ada/getMemberObjects",
+      {
+        method: "POST",
+        headers: { ...authorization, "content-type": "application/json" },
+        body: JSON.stringify({ securityEnabledOnly: true }),
+      }
+    );
+    expect(requestedLimit).toBe(1_001);
+    expect(tooMany.status).toBe(400);
+    expect(await tooMany.json()).toMatchObject({
+      error: { code: "Directory_ResultSizeLimitExceeded" },
     });
   });
 

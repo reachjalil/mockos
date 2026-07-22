@@ -1,12 +1,12 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus source-only M6 Authn limits; deliberately candid
+Status: Accepted M3/M5 boundaries plus source-only M6 Authn/token/key/Graph limits; deliberately candid
 Last reviewed: 2026-07-22
 
-- The Entra OIDC fixtures are source-reviewed expectations marked `documented`.
-  They have not been validated against a live tenant. The linked Worker OIDC and
-  lifecycle-cascade tests prove only their exercised authorization-code,
-  refresh/lifecycle, and error slices, not corpus-wide parity.
+- The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
+  eight M6 token/key/overage cases marked `implemented` that execute through an
+  authenticated local Worker fixture runner. None has been validated against a live
+  tenant. The linked tests prove only their exercised slices, not corpus-wide parity.
 - The M3 deployed smoke exercises the Entra OIDC/refresh/lifecycle path and an Okta
   SCIM/directory subset. Okta discovery, authorization-code, PKCE, introspection,
   revocation, device flow, and lifecycle behavior pass local and hosted Worker tests
@@ -43,6 +43,14 @@ Last reviewed: 2026-07-22
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
   combination are not claimed.
+- The M6 signing-key source candidate keeps active and pre-published successor private
+  JWKs in the environment's SQLite state; application-level encryption at rest is not
+  implemented. Rotation scrubs the previous active private JWK in the same transaction
+  and bounds the ring to four rows. The rollback/verification-overlap window qualified
+  for built-in Worker OIDC and MCP token issuance is exactly 26 hours; a second rotation
+  is blocked during it. Public core `expiresInSeconds` and `additionalClaims` are trusted
+  test seams, so longer custom lifetimes or temporal overrides are outside that
+  guarantee. Hosted and deployed M6 security qualification remain pending.
 - The accepted M3 implementation supports bounded deterministic delay, semantic error,
   and JSON-object mutation actions at known injection points, including
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
@@ -118,12 +126,14 @@ Last reviewed: 2026-07-22
 - The `@mockos` npm scope is an intended name only. Authentication and registration
   are external publishing prerequisites.
 - The fixture runner compares HTTP status, exact selected headers, exact bodies, and
-  object subsets. It executes all 113 SCIM fixtures against the local HTTP composition,
-  not every fixture through the Worker runtime; focused Worker coverage is a separate
-  suite. The runner does not yet understand JSONPath, regex, or JWT claims. The M5
-  request-log assertion can count repeated non-overlapping ordered sequences. That
-  capability is separate from the fixture runner; the M5 acceptance exercised one
-  four-request sequence on each hosted target, not every possible sequence.
+  object subsets. It executes all 113 SCIM fixtures against the local HTTP composition
+  and eight M6 Entra fixtures through the authenticated local Worker setup; it does not
+  execute every OIDC fixture or all 113 SCIM fixtures through the Worker runtime. The
+  runner does not yet understand JSONPath, regex, or arbitrary JWT-claim expressions.
+  The M5 request-log assertion can count repeated non-overlapping ordered sequences,
+  but that capability is separate from the fixture runner; the accepted M5 flow
+  exercised one four-request sequence on each hosted target, not every possible
+  sequence.
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.

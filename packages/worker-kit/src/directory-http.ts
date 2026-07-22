@@ -103,6 +103,7 @@ export const createGraphDirectoryEngine = (engine: Engine): GraphDirectoryEngine
   },
   listGroupMembers: (groupId) => engine.groups.listMembers(groupId).map(graphUser),
   listUserGroups: (userId) => engine.groups.listForUser(userId).map(graphGroup),
+  listUserGroupIds: (userId, limit) => engine.groups.listIdsForUser(userId, limit),
 });
 
 export const createOktaDirectoryEngine = (engine: Engine): OktaDirectoryApiEngine => ({

@@ -1,0 +1,42 @@
+{
+  "name": "Deterministic wrong-audience token",
+  "description": "The token fixture replaces aud with a non-routable mockOS audience derived from the requested client ID.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/mcp",
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "authorization": "Bearer {{apiKey}}",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+      "mcp-session-id": "{{sessionId}}"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 32,
+      "method": "tools/call",
+      "params": {
+        "name": "mint_token",
+        "arguments": {
+          "environmentId": "fixture-tokens-01",
+          "clientId": "fixture-token-client",
+          "subject": "fixture-user@example.test",
+          "broken": "wrong_audience"
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "result": { "structuredContent": { "data": { "broken": "wrong_audience" } } }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "The M6 Worker fixture executor supplies the authenticated MCP session and configured client/subject; the replacement never incorporates a caller-supplied URL."
+}

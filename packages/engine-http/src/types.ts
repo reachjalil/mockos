@@ -25,6 +25,7 @@ export type EntraAuthorizationResult = {
 type EntraTokenRequestBase = {
   clientId: string;
   clientSecret?: string;
+  graphBaseUrl: string;
   issuerBase: string;
 };
 
@@ -69,6 +70,7 @@ export interface EntraHttpEngine {
 
 export type CreateEntraHttpAppOptions = {
   engine: EntraHttpEngine;
+  graphBaseHeader?: string;
   issuerHeader?: string;
   publicPathHeader?: string;
 };

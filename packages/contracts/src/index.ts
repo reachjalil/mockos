@@ -166,7 +166,15 @@ export const scenarioActionSchema = z.discriminatedUnion("type", [
       malformedCase: scimPatchToleranceCaseSchema,
     })
     .strict(),
+  z.object({ type: z.literal("rotate_signing_key") }).strict(),
+  z
+    .object({
+      type: z.literal("token_clock_skew"),
+      seconds: z.number().int().min(-86_400).max(86_400),
+    })
+    .strict(),
 ]);
+export type ScenarioAction = z.infer<typeof scenarioActionSchema>;
 
 const scenarioSpecObjectSchema = z
   .object({
@@ -177,7 +185,26 @@ const scenarioSpecObjectSchema = z
     remaining: z.number().int().min(1).optional(),
     enabled: z.boolean().default(true),
   })
-  .strict();
+  .strict()
+  .superRefine((scenario, context) => {
+    const tokenAction =
+      scenario.action.type === "rotate_signing_key" ||
+      scenario.action.type === "token_clock_skew";
+    if (tokenAction && scenario.injectionPoint !== "token.before_sign") {
+      context.addIssue({
+        code: "custom",
+        path: ["injectionPoint"],
+        message: `${scenario.action.type} is only valid at token.before_sign.`,
+      });
+    }
+    if (scenario.injectionPoint === "token.before_sign" && !tokenAction) {
+      context.addIssue({
+        code: "custom",
+        path: ["action", "type"],
+        message: "token.before_sign requires rotate_signing_key or token_clock_skew.",
+      });
+    }
+  });
 
 type ScenarioInjectionLockInput = {
   readonly injectionPoint: string;

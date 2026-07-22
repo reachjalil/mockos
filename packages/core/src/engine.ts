@@ -29,6 +29,7 @@ import { RequestLogService } from "./log";
 import { OAuthService } from "./oauth";
 import { buildOidcDiscovery } from "./oidc";
 import {
+  ENTRA_INLINE_GROUP_CLAIM_LIMIT,
   getProviderProfile,
   type OidcDiscoveryDocument,
   type ProviderProfile,
@@ -58,13 +59,17 @@ export interface EngineDependencies {
 export interface IssueIdTokenInput {
   /** Request-derived final OIDC issuer. */
   readonly issuerBase: string;
+  /** Trusted request-derived Graph base used only for Entra group overage. */
+  readonly graphBaseUrl?: string;
   readonly clientId: string;
   readonly userId: string;
   readonly nonce?: string;
+  /** Trusted test seam; custom lifetimes are outside the built-in 26h key guarantee. */
   readonly expiresInSeconds?: number;
   readonly groups?: readonly string[];
   readonly roles?: readonly string[];
   readonly scopes?: readonly string[];
+  /** Trusted test seam; temporal overrides are outside the built-in 26h guarantee. */
   readonly additionalClaims?: Readonly<Record<string, unknown>>;
 }
 
@@ -162,6 +167,7 @@ export class Engine {
       users: this.users,
       groups: this.groups,
       keys: this.keys,
+      beforeTokenSign: () => this.#beforeTokenSign(),
     });
   }
 
@@ -256,17 +262,31 @@ export class Engine {
       throw new Error("Cannot mint an ID token for a disabled user.");
     }
     const issuedAt = Math.floor(this.clock.now().getTime() / 1_000);
+    const effect = await this.#beforeTokenSign();
+    const claimIssuedAt = issuedAt + (effect.clockSkewSeconds ?? 0);
     const expiresAt =
-      issuedAt +
+      claimIssuedAt +
       (input.expiresInSeconds ?? this.provider.tokenPolicy.idTokenLifetimeSeconds);
-    const memberships = input.groups ? undefined : this.groups.listForUser(user.id);
-    const groups = input.groups ?? memberships?.map((group) => group.id) ?? [];
+    const groupClaimsEnabled =
+      this.providerId !== "entra" || application.groupClaimsMode !== "none";
+    const memberships =
+      groupClaimsEnabled && !input.groups && this.providerId !== "entra"
+        ? this.groups.listForUser(user.id)
+        : undefined;
+    const groups = groupClaimsEnabled
+      ? (input.groups ??
+        (this.providerId === "entra"
+          ? this.groups.listIdsForUser(user.id, ENTRA_INLINE_GROUP_CLAIM_LIMIT + 1)
+          : memberships?.map((group) => group.id)) ??
+        [])
+      : [];
     const claims = this.provider.claims({
       issuer: this.issuer(input.issuerBase),
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       tenantId: this.tenantId,
       clientId: application.clientId,
       user,
-      issuedAt,
+      issuedAt: claimIssuedAt,
       expiresAt,
       tokenKind: "id",
       tokenId: tokenId(this.provider.tokenPolicy.idTokenIdPrefix ?? "ID_", this.rng),
@@ -286,6 +306,24 @@ export class Engine {
         ? {}
         : { token_use: "id" }),
     });
+  }
+
+  async #beforeTokenSign(): Promise<{ readonly clockSkewSeconds?: number }> {
+    const decision = this.scenarios.decideExact(
+      "token.before_sign",
+      { provider: this.providerId }
+    );
+    if (decision.type === "rotate_signing_key") {
+      await this.keys.rotate();
+      return {};
+    }
+    if (decision.type === "token_clock_skew") {
+      return { clockSkewSeconds: decision.seconds };
+    }
+    if (decision.type !== "pass") {
+      throw new Error("token.before_sign produced an incompatible scenario action.");
+    }
+    return {};
   }
 
   async verifyToken(

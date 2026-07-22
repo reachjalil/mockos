@@ -38,6 +38,8 @@ import {
 } from "@mockos/contracts";
 import {
   applyMigrations,
+  brokenTokenClaimOverrides,
+  corruptJwtSignature,
   DeviceAuthorizationError,
   decodeJwt,
   Engine,
@@ -85,6 +87,7 @@ import {
   parseOutboundBlockedHostnames,
   validateOutboundTarget,
 } from "./secure-fetch";
+import { trustedPublicUrl } from "./trusted-public-url";
 
 const CONFIG_KEY = "environment_config";
 const LAST_ACTIVITY_KEY = "last_activity";
@@ -110,6 +113,18 @@ export type SeedIdentitiesResult = {
   groups: Array<{ displayName: string; id: string }>;
   users: Array<{ id: string; userName: string }>;
 };
+
+export interface MintTokenPublicLocation {
+  /** Trusted, request-derived final issuer. Never persisted. */
+  readonly issuerBase: string;
+  /** Trusted, request-derived Graph base. Required for Entra token minting. */
+  readonly graphBaseUrl?: string;
+}
+
+export interface WellKnownPublicLocation extends MintTokenPublicLocation {
+  /** Trusted environment host/path used by SCIM and directory APIs. */
+  readonly directoryBaseUrl: string;
+}
 
 const validatedUrl = (value: string) => {
   new URL(value);
@@ -219,6 +234,7 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
           refreshToken: input.refreshToken,
           clientId: input.clientId,
           issuerBase: input.issuerBase,
+          graphBaseUrl: input.graphBaseUrl,
           ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
           ...(input.scope ? { scope: input.scope } : {}),
         });
@@ -232,6 +248,7 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
         ),
         codeVerifier: requireAuthorizationField(input.codeVerifier, "code_verifier"),
         issuerBase: input.issuerBase,
+        graphBaseUrl: input.graphBaseUrl,
       });
     },
   };
@@ -620,14 +637,6 @@ const mutateResponse = async (
     statusText: response.statusText,
     headers,
   });
-};
-
-const corruptSignature = (token: string) => {
-  const parts = token.split(".");
-  const signature = parts[2];
-  if (parts.length !== 3 || !signature) throw new Error("Expected a compact JWT.");
-  parts[2] = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
-  return parts.join(".");
 };
 
 type ProvisioningEnvironmentVariables = {
@@ -1403,21 +1412,31 @@ export class EnvironmentDurableObject extends DurableObject {
     return engine.discovery(issuer);
   }
 
-  async mintToken(input: MintTokenRequest, issuerBase: string): Promise<MintedToken> {
+  async mintToken(
+    input: MintTokenRequest,
+    location: MintTokenPublicLocation
+  ): Promise<MintedToken> {
     const request = mintTokenRequestSchema.parse(input);
-    const issuer = new URL(issuerBase);
-    const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-    if (
-      (issuer.protocol !== "https:" && !loopback.has(issuer.hostname)) ||
-      issuer.username ||
-      issuer.password ||
-      issuer.search ||
-      issuer.hash
-    ) {
-      throw new Error("Token issuer base must be a trusted HTTPS or loopback URL.");
-    }
-    const validatedIssuerBase = issuer.toString().replace(/\/$/, "");
+    const validatedIssuerBase = trustedPublicUrl(
+      location.issuerBase,
+      "Token issuer base"
+    );
+    const issuer = new URL(validatedIssuerBase);
     const engine = await this.#engine();
+    let validatedGraphBaseUrl: string | undefined;
+    if (engine.providerId === "entra") {
+      if (!location.graphBaseUrl) {
+        throw new Error("Entra token minting requires a trusted Graph base URL.");
+      }
+      validatedGraphBaseUrl = trustedPublicUrl(
+        location.graphBaseUrl,
+        "Token Graph base",
+        {
+          pathSuffix: "/graph/v1.0",
+          protocol: issuer.protocol,
+        }
+      );
+    }
     const user =
       engine.users.findById(request.subject) ??
       engine.users.findByUserName(request.subject);
@@ -1426,37 +1445,20 @@ export class EnvironmentDurableObject extends DurableObject {
     const defaultExpiresAt = now + engine.provider.tokenPolicy.idTokenLifetimeSeconds;
     const additionalClaims: Record<string, unknown> = {
       ...(request.audience ? { aud: request.audience } : {}),
+      ...brokenTokenClaimOverrides(request.broken, {
+        clientId: request.clientId,
+        nowEpochSeconds: now,
+      }),
     };
-    switch (request.broken) {
-      case "expired":
-        additionalClaims.iat = now - 3_600;
-        additionalClaims.nbf = now - 3_600;
-        additionalClaims.exp = now - 60;
-        break;
-      case "wrong_audience":
-        additionalClaims.aud = `https://wrong-audience.mockos.invalid/${encodeURIComponent(
-          request.clientId
-        )}`;
-        break;
-      case "not_yet_valid":
-        additionalClaims.nbf = now + 3_600;
-        additionalClaims.exp = now + 7_200;
-        break;
-      case "wrong_issuer":
-        additionalClaims.iss = "https://wrong-issuer.mockos.invalid";
-        break;
-      case "bad_signature":
-      case undefined:
-        break;
-    }
     let token = await engine.issueIdToken({
       issuerBase: validatedIssuerBase,
+      ...(validatedGraphBaseUrl ? { graphBaseUrl: validatedGraphBaseUrl } : {}),
       clientId: request.clientId,
       userId: user.id,
       additionalClaims,
     });
     const claims = decodeJwt(token).payload;
-    if (request.broken === "bad_signature") token = corruptSignature(token);
+    if (request.broken === "bad_signature") token = corruptJwtSignature(token);
     const expiresAtSeconds =
       typeof claims.exp === "number" ? claims.exp : defaultExpiresAt;
     await this.#touch();
@@ -1515,25 +1517,41 @@ export class EnvironmentDurableObject extends DurableObject {
     return result;
   }
 
-  async getWellKnownUrls(
-    publicBase: string,
-    issuerBase: string
-  ): Promise<WellKnownUrls> {
+  async getWellKnownUrls(location: WellKnownPublicLocation): Promise<WellKnownUrls> {
     const engine = await this.#engine();
+    const issuerBase = trustedPublicUrl(location.issuerBase, "Well-known issuer base");
+    const directoryBaseUrl = trustedPublicUrl(
+      location.directoryBaseUrl,
+      "Well-known directory base",
+      { protocol: new URL(issuerBase).protocol }
+    );
     const context = { issuerBase, tenantId: engine.tenantId };
     const urls = engine.provider.urls;
+    const graphBaseUrl =
+      engine.providerId === "entra"
+        ? trustedPublicUrl(location.graphBaseUrl ?? "", "Well-known Graph base", {
+            pathSuffix: "/graph/v1.0",
+            protocol: new URL(issuerBase).protocol,
+          })
+        : undefined;
+    if (
+      graphBaseUrl &&
+      graphBaseUrl !== `${directoryBaseUrl.replace(/\/+$/, "")}/graph/v1.0`
+    ) {
+      throw new Error("Well-known Graph base must belong to the directory base.");
+    }
     const result = wellKnownUrlsSchema.parse({
       issuer: urls.issuer(context),
       openidConfiguration: urls.discovery(context),
       authorizationEndpoint: urls.authorization(context),
       tokenEndpoint: urls.token(context),
       jwksUri: urls.jwks(context),
-      scimBaseUrl: `${publicBase.replace(/\/+$/, "")}/scim/v2`,
+      scimBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/scim/v2`,
       ...(engine.providerId === "entra"
-        ? { graphBaseUrl: `${publicBase.replace(/\/+$/, "")}/graph/v1.0` }
+        ? { graphBaseUrl }
         : {
-            oktaApiBaseUrl: `${publicBase.replace(/\/+$/, "")}/api/v1`,
-            oktaAuthnEndpoint: `${publicBase.replace(/\/+$/, "")}/api/v1/authn`,
+            oktaApiBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1`,
+            oktaAuthnEndpoint: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1/authn`,
           }),
       userinfoEndpoint: urls.userInfo(context),
       ...(urls.introspection

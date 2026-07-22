@@ -1,0 +1,26 @@
+{
+  "name": "Resolve group overage with getMemberObjects",
+  "description": "An Entra token with 201 groups points to the same mock environment's bounded Graph getMemberObjects endpoint.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/{{claimSourcePath}}",
+    "headers": {
+      "authorization": "Bearer {{accessToken}}",
+      "content-type": "application/json"
+    },
+    "body": { "securityEnabledOnly": true }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "@odata.context": "$metadata#Collection(Edm.String)"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/graph/api/directoryobject-getmemberobjects",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "The M6 Worker fixture executor seeds 201 memberships, mints the overage token, reads this request path from that token's _claim_sources endpoint, and verifies all returned group IDs."
+}

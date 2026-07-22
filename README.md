@@ -45,8 +45,9 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - A synchronous `node:sqlite` test store
 - Deterministic test clock and RNG, persisted deterministic scenarios, bounded request
   logs, and request assertions
-- Fixture schema, loader, runner, 30 source-reviewed Entra OIDC fixtures, and 22
-  source-reviewed Okta OIDC fixtures, plus a locally and hosted-CI green 113-case
+- Fixture schema, loader, and runner; 38 source-reviewed Entra OIDC fixtures (30
+  documented and eight implemented M6 cases that execute through the local Worker);
+  22 documented Okta OIDC fixtures; and a locally and hosted-CI green 113-case
   RFC/Entra/Okta SCIM corpus
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
@@ -71,13 +72,16 @@ the Okta API accepts a non-empty synthetic SSWS value. Those directory checks ar
 scheme/presence boundaries, not production authorization; never forward the management
 key to them.
 
-Every OIDC provider fixture is marked `documented`, not `implemented` or
-`verified-live`; the 113 SCIM fixtures separately record source-implemented behavior.
+Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
+token/key/overage fixtures are `implemented` and execute through an authenticated local
+Worker fixture runner. No OIDC fixture is `verified-live`. The 113 SCIM fixtures
+separately record source-implemented behavior.
 The accepted M3 and M5 records remain distinct. M5 passed its
 [local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md)
 and [exact-pair manual deployment/hosted acceptance](./docs/evidence/m5-workers-dev-smoke.md).
 That evidence does not qualify guarded promotion, standalone public Access-Key smoke,
-npm publication, or live-provider parity.
+npm publication, or live-provider parity. The M6 token/key/overage evidence remains
+local source evidence only.
 
 ## Local verification
 

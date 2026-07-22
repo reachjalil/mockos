@@ -1,0 +1,47 @@
+{
+  "name": "Skew token claims before signing",
+  "description": "A one-shot internal token scenario shifts only temporal JWT claims by a bounded number of seconds.",
+  "provider": "entra",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/mcp",
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "authorization": "Bearer {{apiKey}}",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+      "mcp-session-id": "{{sessionId}}"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 37,
+      "method": "tools/call",
+      "params": {
+        "name": "set_scenario",
+        "arguments": {
+          "environmentId": "fixture-tokens-01",
+          "id": "skew-once",
+          "injectionPoint": "token.before_sign",
+          "action": { "type": "token_clock_skew", "seconds": 300 },
+          "remaining": 1
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "result": {
+        "structuredContent": {
+          "data": { "action": { "type": "token_clock_skew", "seconds": 300 } }
+        }
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "The M6 Worker fixture executor supplies the authenticated MCP session and configured environment; the core test proves persisted grant timestamps and the injected clock remain unchanged."
+}

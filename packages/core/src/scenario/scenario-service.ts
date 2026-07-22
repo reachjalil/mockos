@@ -38,6 +38,17 @@ export type ScenarioDecision =
       readonly scenarioId: string;
       readonly injectionPoint: string;
       readonly malformedCase: ScimPatchToleranceCase;
+    }
+  | {
+      readonly type: "rotate_signing_key";
+      readonly scenarioId: string;
+      readonly injectionPoint: "token.before_sign";
+    }
+  | {
+      readonly type: "token_clock_skew";
+      readonly scenarioId: string;
+      readonly injectionPoint: "token.before_sign";
+      readonly seconds: number;
     };
 
 type ScenarioRow = SqlRow & {
@@ -203,14 +214,13 @@ export class ScenarioService {
     return this.#store.transaction(() => {
       const rows = this.#store.all<ScenarioRow>(
         `${selectScenarios}
-         WHERE enabled = 1 AND ${
-           includeCatchAll
-             ? "(injection_point = ? OR injection_point = '*')"
-             : "injection_point = ?"
-}
+         WHERE enabled = 1 AND (
+           injection_point = ? OR (? = 1 AND injection_point = '*')
+         )
          ORDER BY CASE WHEN injection_point = ? THEN 0 ELSE 1 END,
            created_at, id`,
         injectionPoint,
+        includeCatchAll ? 1 : 0,
         injectionPoint
       );
       for (const row of rows) {
@@ -260,6 +270,19 @@ export class ScenarioService {
           case "scim_soft_delete_race":
           case "scim_patch_tolerance":
             return { ...common, ...spec.action };
+          case "rotate_signing_key":
+            return {
+              ...common,
+              type: "rotate_signing_key",
+              injectionPoint: "token.before_sign",
+            };
+          case "token_clock_skew":
+            return {
+              ...common,
+              type: "token_clock_skew",
+              injectionPoint: "token.before_sign",
+              seconds: spec.action.seconds,
+            };
         }
       }
       return { type: "pass" };

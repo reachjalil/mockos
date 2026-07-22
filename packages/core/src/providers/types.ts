@@ -41,6 +41,8 @@ export interface ErrorCatalog {
 
 export interface ClaimMapperContext {
   readonly issuer: string;
+  /** Trusted request-derived Microsoft Graph base; never persisted. */
+  readonly graphBaseUrl?: string;
   readonly tenantId: string;
   readonly clientId: string;
   readonly user: UserRecord;

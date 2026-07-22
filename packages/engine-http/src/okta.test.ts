@@ -124,6 +124,29 @@ describe("Okta HTTP adapter", () => {
     expect(engine.jwks).toHaveBeenCalledWith(issuer);
   });
 
+  it("allows HTTP only on loopback and rejects other loopback schemes", async () => {
+    const app = createOktaHttpApp({ engine });
+    const loopbackIssuer = "http://127.42.19.7:8787/oauth2/default";
+    const accepted = await app.request(
+      "https://do.internal/oauth2/default/.well-known/openid-configuration",
+      { headers: { "x-mockos-issuer-base": loopbackIssuer } }
+    );
+    expect(accepted.status).toBe(200);
+    expect(engine.discovery).toHaveBeenCalledWith(loopbackIssuer);
+
+    for (const untrustedIssuer of [
+      "ftp://localhost:8787/oauth2/default",
+      "ws://127.0.0.1:8787/oauth2/default",
+      "http://id.mockos.test/oauth2/default",
+    ]) {
+      const rejected = await app.request(
+        "https://do.internal/oauth2/default/.well-known/openid-configuration",
+        { headers: { "x-mockos-issuer-base": untrustedIssuer } }
+      );
+      expect(rejected.status).toBe(400);
+    }
+  });
+
   it("renders the Okta hosted login and carries required S256 PKCE fields", async () => {
     const app = createOktaHttpApp({ engine });
     const params = authorizationParams();
