@@ -114,7 +114,10 @@ export const semanticErrorCodeSchema = z.enum([
 export type SemanticErrorCode = z.infer<typeof semanticErrorCodeSchema>;
 
 export const scenarioActionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("delay"), milliseconds: z.number().int().min(1) }),
+  z.object({
+    type: z.literal("delay"),
+    milliseconds: z.number().int().min(1).max(30_000),
+  }),
   z.object({ type: z.literal("error"), code: semanticErrorCodeSchema }),
   z.object({
     type: z.literal("mutate"),
@@ -209,27 +212,288 @@ export const createEnvironmentToolInputSchema = z
     seed: z.string().min(1).max(256).default("mockos"),
   })
   .strict();
+export type CreateEnvironmentToolInput = z.infer<
+  typeof createEnvironmentToolInputSchema
+>;
+
+export const emptyToolInputSchema = z.object({}).strict();
+
 export const environmentRefToolInputSchema = z
   .object({ environmentId: environmentIdSchema.optional() })
   .strict();
-export const mintTokenToolInputSchema = environmentRefToolInputSchema
-  .extend({
+export type EnvironmentRefToolInput = z.infer<typeof environmentRefToolInputSchema>;
+
+export const environmentPatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    idleTtlHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 365)
+      .optional(),
+    requestLogLimit: z.number().int().min(100).max(100_000).optional(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.name !== undefined ||
+      input.idleTtlHours !== undefined ||
+      input.requestLogLimit !== undefined,
+    { message: "At least one environment setting is required." }
+  );
+export type EnvironmentPatch = z.infer<typeof environmentPatchSchema>;
+
+export const configureEnvironmentToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    name: z.string().trim().min(1).max(80).optional(),
+    idleTtlHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 365)
+      .optional(),
+    requestLogLimit: z.number().int().min(100).max(100_000).optional(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.name !== undefined ||
+      input.idleTtlHours !== undefined ||
+      input.requestLogLimit !== undefined,
+    { message: "At least one environment setting is required." }
+  );
+export type ConfigureEnvironmentToolInput = z.infer<
+  typeof configureEnvironmentToolInputSchema
+>;
+
+export const seedIdentitiesToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    users: identitySeedSchema.shape.users,
+    groups: identitySeedSchema.shape.groups,
+  })
+  .strict();
+export type SeedIdentitiesToolInput = z.infer<typeof seedIdentitiesToolInputSchema>;
+
+export const seedIdentitiesResultSchema = z
+  .object({
+    users: z.array(
+      z.object({ id: z.string().min(1), userName: z.string().min(1) }).strict()
+    ),
+    groups: z.array(
+      z.object({ id: z.string().min(1), displayName: z.string().min(1) }).strict()
+    ),
+  })
+  .strict();
+export type SeedIdentitiesResult = z.infer<typeof seedIdentitiesResultSchema>;
+
+export const createApplicationToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    ...createApplicationInputSchema.shape,
+  })
+  .strict();
+export type CreateApplicationToolInput = z.infer<
+  typeof createApplicationToolInputSchema
+>;
+
+export const brokenTokenVariantSchema = z.enum([
+  "expired",
+  "wrong_audience",
+  "not_yet_valid",
+  "bad_signature",
+  "wrong_issuer",
+]);
+export type BrokenTokenVariant = z.infer<typeof brokenTokenVariantSchema>;
+
+export const mintTokenRequestSchema = z
+  .object({
     clientId: z.string().min(1),
     subject: z.string().min(1),
     audience: z.string().min(1).optional(),
-    broken: z
-      .enum([
-        "expired",
-        "wrong_audience",
-        "not_yet_valid",
-        "bad_signature",
-        "wrong_issuer",
-      ])
-      .optional(),
+    broken: brokenTokenVariantSchema.optional(),
   })
   .strict();
+export type MintTokenRequest = z.infer<typeof mintTokenRequestSchema>;
 
-export type McpToolInput =
-  | z.infer<typeof createEnvironmentToolInputSchema>
-  | z.infer<typeof environmentRefToolInputSchema>
-  | z.infer<typeof mintTokenToolInputSchema>;
+export const mintTokenToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    ...mintTokenRequestSchema.shape,
+  })
+  .strict();
+export type MintTokenToolInput = z.infer<typeof mintTokenToolInputSchema>;
+
+export const mintedTokenSchema = z
+  .object({
+    token: z.string().min(1),
+    tokenType: z.literal("Bearer"),
+    expiresAt: z.iso.datetime(),
+    claims: z.record(z.string(), z.unknown()),
+    broken: brokenTokenVariantSchema.optional(),
+  })
+  .strict();
+export type MintedToken = z.infer<typeof mintedTokenSchema>;
+
+export const setScenarioToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    ...scenarioSpecSchema.shape,
+  })
+  .strict();
+export type SetScenarioToolInput = z.infer<typeof setScenarioToolInputSchema>;
+
+export const clearScenarioToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    scenarioId: z.string().min(1).max(128).optional(),
+  })
+  .strict();
+export type ClearScenarioToolInput = z.infer<typeof clearScenarioToolInputSchema>;
+
+export const clearScenarioResultSchema = z
+  .object({ cleared: z.number().int().min(0) })
+  .strict();
+export type ClearScenarioResult = z.infer<typeof clearScenarioResultSchema>;
+
+export const requestLogQuerySchema = z
+  .object({
+    source: requestLogSourceSchema.optional(),
+    provider: providerIdSchema.optional(),
+    method: z.string().trim().min(1).max(32).optional(),
+    path: z.string().min(1).max(2048).optional(),
+    status: z.number().int().min(100).max(599).optional(),
+    limit: z.number().int().min(1).max(1_000).default(100),
+    cursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type RequestLogQuery = z.infer<typeof requestLogQuerySchema>;
+
+export const getRequestLogToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    ...requestLogQuerySchema.shape,
+  })
+  .strict();
+export type GetRequestLogToolInput = z.infer<typeof getRequestLogToolInputSchema>;
+
+export const requestLogPageSchema = z
+  .object({
+    entries: z.array(requestLogEntrySchema),
+    nextCursor: z.string().min(1).optional(),
+  })
+  .strict();
+export type RequestLogPage = z.infer<typeof requestLogPageSchema>;
+
+export const assertRequestsToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    ...assertionSpecSchema.shape,
+  })
+  .strict();
+export type AssertRequestsToolInput = z.infer<typeof assertRequestsToolInputSchema>;
+
+export const wellKnownUrlsSchema = z
+  .object({
+    issuer: z.url(),
+    openidConfiguration: z.url(),
+    authorizationEndpoint: z.url(),
+    tokenEndpoint: z.url(),
+    jwksUri: z.url(),
+    scimBaseUrl: z.url(),
+    userinfoEndpoint: z.url().optional(),
+    introspectionEndpoint: z.url().optional(),
+    revocationEndpoint: z.url().optional(),
+    deviceAuthorizationEndpoint: z.url().optional(),
+  })
+  .strict();
+export type WellKnownUrls = z.infer<typeof wellKnownUrlsSchema>;
+
+export const setCurrentEnvironmentToolInputSchema = z
+  .object({ environmentId: environmentIdSchema.nullable() })
+  .strict();
+export type SetCurrentEnvironmentToolInput = z.infer<
+  typeof setCurrentEnvironmentToolInputSchema
+>;
+
+export const currentEnvironmentCursorSchema = z
+  .object({ environmentId: environmentIdSchema.nullable() })
+  .strict();
+export type CurrentEnvironmentCursor = z.infer<typeof currentEnvironmentCursorSchema>;
+
+export const environmentListSchema = z
+  .object({
+    environments: z.array(environmentConfigSchema),
+    currentEnvironmentId: environmentIdSchema.nullable(),
+  })
+  .strict();
+export type EnvironmentList = z.infer<typeof environmentListSchema>;
+
+export const deleteEnvironmentResultSchema = z
+  .object({
+    environmentId: environmentIdSchema,
+    deleted: z.literal(true),
+  })
+  .strict();
+export type DeleteEnvironmentResult = z.infer<typeof deleteEnvironmentResultSchema>;
+
+export const mockosMcpToolNames = [
+  "create_environment",
+  "list_environments",
+  "delete_environment",
+  "configure_environment",
+  "seed_identities",
+  "create_application",
+  "mint_token",
+  "set_scenario",
+  "clear_scenario",
+  "get_request_log",
+  "assert_requests",
+  "get_wellknown_urls",
+  "set_current_environment",
+] as const;
+export type MockosMcpToolName = (typeof mockosMcpToolNames)[number];
+
+export type MockosMcpToolInputs = {
+  create_environment: CreateEnvironmentToolInput;
+  list_environments: z.infer<typeof emptyToolInputSchema>;
+  delete_environment: EnvironmentRefToolInput;
+  configure_environment: ConfigureEnvironmentToolInput;
+  seed_identities: SeedIdentitiesToolInput;
+  create_application: CreateApplicationToolInput;
+  mint_token: MintTokenToolInput;
+  set_scenario: SetScenarioToolInput;
+  clear_scenario: ClearScenarioToolInput;
+  get_request_log: GetRequestLogToolInput;
+  assert_requests: AssertRequestsToolInput;
+  get_wellknown_urls: EnvironmentRefToolInput;
+  set_current_environment: SetCurrentEnvironmentToolInput;
+};
+
+export type MockosMcpToolData = {
+  create_environment: EnvironmentConfig;
+  list_environments: EnvironmentList;
+  delete_environment: DeleteEnvironmentResult;
+  configure_environment: EnvironmentConfig;
+  seed_identities: SeedIdentitiesResult;
+  create_application: ApplicationRegistration;
+  mint_token: MintedToken;
+  set_scenario: ScenarioSpec;
+  clear_scenario: ClearScenarioResult;
+  get_request_log: RequestLogPage;
+  assert_requests: AssertionResult;
+  get_wellknown_urls: WellKnownUrls;
+  set_current_environment: CurrentEnvironmentCursor;
+};
+
+export type MockosMcpToolOutputs = {
+  [Name in MockosMcpToolName]: Envelope<MockosMcpToolData[Name]>;
+};
+
+export type MockosMcpToolResult<Name extends MockosMcpToolName> =
+  | MockosMcpToolOutputs[Name]
+  | Problem;
+
+export type McpToolInput = MockosMcpToolInputs[keyof MockosMcpToolInputs];

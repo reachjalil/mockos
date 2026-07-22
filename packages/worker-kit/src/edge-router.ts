@@ -6,6 +6,7 @@ import {
 } from "./host-resolver";
 
 export type EnvironmentRoutingBindings = {
+  API_KEY?: string;
   ENVIRONMENTS: DurableObjectNamespace<EnvironmentDurableObject>;
   TID_INDEX?: KVNamespace;
 };
@@ -48,7 +49,14 @@ export const routeEnvironmentRequest = async (
   if (intercepted) return intercepted;
   const id = bindings.ENVIRONMENTS.idFromName(environmentId);
   const stub = bindings.ENVIRONMENTS.get(id);
+  const controlAuthorization = bindings.API_KEY
+    ? request.headers.get("authorization") === `Bearer ${bindings.API_KEY}`
+    : false;
   return stub.fetch(
-    forwardEnvironmentRequest(request, { ...resolution, environmentId })
+    forwardEnvironmentRequest(
+      request,
+      { ...resolution, environmentId },
+      { redactAuthorization: controlAuthorization }
+    )
   );
 };

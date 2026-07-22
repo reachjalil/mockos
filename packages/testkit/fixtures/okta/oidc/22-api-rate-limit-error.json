@@ -1,0 +1,17 @@
+{
+  "name": "Okta API rate-limit envelope",
+  "description": "Okta API throttling uses E0000047 and epoch-based X-Rate-Limit headers.",
+  "provider": "okta",
+  "area": "errors",
+  "request": { "method": "GET", "path": "/e/acme/api/v1/users" },
+  "expected": {
+    "status": 429,
+    "headers": { "x-rate-limit-limit": "60", "x-rate-limit-remaining": "0" },
+    "bodyContains": { "errorCode": "E0000047", "errorLink": "E0000047" }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/error-codes/#e0000047-api-call-exceeded-rate-limit",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "The exact deterministic reset epoch is asserted in packages/core/src/okta.test.ts."
+}

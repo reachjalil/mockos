@@ -1,0 +1,27 @@
+{
+  "name": "Okta authorization code token exchange",
+  "description": "A valid code, client authentication, redirect URI, and verifier produce bearer tokens.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "client_id": "0oaMockClient",
+      "client_secret": "okta-client-secret",
+      "code": "fixture-code",
+      "redirect_uri": "https://client.example/callback",
+      "code_verifier": "okta-verifier-abcdefghijklmnopqrstuvwxyz-0123456789-ABCDE"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": { "token_type": "Bearer", "expires_in": 3600 }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/implement-grant-type/authcodepkce/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Seed setup must create fixture-code before this fixture is made executable."
+}

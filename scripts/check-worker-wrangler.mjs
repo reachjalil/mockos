@@ -82,12 +82,31 @@ const readTarget = (label, target) => {
     target.secrets?.required?.includes("API_KEY"),
     `${label} must declare API_KEY as a required secret.`
   );
-  const environmentDo = target.durable_objects?.bindings?.find(
-    (binding) => binding.name === "ENVIRONMENTS"
-  );
+  const requiredBindings = {
+    ENVIRONMENTS: "EnvironmentDurableObject",
+    ENVIRONMENT_CATALOG: "EnvironmentCatalogDurableObject",
+    MOCKOS_MCP: "MockosMcpAgent",
+  };
+  for (const [name, className] of Object.entries(requiredBindings)) {
+    const binding = target.durable_objects?.bindings?.find(
+      (candidate) => candidate.name === name
+    );
+    requireValue(
+      binding?.class_name === className,
+      `${label} ${name} Durable Object binding is missing.`
+    );
+  }
+  let publicOrigin;
+  try {
+    publicOrigin = new URL(target.vars?.PUBLIC_ORIGIN);
+  } catch {
+    fail(`${label} PUBLIC_ORIGIN must be an absolute URL.`);
+  }
   requireValue(
-    environmentDo?.class_name === "EnvironmentDurableObject",
-    `${label} ENVIRONMENTS Durable Object binding is missing.`
+    publicOrigin.protocol === "https:" &&
+      publicOrigin.toString() === `${publicOrigin.origin}/` &&
+      target.vars.PUBLIC_ORIGIN === publicOrigin.origin,
+    `${label} PUBLIC_ORIGIN must be an HTTPS origin without a trailing slash.`
   );
 
   if (target.workers_dev === true) {
@@ -110,7 +129,7 @@ const readTarget = (label, target) => {
     );
   }
 
-  return { environmentDo, name: target.name, workersDev: target.workers_dev };
+  return { name: target.name, workersDev: target.workers_dev };
 };
 
 const production = readTarget("production", config);
@@ -122,10 +141,16 @@ requireValue(
   "production and staging must use different Worker names."
 );
 requireValue(
-  config.migrations?.some((migration) =>
-    migration.new_sqlite_classes?.includes("EnvironmentDurableObject")
+  [
+    "EnvironmentDurableObject",
+    "EnvironmentCatalogDurableObject",
+    "MockosMcpAgent",
+  ].every((className) =>
+    config.migrations?.some((migration) =>
+      migration.new_sqlite_classes?.includes(className)
+    )
   ),
-  "EnvironmentDurableObject must have a new_sqlite_classes migration."
+  "Every Durable Object class must have a new_sqlite_classes migration."
 );
 
 process.stdout.write(

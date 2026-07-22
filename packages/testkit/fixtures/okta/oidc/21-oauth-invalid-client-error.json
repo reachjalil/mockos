@@ -1,0 +1,28 @@
+{
+  "name": "Okta OAuth invalid-client error",
+  "description": "OAuth endpoints render invalid_client rather than an Okta management API E-code envelope.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "fixture-code",
+      "client_id": "0oaMockClient",
+      "client_secret": "wrong-secret"
+    }
+  },
+  "expected": {
+    "status": 401,
+    "body": {
+      "error": "invalid_client",
+      "error_description": "Client authentication failed."
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/guides/client-auth/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "ProviderErrorContext.surface selects this OAuth protocol shape."
+}

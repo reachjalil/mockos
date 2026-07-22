@@ -1,0 +1,27 @@
+{
+  "name": "Okta device authorization pending",
+  "description": "Polling before user activation returns authorization_pending with Okta's description.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "device_code": "fixture-pending-device-code",
+      "client_id": "0oaMockClient"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "body": {
+      "error": "authorization_pending",
+      "error_description": "The device authorization is pending. Please try again later."
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/device-authorization-grant/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Exact core error shape is covered by the device authorization test."
+}

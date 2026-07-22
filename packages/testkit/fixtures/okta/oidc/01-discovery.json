@@ -1,0 +1,22 @@
+{
+  "name": "Okta custom authorization server discovery",
+  "description": "The custom authorization server publishes its Okta OIDC endpoints and device grant metadata.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/e/acme/oauth2/default/.well-known/openid-configuration"
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "issuer": "https://id.mockos.test/e/acme/oauth2/default",
+      "device_authorization_endpoint": "https://id.mockos.test/e/acme/oauth2/default/v1/device/authorize"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/oauth/tag/CustomAS/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Core behavior is covered by okta.test.ts; HTTP fixture execution awaits the edge adapter."
+}

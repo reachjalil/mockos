@@ -1,4 +1,8 @@
-import { EnvironmentDurableObject } from "@mockos/worker-kit";
+import {
+  EnvironmentCatalogDurableObject,
+  EnvironmentDurableObject,
+  MockosMcpAgent,
+} from "@mockos/worker-kit";
 import * as Sentry from "@sentry/cloudflare";
 import { type CloudflareEnv, createWorkerApp } from "./app";
 
@@ -22,4 +26,4 @@ export default Sentry.withSentry(
   handler
 );
 
-export { EnvironmentDurableObject };
+export { EnvironmentCatalogDurableObject, EnvironmentDurableObject, MockosMcpAgent };

@@ -1,0 +1,21 @@
+{
+  "name": "Okta custom authorization server access-token claims",
+  "description": "Issued access tokens carry Okta-style ver, jti, cid, uid, and array-valued scp claims.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "fixture-code-access",
+      "client_id": "0oaMockClient"
+    }
+  },
+  "expected": { "status": 200, "bodyContains": { "token_type": "Bearer" } },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/guides/overview/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "JWT claim assertions are exercised directly in packages/core/src/okta.test.ts."
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Okta active access-token introspection",
+  "description": "Introspection of an active access token returns active metadata and Okta identity fields.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/introspect",
+    "form": {
+      "token": "fixture-access-token",
+      "token_type_hint": "access_token",
+      "client_id": "0oaMockClient",
+      "client_secret": "okta-client-secret"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "active": true,
+      "token_type": "Bearer",
+      "client_id": "0oaMockClient"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/validate-access-tokens/go/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Token fixture setup is required before HTTP runner execution."
+}

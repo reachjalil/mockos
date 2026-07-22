@@ -1,0 +1,25 @@
+{
+  "name": "Okta refresh-token introspection",
+  "description": "An unexpired, unconsumed refresh token can be introspected by its owning client.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/introspect",
+    "form": {
+      "token": "fixture-refresh-token",
+      "token_type_hint": "refresh_token",
+      "client_id": "0oaMockClient",
+      "client_secret": "okta-client-secret"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": { "active": true, "token_type": "refresh_token" }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc7662.html",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Core tests mint and introspect the refresh token before transport mapping."
+}

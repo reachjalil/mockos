@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertRequestsToolInputSchema,
+  brokenTokenVariantSchema,
+  configureEnvironmentToolInputSchema,
   environmentConfigSchema,
+  getRequestLogToolInputSchema,
   identitySeedSchema,
+  mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  scenarioSpecSchema,
+  seedIdentitiesToolInputSchema,
 } from "./index";
 
 describe("wire contracts", () => {
@@ -40,11 +47,68 @@ describe("wire contracts", () => {
   it("validates RFC 7807 problem documents", () => {
     expect(
       problemSchema.parse({
-        type: "https://mockos.dev/problems/not-found",
+        type: "https://mockos.live/problems/not-found",
         title: "Not found",
         status: 404,
         requestId: "req_123",
       }).status
     ).toBe(404);
+  });
+
+  it("keeps MCP defaults deterministic", () => {
+    expect(
+      seedIdentitiesToolInputSchema.parse({
+        users: [{ userName: "ada@example.com", displayName: "Ada Lovelace" }],
+      })
+    ).toMatchObject({
+      users: [{ active: true, mfaState: "none", password: "Passw0rd!" }],
+      groups: [],
+    });
+    expect(getRequestLogToolInputSchema.parse({}).limit).toBe(100);
+    expect(assertRequestsToolInputSchema.parse({}).count).toEqual({ atLeast: 1 });
+  });
+
+  it("requires a mutable setting when configuring an environment", () => {
+    expect(() => configureEnvironmentToolInputSchema.parse({})).toThrow(
+      "At least one environment setting is required."
+    );
+    expect(() =>
+      configureEnvironmentToolInputSchema.parse({ provider: "okta" })
+    ).toThrow();
+  });
+
+  it("caps injected latency at thirty seconds", () => {
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "too-slow",
+        injectionPoint: "*",
+        action: { type: "delay", milliseconds: 30_001 },
+      })
+    ).toThrow();
+  });
+
+  it("locks the broken-token variants and MCP v1 tool names", () => {
+    expect(brokenTokenVariantSchema.options).toEqual([
+      "expired",
+      "wrong_audience",
+      "not_yet_valid",
+      "bad_signature",
+      "wrong_issuer",
+    ]);
+    expect(mockosMcpToolNames).toEqual([
+      "create_environment",
+      "list_environments",
+      "delete_environment",
+      "configure_environment",
+      "seed_identities",
+      "create_application",
+      "mint_token",
+      "set_scenario",
+      "clear_scenario",
+      "get_request_log",
+      "assert_requests",
+      "get_wellknown_urls",
+      "set_current_environment",
+    ]);
   });
 });

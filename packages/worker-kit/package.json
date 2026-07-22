@@ -16,6 +16,9 @@
     "@mockos/contracts": "workspace:*",
     "@mockos/core": "workspace:*",
     "@mockos/engine-http": "workspace:*",
+    "@mockos/mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "agents": "catalog:",
     "hono": "catalog:"
   },
   "devDependencies": {

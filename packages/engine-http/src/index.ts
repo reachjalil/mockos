@@ -9,7 +9,9 @@ import type {
 } from "./types";
 
 export { OAuthProtocolError, renderEntraError } from "./errors";
-export { renderEntraLoginPage } from "./login";
+export { renderEntraLoginPage, renderOktaLoginPage } from "./login";
+export { createOktaHttpApp, renderOktaDeviceActivationPage } from "./okta";
+export type * from "./okta-types";
 export type * from "./types";
 
 const noStoreHeaders = {
@@ -57,6 +59,9 @@ const issuerFromRequest = (request: Request, header: string) => {
     const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
     if (issuer.protocol !== "https:" && !loopback.has(issuer.hostname)) {
       throw new Error("Issuer must use HTTPS.");
+    }
+    if (issuer.username || issuer.password || issuer.search || issuer.hash) {
+      throw new Error("Issuer must not contain credentials, query, or fragment.");
     }
     return issuer.toString().replace(/\/$/, "");
   } catch (cause) {
@@ -156,6 +161,49 @@ const appendAuthorizationResult = (
   return redirect.toString();
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const assertResponseMode = (responseMode: string | undefined) => {
+  if (
+    responseMode !== undefined &&
+    responseMode !== "query" &&
+    responseMode !== "form_post"
+  ) {
+    throw new OAuthProtocolError(
+      "INVALID_REQUEST",
+      "Only response_mode=query and response_mode=form_post are supported."
+    );
+  }
+};
+
+const authorizationResponse = (
+  input: EntraAuthorizationRequest,
+  result: { code: string }
+): Response => {
+  if (input.responseMode === "form_post") {
+    const state = input.state
+      ? `<input type="hidden" name="state" value="${escapeHtml(input.state)}">`
+      : "";
+    return new Response(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Continue</title></head><body><form id="response" method="post" action="${escapeHtml(input.redirectUri)}"><input type="hidden" name="code" value="${escapeHtml(result.code)}">${state}<noscript><button type="submit">Continue</button></noscript></form><script>document.getElementById("response").submit()</script></body></html>`,
+      {
+        status: 200,
+        headers: { ...noStoreHeaders, "content-type": "text/html; charset=UTF-8" },
+      }
+    );
+  }
+  return Response.redirect(
+    appendAuthorizationResult(input.redirectUri, result, input.state),
+    302
+  );
+};
+
 export const createEntraHttpApp = ({
   engine,
   issuerHeader = "x-mockos-issuer-base",
@@ -187,6 +235,7 @@ export const createEntraHttpApp = ({
         "Only response_type=code is supported."
       );
     }
+    assertResponseMode(input.responseMode);
     await engine.validateAuthorizationRequest?.(input);
     return context.html(
       renderEntraLoginPage(input, {
@@ -208,12 +257,10 @@ export const createEntraHttpApp = ({
     const username = required(optional(params.get("username")), "username");
     const password = required(optional(params.get("password")), "password");
     try {
+      assertResponseMode(input.responseMode);
       await engine.validateAuthorizationRequest?.(input);
       const result = await engine.authorize({ ...input, username, password });
-      return context.redirect(
-        appendAuthorizationResult(input.redirectUri, result, input.state),
-        302
-      );
+      return authorizationResponse(input, result);
     } catch (error) {
       const rendered = renderEntraError(error);
       return context.html(

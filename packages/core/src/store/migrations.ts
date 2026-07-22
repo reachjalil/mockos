@@ -176,8 +176,40 @@ const migrationV1 = [
   )`,
 ] as const;
 
+const migrationV2 = [
+  `CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+    token_hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    jti TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS oauth_access_tokens_expiry_idx
+    ON oauth_access_tokens(expires_at)`,
+  `ALTER TABLE device_codes
+    ADD COLUMN interval_seconds INTEGER NOT NULL DEFAULT 5`,
+  `ALTER TABLE device_codes
+    ADD COLUMN current_interval_seconds INTEGER NOT NULL DEFAULT 5`,
+  `ALTER TABLE device_codes ADD COLUMN consumed_at TEXT`,
+] as const;
+
+const migrationV3 = [
+  `ALTER TABLE scenarios
+    ADD COLUMN evaluations INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE scenarios ADD COLUMN remaining INTEGER`,
+  `CREATE INDEX IF NOT EXISTS scenarios_decision_idx
+    ON scenarios(enabled, injection_point, created_at, id)`,
+  `CREATE INDEX IF NOT EXISTS request_log_filters_idx
+    ON request_log(source, provider, method, response_status, sequence DESC)`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
+  { version: 2, statements: migrationV2 },
+  { version: 3, statements: migrationV3 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };

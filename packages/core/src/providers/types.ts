@@ -14,6 +14,10 @@ export interface ProviderUrls {
   jwks(context: ProviderUrlContext): string;
   userInfo(context: ProviderUrlContext): string;
   discovery(context: ProviderUrlContext): string;
+  introspection?(context: ProviderUrlContext): string;
+  revocation?(context: ProviderUrlContext): string;
+  deviceAuthorization?(context: ProviderUrlContext): string;
+  activation?(context: ProviderUrlContext): string;
 }
 
 export interface ProviderErrorContext {
@@ -21,6 +25,8 @@ export interface ProviderErrorContext {
   readonly traceId: string;
   readonly timestamp: string;
   readonly detail?: string;
+  /** API errors and OAuth protocol errors use different Okta wire shapes. */
+  readonly surface?: "api" | "oauth";
 }
 
 export interface RenderedProviderError {
@@ -42,7 +48,13 @@ export interface ClaimMapperContext {
   readonly expiresAt: number;
   readonly nonce?: string;
   readonly groups?: readonly string[];
+  readonly groupNames?: readonly string[];
   readonly roles?: readonly string[];
+  readonly tokenKind?: "access" | "id";
+  readonly scopes?: readonly string[];
+  readonly tokenId?: string;
+  readonly authTime?: number;
+  readonly accessTokenHash?: string;
 }
 
 export type ClaimMapper = (
@@ -72,6 +84,10 @@ export interface TokenPolicy {
   readonly idTokenLifetimeSeconds: number;
   readonly authorizationCodeLifetimeSeconds: number;
   readonly refreshTokenLifetimeSeconds: number;
+  readonly scopeClaimFormat?: "string" | "array";
+  readonly includeTokenUseClaim?: boolean;
+  readonly accessTokenIdPrefix?: string;
+  readonly idTokenIdPrefix?: string;
 }
 
 export interface ProviderProfile {

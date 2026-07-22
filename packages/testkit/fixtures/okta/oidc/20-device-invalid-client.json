@@ -1,0 +1,17 @@
+{
+  "name": "Okta device authorization invalid client",
+  "description": "An unknown client_id is rejected before a device code is created.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/device/authorize",
+    "form": { "client_id": "unknown-client", "scope": "openid" }
+  },
+  "expected": { "status": 400, "bodyContains": { "error": "invalid_client" } },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/device-authorization-grant/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "The core validates registration and the device grant before persistence."
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Okta authorization code request",
+  "description": "A custom authorization server accepts an authorization-code request with PKCE S256.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "GET",
+    "path": "/e/acme/oauth2/default/v1/authorize",
+    "query": {
+      "client_id": "0oaMockClient",
+      "response_type": "code",
+      "redirect_uri": "https://client.example/callback",
+      "scope": "openid profile",
+      "state": "state-02",
+      "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      "code_challenge_method": "S256"
+    }
+  },
+  "expected": { "status": 200 },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/implement-grant-type/authcodepkce/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Core authorization-code behavior is implemented; hosted-login transport supplies the interactive response."
+}

@@ -22,9 +22,14 @@ const favicon =
   <path d="M16 22c-3-2.5-7-3-10-1 2 4.5 6.5 5.5 10 3 3.5 2.5 8 1.5 10-3-3-2-7-1.5-10 1Z" fill="#f7f5ef"/>
 </svg>`);
 
-export const renderEntraLoginPage = (
+const renderProviderLoginPage = (
   input: EntraAuthorizationRequest,
-  options: { action: string; error?: string }
+  options: {
+    action: string;
+    error?: string;
+    providerLabel: string;
+    usernameLabel: string;
+  }
 ) => {
   const error = options.error
     ? `<div class="error" role="alert">${escapeHtml(options.error)}</div>`
@@ -86,7 +91,7 @@ export const renderEntraLoginPage = (
         <span class="wordmark">mockOS</span>
         <span class="environment">Test environment</span>
       </div>
-      <p class="provider">Microsoft Entra ID simulation</p>
+      <p class="provider">${escapeHtml(options.providerLabel)} simulation</p>
       <h1>Sign in</h1>
       <p class="hint">Use a seeded mockOS identity. Never enter production credentials.</p>
       ${error}
@@ -100,7 +105,7 @@ export const renderEntraLoginPage = (
         ${hidden("nonce", input.nonce)}
         ${hidden("code_challenge", input.codeChallenge)}
         ${hidden("code_challenge_method", input.codeChallengeMethod)}
-        <label for="username">Email, phone, or Skype</label>
+        <label for="username">${escapeHtml(options.usernameLabel)}</label>
         <input id="username" name="username" type="email" autocomplete="username" required
           value="${escapeHtml(input.loginHint ?? "")}">
         <label for="password">Password</label>
@@ -112,3 +117,23 @@ export const renderEntraLoginPage = (
   </body>
 </html>`;
 };
+
+export const renderEntraLoginPage = (
+  input: EntraAuthorizationRequest,
+  options: { action: string; error?: string }
+) =>
+  renderProviderLoginPage(input, {
+    ...options,
+    providerLabel: "Microsoft Entra ID",
+    usernameLabel: "Email, phone, or Skype",
+  });
+
+export const renderOktaLoginPage = (
+  input: EntraAuthorizationRequest,
+  options: { action: string; error?: string }
+) =>
+  renderProviderLoginPage(input, {
+    ...options,
+    providerLabel: "Okta",
+    usernameLabel: "Username",
+  });

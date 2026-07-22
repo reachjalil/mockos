@@ -85,11 +85,11 @@ afterEach(() => {
 describe("core substrate", () => {
   it("applies ordered PRAGMA user_version migrations idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(1);
-    expect(getSchemaVersion(store)).toBe(1);
-    expect(applyMigrations(store)).toBe(1);
+    expect(applyMigrations(store)).toBe(3);
+    expect(getSchemaVersion(store)).toBe(3);
+    expect(applyMigrations(store)).toBe(3);
     expect(
       store.get<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"

@@ -1,0 +1,21 @@
+{
+  "name": "Okta inactive-token introspection",
+  "description": "Unknown, expired, revoked, or wrong-client tokens return only active false.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/introspect",
+    "form": {
+      "token": "unknown-token",
+      "client_id": "0oaMockClient",
+      "client_secret": "okta-client-secret"
+    }
+  },
+  "expected": { "status": 200, "body": { "active": false } },
+  "provenance": "rfc",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc7662.html#section-2.2",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "The exact inactive response is covered in the focused core suite."
+}

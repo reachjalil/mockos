@@ -1,7 +1,7 @@
 {
   "name": "@mockos/cli",
-  "version": "0.0.1",
-  "description": "Reserved CLI package for mockOS, mock identity infrastructure for integration tests.",
+  "version": "0.1.0",
+  "description": "Command-line client for mockOS environments, scenarios, tokens, logs, and assertions.",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Jalil Laaraichi",
@@ -26,18 +26,20 @@
     "testing"
   ],
   "sideEffects": false,
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "bin": {
+    "mockos": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [
-    "index.d.ts",
-    "index.js",
+    "dist",
     "README.md"
   ],
   "engines": {
@@ -47,6 +49,17 @@
     "access": "public"
   },
   "scripts": {
-    "prepublishOnly": "node --check index.js"
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').chmodSync('dist/bin.js', 0o755)\"",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "test": "vitest run",
+    "types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

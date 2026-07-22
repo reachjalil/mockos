@@ -23,7 +23,7 @@ env:
 
 jobs:
   deploy:
-    name: Deploy and pre-M2 health probe
+    name: Deploy and run M2 acceptance smoke
     if: >-
       vars.MOCKOS_WORKER_DEPLOY_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
@@ -36,7 +36,10 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
+      MOCKOS_STAGING_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
       MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
+      MOCKOS_STAGING_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
     steps:
       - name: Check explicit deployment opt-in
         shell: bash
@@ -44,10 +47,17 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$MOCKOS_SMOKE_API_KEY"
+          test -n "$MOCKOS_STAGING_SMOKE_API_KEY"
           test -n "$MOCKOS_SMOKE_ORIGIN"
+          test -n "$MOCKOS_STAGING_SMOKE_ORIGIN"
           case "$MOCKOS_SMOKE_ORIGIN" in
             https://*) ;;
             *) printf 'MOCKOS_WORKER_URL must be an HTTPS origin.\n' >&2; exit 1 ;;
+          esac
+          case "$MOCKOS_STAGING_SMOKE_ORIGIN" in
+            https://*) ;;
+            *) printf 'MOCKOS_STAGING_WORKER_URL must be an HTTPS origin.\n' >&2; exit 1 ;;
           esac
       - name: Check out the CI-validated revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,13 +75,16 @@ jobs:
         run: node scripts/check-worker-wrangler.mjs --allow-workers-dev
       - name: Verify Wrangler identity
         run: pnpm --filter @mockos/worker exec wrangler whoami
+      - name: Build the smoke client
+        run: pnpm --filter @mockos/cli build
+      - name: Deploy staging Worker
+        run: pnpm --filter @mockos/worker exec wrangler deploy --env staging
+      - name: Run staging M2 acceptance
+        env:
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
+          MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
+        run: bash scripts/smoke-worker.sh
       - name: Deploy production Worker
         run: pnpm --filter @mockos/worker exec wrangler deploy --env=
-      - name: Run the public health probe
+      - name: Run production M2 acceptance
         run: bash scripts/smoke-worker.sh
-      - name: Record incomplete M2 acceptance
-        run: >-
-          printf '%s\n'
-          'Deployment and public health passed. This workflow does not claim the M2
-          authenticated MCP/OIDC/JWKS/scenario/delete smoke until that sequence replaces
-          the health-only probe.'

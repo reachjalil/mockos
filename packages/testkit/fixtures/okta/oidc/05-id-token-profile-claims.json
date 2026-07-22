@@ -1,0 +1,21 @@
+{
+  "name": "Okta ID token profile and email claims",
+  "description": "Profile and email scopes release the corresponding standard OIDC claims in the ID token.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "fixture-code-profile",
+      "scope": "openid profile email"
+    }
+  },
+  "expected": { "status": 200, "bodyContains": { "token_type": "Bearer" } },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/guides/overview/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Scope-aware ID-token claims are verified in the focused core suite."
+}

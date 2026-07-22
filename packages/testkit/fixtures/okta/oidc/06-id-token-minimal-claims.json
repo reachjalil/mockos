@@ -1,0 +1,21 @@
+{
+  "name": "Okta minimal ID token claims",
+  "description": "An openid-only request does not release profile or email claims.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "fixture-code-minimal",
+      "scope": "openid"
+    }
+  },
+  "expected": { "status": 200, "bodyContains": { "token_type": "Bearer" } },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/guides/overview/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Negative JWT claim assertions are verified in the focused core suite."
+}

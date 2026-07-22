@@ -1,0 +1,21 @@
+{
+  "name": "Okta expired device code",
+  "description": "A device code polled after its lifetime returns expired_token.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "device_code": "fixture-expired-device-code",
+      "client_id": "0oaMockClient"
+    }
+  },
+  "expected": { "status": 400, "bodyContains": { "error": "expired_token" } },
+  "provenance": "rfc",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc8628.html#section-3.5",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "The deterministic clock test advances beyond the 600-second lifetime."
+}

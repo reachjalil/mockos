@@ -41,6 +41,13 @@ export class DoSqlStore implements SqlStore {
     this.#storage = storage;
   }
 
+  #changes(): number {
+    const result = this.#storage.sql
+      .exec<{ changes: number }>("SELECT changes() AS changes")
+      .next();
+    return result.done ? 0 : Number(result.value.changes);
+  }
+
   run(sql: string, ...bindings: SqlValue[]): SqlRunResult {
     const userVersion = USER_VERSION_SET.exec(sql)?.[1];
     if (userVersion !== undefined) {
@@ -56,12 +63,12 @@ export class DoSqlStore implements SqlStore {
         Number(userVersion)
       );
       cursor.toArray();
-      return { changes: cursor.rowsWritten };
+      return { changes: this.#changes() };
     }
     const cursor = this.#storage.sql.exec(sql, ...bindings.map(toBinding));
     // Materialize RETURNING queries so writes complete before the caller moves on.
     cursor.toArray();
-    return { changes: cursor.rowsWritten };
+    return { changes: this.#changes() };
   }
 
   all<T extends SqlRow = SqlRow>(sql: string, ...bindings: SqlValue[]): T[] {

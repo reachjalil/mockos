@@ -41,6 +41,10 @@ export const sha256 = async (value: string | Uint8Array): Promise<string> =>
 export const sha256Base64Url = async (value: string | Uint8Array): Promise<string> =>
   base64UrlEncode(await digestBytes(value));
 
+/** OIDC token hash: the base64url left half of a SHA-256 token digest. */
+export const oidcTokenHash = async (token: string): Promise<string> =>
+  base64UrlEncode((await digestBytes(token)).slice(0, 16));
+
 const sortValue = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(sortValue);
   if (value && typeof value === "object") {

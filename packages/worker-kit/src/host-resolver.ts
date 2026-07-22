@@ -40,7 +40,11 @@ const classifyPath = (pathname: string) => {
   if (first && UUID_PATTERN.test(first)) {
     return { provider: "entra" as const, tenantId: first.toLowerCase() };
   }
-  if (pathname.startsWith("/oauth2/") || pathname.startsWith("/api/v1/")) {
+  if (
+    pathname === "/activate" ||
+    pathname.startsWith("/oauth2/") ||
+    pathname.startsWith("/api/v1/")
+  ) {
     return { provider: "okta" as const };
   }
   if (pathname === "/scim/v2" || pathname.startsWith("/scim/v2/")) {
@@ -141,15 +145,22 @@ export const resolveEnvironmentRequest = (
 
 export const forwardEnvironmentRequest = (
   request: Request,
-  resolution: ResolvedEnvironmentRequest
+  resolution: ResolvedEnvironmentRequest,
+  options: { redactAuthorization?: boolean } = {}
 ) => {
   const url = new URL(request.url);
   url.pathname = resolution.forwardedPath;
   const headers = new Headers(request.headers);
+  for (const name of [...headers.keys()]) {
+    if (name.toLowerCase().startsWith("x-mockos-")) headers.delete(name);
+  }
   headers.set("x-mockos-issuer-base", resolution.issuerBase);
   headers.set("x-mockos-public-path", new URL(request.url).pathname);
   if (resolution.environmentId) {
     headers.set("x-mockos-env", resolution.environmentId);
+  }
+  if (options.redactAuthorization) {
+    headers.set("x-mockos-redact-authorization", "true");
   }
   return new Request(url, {
     body: request.body,

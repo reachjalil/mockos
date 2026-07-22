@@ -1,0 +1,21 @@
+{
+  "name": "Okta introspection invalid client",
+  "description": "Invalid confidential-client authentication is rejected as invalid_client.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/introspect",
+    "form": {
+      "token": "fixture-access-token",
+      "client_id": "0oaMockClient",
+      "client_secret": "wrong-secret"
+    }
+  },
+  "expected": { "status": 401, "bodyContains": { "error": "invalid_client" } },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-oauth/guides/client-auth/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Core surfaces BAD_CLIENT_SECRET for the edge OAuth renderer."
+}

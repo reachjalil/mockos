@@ -1,0 +1,21 @@
+{
+  "name": "Okta consumed device code",
+  "description": "A device code is one-time use and cannot mint a second token response.",
+  "provider": "okta",
+  "area": "errors",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/token",
+    "form": {
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "device_code": "fixture-consumed-device-code",
+      "client_id": "0oaMockClient"
+    }
+  },
+  "expected": { "status": 400, "bodyContains": { "error": "invalid_grant" } },
+  "provenance": "rfc",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc8628.html#section-3.5",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Atomic consumption is asserted by polling twice in the focused core suite."
+}

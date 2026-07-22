@@ -1,0 +1,22 @@
+{
+  "name": "Okta access-token revocation",
+  "description": "The owning client can revoke an access token and receives an empty success response.",
+  "provider": "okta",
+  "area": "oidc",
+  "request": {
+    "method": "POST",
+    "path": "/e/acme/oauth2/default/v1/revoke",
+    "form": {
+      "token": "fixture-access-token",
+      "token_type_hint": "access_token",
+      "client_id": "0oaMockClient",
+      "client_secret": "okta-client-secret"
+    }
+  },
+  "expected": { "status": 200 },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/guides/revoke-tokens/main/",
+  "lastVerified": "2026-07-22",
+  "status": "documented",
+  "notes": "Core revocation followed by inactive introspection is covered by okta.test.ts."
+}

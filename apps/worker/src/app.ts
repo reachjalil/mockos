@@ -6,14 +6,20 @@ import {
   type Problem,
 } from "@mockos/contracts";
 import {
+  type EnvironmentCatalogDurableObject,
   type EnvironmentDurableObject,
+  type MockosMcpAgent,
+  MockosMcpAgent as MockosMcpAgentClass,
   routeEnvironmentRequest,
+  SELF_HOSTED_ACCOUNT_ID,
 } from "@mockos/worker-kit";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export type CloudflareEnv = {
+  ENVIRONMENT_CATALOG: DurableObjectNamespace<EnvironmentCatalogDurableObject>;
   ENVIRONMENTS: DurableObjectNamespace<EnvironmentDurableObject>;
+  MOCKOS_MCP: DurableObjectNamespace<MockosMcpAgent>;
   TID_INDEX?: KVNamespace;
   API_KEY?: string;
   BASE_DOMAIN?: string;
@@ -26,6 +32,10 @@ export type CloudflareEnv = {
 };
 
 type WorkerHonoEnv = { Bindings: CloudflareEnv };
+
+const mcpHandler = MockosMcpAgentClass.serve("/mcp", {
+  binding: "MOCKOS_MCP",
+});
 
 const problem = (
   status: number,
@@ -58,10 +68,58 @@ const presentedApiKey = (request: Request) => {
   return request.headers.get("x-api-key") ?? "";
 };
 
+const apiKeyFailure = (request: Request, env: CloudflareEnv) => {
+  const expected = env.API_KEY?.trim();
+  if (!expected) {
+    const body = problem(
+      503,
+      "Control API unavailable",
+      "The API_KEY secret has not been configured.",
+      "CONTROL_API_UNAVAILABLE",
+      request
+    );
+    return Response.json(body, { status: body.status });
+  }
+  if (sameSecret(presentedApiKey(request), expected)) return undefined;
+  const body = problem(
+    401,
+    "Unauthorized",
+    "Supply the self-host API key as a Bearer token.",
+    "UNAUTHORIZED",
+    request
+  );
+  return Response.json(body, {
+    status: body.status,
+    headers: { "www-authenticate": "Bearer realm=mockos-control" },
+  });
+};
+
+const withoutControlCredentials = (request: Request) => {
+  const headers = new Headers(request.headers);
+  headers.delete("authorization");
+  headers.delete("x-api-key");
+  return new Request(request, { headers });
+};
+
 const environmentStub = (env: CloudflareEnv, environmentId: string) => {
   const parsed = environmentIdSchema.safeParse(environmentId);
   if (!parsed.success) throw new Error("Invalid environment id.");
   return env.ENVIRONMENTS.get(env.ENVIRONMENTS.idFromName(parsed.data));
+};
+
+const environmentCatalog = (env: CloudflareEnv) =>
+  env.ENVIRONMENT_CATALOG.get(
+    env.ENVIRONMENT_CATALOG.idFromName(SELF_HOSTED_ACCOUNT_ID)
+  );
+
+const serveMcp = async (context: Context<WorkerHonoEnv>) => {
+  const failure = apiKeyFailure(context.req.raw, context.env);
+  if (failure) return failure;
+  return mcpHandler.fetch(
+    withoutControlCredentials(context.req.raw),
+    context.env,
+    context.executionCtx as unknown as Parameters<typeof mcpHandler.fetch>[2]
+  );
 };
 
 export const createWorkerApp = () => {
@@ -86,30 +144,12 @@ export const createWorkerApp = () => {
     })
   );
 
+  app.all("/mcp", serveMcp);
+  app.all("/mcp/*", serveMcp);
+
   app.use("/__mockos/v1/*", async (context, next) => {
-    const expected = context.env.API_KEY?.trim();
-    if (!expected) {
-      const body = problem(
-        503,
-        "Control API unavailable",
-        "The API_KEY secret has not been configured.",
-        "CONTROL_API_UNAVAILABLE",
-        context.req.raw
-      );
-      return context.json(body, body.status as ContentfulStatusCode);
-    }
-    if (!sameSecret(presentedApiKey(context.req.raw), expected)) {
-      const body = problem(
-        401,
-        "Unauthorized",
-        "Supply the self-host API key as a Bearer token.",
-        "UNAUTHORIZED",
-        context.req.raw
-      );
-      return context.json(body, body.status as ContentfulStatusCode, {
-        "www-authenticate": "Bearer realm=mockos-control",
-      });
-    }
+    const failure = apiKeyFailure(context.req.raw, context.env);
+    if (failure) return failure;
     await next();
   });
 
@@ -122,6 +162,7 @@ export const createWorkerApp = () => {
     const configured = await environmentStub(context.env, environmentId).configure(
       config
     );
+    await environmentCatalog(context.env).registerEnvironment(configured);
     if (context.env.TID_INDEX) {
       await context.env.TID_INDEX.put(`tid:${configured.tenantId}`, environmentId);
     }
@@ -172,8 +213,30 @@ export const createWorkerApp = () => {
   });
 
   app.delete("/__mockos/v1/environments/:environmentId", async (context) => {
-    await environmentStub(context.env, context.req.param("environmentId")).purge();
-    return context.body(null, 204);
+    const environmentId = environmentIdSchema.parse(context.req.param("environmentId"));
+    const stub = environmentStub(context.env, environmentId);
+    const catalog = environmentCatalog(context.env);
+    let config = await catalog.beginDeleteEnvironment(environmentId);
+    if (!config) {
+      const legacyConfig = await stub.getConfig();
+      if (!legacyConfig) return context.body(null, 204);
+      await catalog.registerEnvironment(legacyConfig);
+      config = await catalog.beginDeleteEnvironment(environmentId);
+    }
+    if (!config) throw new Error("Environment catalog deletion could not begin.");
+    let purged = false;
+    try {
+      await stub.purge();
+      purged = true;
+      if (context.env.TID_INDEX) {
+        await context.env.TID_INDEX.delete(`tid:${config.tenantId}`);
+      }
+      await catalog.completeDeleteEnvironment(environmentId);
+      return context.body(null, 204);
+    } catch (error) {
+      if (!purged) await catalog.restoreEnvironment(config);
+      throw error;
+    }
   });
 
   app.all("*", async (context) => {
