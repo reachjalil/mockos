@@ -1,0 +1,136 @@
+name: Run deployed Worker smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact deployed source SHA with successful push CI
+        required: true
+        type: string
+      deployed_version_id:
+        description: Exact 100%-active Cloudflare Worker version verified by the caller
+        required: true
+        type: string
+      target:
+        description: Isolated Worker target to smoke
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: worker-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24.11.1
+  PNPM_VERSION: 10.30.2
+  MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
+  MOCKOS_STAGING_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
+
+jobs:
+  smoke:
+    name: Smoke ${{ inputs.target }} deployed Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the current trusted smoke runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify current and deployed source provenance
+        id: provenance
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DEPLOYED_VERSION_ID: ${{ inputs.deployed_version_id }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            printf 'Deployed Worker smoke must be dispatched from main.\n' >&2
+            exit 1
+          fi
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'candidate_sha must be a full lowercase commit SHA.\n' >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOYED_VERSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            printf 'deployed_version_id must be a lowercase UUID.\n' >&2
+            exit 1
+          fi
+          current_sha=$(git rev-parse HEAD)
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$current_sha"
+          git merge-base --is-ancestor "$CANDIDATE_SHA" "$current_sha"
+          git diff --quiet "$CANDIDATE_SHA" "$current_sha" -- \
+            .github/workflows/ci.yml apps/worker packages scripts \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml \
+            .npmrc biome.json tsconfig.base.json turbo.json
+          verify_ci() {
+            local sha="$1"
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&branch=main&event=push&status=success&per_page=100" |
+              EXPECTED_SHA="$sha" node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                const payload = JSON.parse(readFileSync(0, "utf8"));
+                const matches = payload.workflow_runs?.filter(
+                  (run) =>
+                    run.head_sha === process.env.EXPECTED_SHA &&
+                    run.head_branch === "main" &&
+                    run.event === "push" &&
+                    run.conclusion === "success" &&
+                    run.path === ".github/workflows/ci.yml"
+                );
+                if (!matches?.length) {
+                  throw new Error("No successful push CI exists for the exact SHA.");
+                }
+                matches.sort((left, right) => right.id - left.id);
+                process.stdout.write(String(matches[0].id));
+              '
+          }
+          candidate_ci_run_id=$(verify_ci "$CANDIDATE_SHA")
+          current_ci_run_id=$(verify_ci "$current_sha")
+          printf 'candidate_ci_run_id=%s\n' "$candidate_ci_run_id" >> "$GITHUB_OUTPUT"
+          printf 'current_ci_run_id=%s\n' "$current_ci_run_id" >> "$GITHUB_OUTPUT"
+          printf 'current_sha=%s\n' "$current_sha" >> "$GITHUB_OUTPUT"
+          printf '## Deployed Worker smoke\n\n- Target: `%s`\n- Deployed source: `%s`\n- Caller-verified active version: `%s`\n- Candidate push CI: `%s`\n- Smoke-runner source: `%s`\n- Smoke-runner push CI: `%s`\n' \
+            '${{ inputs.target }}' "$CANDIDATE_SHA" "$DEPLOYED_VERSION_ID" \
+            "$candidate_ci_run_id" "$current_sha" "$current_ci_run_id" >> "$GITHUB_STEP_SUMMARY"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Bind smoke origins to Wrangler configuration
+        run: node scripts/check-worker-wrangler.mjs --allow-workers-dev
+      - name: Build the smoke client
+        run: pnpm --filter @mockos/cli build
+      - name: Run staging M6 sampled acceptance
+        if: inputs.target == 'staging'
+        env:
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
+          MOCKOS_EXPECTED_WORKER_VERSION_ID: ${{ inputs.deployed_version_id }}
+          MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
+        run: bash scripts/smoke-worker.sh
+      - name: Run production M6 sampled acceptance
+        if: inputs.target == 'production'
+        env:
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
+          MOCKOS_EXPECTED_WORKER_VERSION_ID: ${{ inputs.deployed_version_id }}
+          MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
+        run: bash scripts/smoke-worker.sh
+      - name: Record acceptance boundary
+        run: |
+          printf '%s\n' '- Result: sampled M6 mockOS acceptance passed on the exact serving Worker version, with cleanup.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '- Boundary: this is exact-version mock deployment evidence, not verified-live Entra ID or Okta evidence.' >> "$GITHUB_STEP_SUMMARY"

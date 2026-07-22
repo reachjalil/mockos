@@ -66,6 +66,22 @@ export const requireNoSecretLeak = (value, secrets, label) => {
   }
 };
 
+export const requireServingWorkerVersion = (health, expectedVersionId) => {
+  if (
+    !health ||
+    typeof health !== "object" ||
+    Array.isArray(health) ||
+    typeof expectedVersionId !== "string" ||
+    !expectedVersionId ||
+    health.workerVersionId !== expectedVersionId
+  ) {
+    throw new Error(
+      `Expected the live Worker request to be served by version ${expectedVersionId}.`
+    );
+  }
+  return expectedVersionId;
+};
+
 export const resolveTaggedWorkerVersion = (versions, tag) => {
   if (!Array.isArray(versions) || typeof tag !== "string" || !tag) {
     throw new Error("Worker version evidence requires a version list and tag.");

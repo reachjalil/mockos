@@ -4,6 +4,7 @@ import {
   jwtParts,
   requireActiveWorkerVersion,
   requireNoSecretLeak,
+  requireServingWorkerVersion,
   requireSingleActiveWorkerVersion,
   requireTrustedGroupFallback,
   resolveTaggedWorkerVersion,
@@ -80,6 +81,22 @@ test("redaction sentinel helper fails closed on a leaked secret", () => {
   assert.throws(
     () => requireNoSecretLeak("SyntheticSecret", ["SyntheticSecret"], "log"),
     /exposed a synthetic secret sentinel/
+  );
+});
+
+test("serving-version evidence requires the exact live metadata binding", () => {
+  const versionId = "11111111-1111-4111-8111-111111111111";
+  assert.equal(
+    requireServingWorkerVersion({ workerVersionId: versionId }, versionId),
+    versionId
+  );
+  assert.throws(
+    () => requireServingWorkerVersion({ workerVersionId: "other-version" }, versionId),
+    /live Worker request/
+  );
+  assert.throws(
+    () => requireServingWorkerVersion({}, versionId),
+    /live Worker request/
   );
 });
 

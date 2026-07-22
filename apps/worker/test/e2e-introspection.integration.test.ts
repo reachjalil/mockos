@@ -8,6 +8,11 @@ const executionContext = {} as ExecutionContext;
 const bindings = (enabled: boolean): CloudflareEnv =>
   ({
     API_KEY: "introspection-test-key",
+    CF_VERSION_METADATA: {
+      id: "11111111-1111-4111-8111-111111111111",
+      tag: "test-version",
+      timestamp: "2026-07-22T00:00:00.000Z",
+    },
     E2E_OWNER_NONCE: "owned-e2e-process",
     ...(enabled
       ? { E2E_INTROSPECTION_ENABLED: "true" }
@@ -23,6 +28,7 @@ describe("local E2E introspection seam", () => {
     );
     expect(await enabled.json()).toMatchObject({
       service: "mockos",
+      workerVersionId: "11111111-1111-4111-8111-111111111111",
       e2eOwnerNonce: "owned-e2e-process",
     });
 

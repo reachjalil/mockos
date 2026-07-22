@@ -190,6 +190,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           EXPECTED_VERSION_ID: ${{ steps.deploy_staging.outputs.version_id }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
+          MOCKOS_EXPECTED_WORKER_VERSION_ID: ${{ steps.deploy_staging.outputs.version_id }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
         shell: bash
         run: |
@@ -270,6 +271,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           EXPECTED_VERSION_ID: ${{ steps.deploy_production.outputs.version_id }}
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
+          MOCKOS_EXPECTED_WORKER_VERSION_ID: ${{ steps.deploy_production.outputs.version_id }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
         shell: bash
         run: |

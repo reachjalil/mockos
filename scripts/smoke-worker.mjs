@@ -2,12 +2,14 @@ import { McpToolClient, unwrapToolResult } from "../packages/cli/dist/index.js";
 import {
   jwtParts,
   requireNoSecretLeak,
+  requireServingWorkerVersion,
   requireTrustedGroupFallback,
   verifyJwtSignature,
 } from "./smoke-worker-helpers.mjs";
 
 const origin = process.env.MOCKOS_SMOKE_ORIGIN;
 const apiKey = process.env.MOCKOS_SMOKE_API_KEY;
+const expectedWorkerVersionId = process.env.MOCKOS_EXPECTED_WORKER_VERSION_ID;
 const requestTimeoutMs = Number.parseInt(
   process.env.MOCKOS_SMOKE_TIMEOUT_MS ?? "30000",
   10
@@ -196,6 +198,20 @@ const jsonRequest = async ({ url, method = "GET", headers = {}, body, label }) =
   return response;
 };
 
+const verifyServingWorkerVersion = async (label) => {
+  if (!expectedWorkerVersionId) return;
+  const response = await timed(label, () =>
+    fetch(`${publicOrigin}/health`, {
+      signal: AbortSignal.timeout(requestTimeoutMs),
+    })
+  );
+  await expectStatus(response, 200, label);
+  requireServingWorkerVersion(
+    requireObject(await response.json(), `${label} body`),
+    expectedWorkerVersionId
+  );
+};
+
 try {
   const health = await timed("health probe", () =>
     fetch(`${publicOrigin}/health`, {
@@ -203,6 +219,12 @@ try {
     })
   );
   await expectStatus(health, 200, "Health probe");
+  if (expectedWorkerVersionId) {
+    requireServingWorkerVersion(
+      requireObject(await health.json(), "health probe body"),
+      expectedWorkerVersionId
+    );
+  }
 
   await timed("authenticated MCP initialization", () => client.connect());
   const toolNames = new Set(
@@ -1633,6 +1655,14 @@ try {
     cleanupFailures.push(error);
     process.stderr.write(
       `WARN  MCP session cleanup failed: ${error instanceof Error ? error.message : String(error)}\n`
+    );
+  }
+  try {
+    await verifyServingWorkerVersion("final serving-version probe");
+  } catch (error) {
+    cleanupFailures.push(error);
+    process.stderr.write(
+      `WARN  final serving-version probe failed: ${error instanceof Error ? error.message : String(error)}\n`
     );
   }
   if (cleanupFailures.length > 0) process.exitCode = 1;

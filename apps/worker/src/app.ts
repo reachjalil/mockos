@@ -26,6 +26,7 @@ export type CloudflareEnv = {
   API_KEY?: string;
   ALLOW_INSECURE_TARGETS?: string;
   BASE_DOMAIN?: string;
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
   ENTRA_HOST?: string;
   E2E_INTROSPECTION_ENABLED?: string;
   E2E_OWNER_NONCE?: string;
@@ -284,6 +285,9 @@ export const createWorkerApp = () => {
       ok: true,
       service: "mockos",
       hostingMode: context.env.HOSTING_MODE,
+      ...(context.env.CF_VERSION_METADATA?.id
+        ? { workerVersionId: context.env.CF_VERSION_METADATA.id }
+        : {}),
       ...(context.env.E2E_INTROSPECTION_ENABLED === "true" &&
       context.env.E2E_OWNER_NONCE
         ? { e2eOwnerNonce: context.env.E2E_OWNER_NONCE }
