@@ -1,4 +1,4 @@
-name: Deploy worker (M3 gate)
+name: Deploy worker (M6 gate)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ env:
 
 jobs:
   deploy:
-    name: Deploy and run M3 acceptance smoke
+    name: Deploy and run M6 sampled acceptance
     if: >-
       vars.MOCKOS_WORKER_DEPLOY_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           candidate_sha=$(git rev-parse HEAD)
           printf 'sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
-          printf '## Worker deployment\n\n- Candidate SHA: `%s`\n' "$candidate_sha" >> "$GITHUB_STEP_SUMMARY"
+          printf '## M6 Worker deployment\n\n- Candidate SHA: `%s`\n' "$candidate_sha" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify Wrangler identity
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -111,7 +111,7 @@ jobs:
           ')
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
           printf -- '- Staging version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run staging M3 acceptance
+      - name: Run staging M6 sampled acceptance
         env:
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
@@ -138,8 +138,19 @@ jobs:
           ')
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
           printf -- '- Production version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run production M3 acceptance
+      - name: Run production M6 sampled acceptance
         env:
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}
         run: bash scripts/smoke-worker.sh
+      - name: Record M6 acceptance boundary
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          STAGING_VERSION_ID: ${{ steps.deploy_staging.outputs.version_id }}
+          PRODUCTION_VERSION_ID: ${{ steps.deploy_production.outputs.version_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf -- '- Staging and production sampled M6 acceptance passed for `%s`.\n' "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Staging version: `%s`; production version: `%s`.\n' "$STAGING_VERSION_ID" "$PRODUCTION_VERSION_ID" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '- Scope: bounded synthetic mockOS deployment evidence; this run does not claim broad Entra ID or Okta provider parity.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,10 @@
 import { McpToolClient, unwrapToolResult } from "../packages/cli/dist/index.js";
+import {
+  jwtParts,
+  requireNoSecretLeak,
+  requireTrustedGroupFallback,
+  verifyJwtSignature,
+} from "./smoke-worker-helpers.mjs";
 
 const origin = process.env.MOCKOS_SMOKE_ORIGIN;
 const apiKey = process.env.MOCKOS_SMOKE_API_KEY;
@@ -92,6 +98,22 @@ const verifyScimDiscovery = async (baseUrl, label) => {
   }
 };
 
+const scimRequest = async ({ baseUrl, path, method, body, expectedStatus, label }) => {
+  const response = await jsonRequest({
+    url: endpoint(baseUrl, path, `${label} scimBaseUrl`),
+    method,
+    headers: scimHeaders,
+    body,
+    label,
+  });
+  await expectStatus(response, expectedStatus, label);
+  const parsedBody =
+    expectedStatus === 204
+      ? undefined
+      : requireObject(await response.json(), `${label} response body`);
+  return { response, body: parsedBody };
+};
+
 const patchScimGroup = async ({
   baseUrl,
   groupId,
@@ -136,36 +158,41 @@ const base64Url = (bytes) =>
     .replaceAll("/", "_")
     .replace(/=+$/, "");
 
-const decodeJwtPart = (value) =>
-  JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-
 const verifyJwt = async (token, jwks, expected) => {
-  const parts = token.split(".");
-  if (parts.length !== 3) throw new Error("The smoke flow did not receive a JWT.");
-  const [encodedHeader, encodedPayload, encodedSignature] = parts;
-  const header = decodeJwtPart(encodedHeader);
-  const claims = decodeJwtPart(encodedPayload);
-  const jwk = jwks.keys?.find((candidate) => candidate.kid === header.kid);
-  if (!jwk) throw new Error("The token signing key was absent from JWKS.");
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-  const verified = await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    Buffer.from(encodedSignature, "base64url"),
-    new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
-  );
-  if (!verified) throw new Error("The smoke ID token signature did not verify.");
+  const { header, claims } = jwtParts(token);
+  if (!(await verifyJwtSignature(token, jwks))) {
+    throw new Error("The smoke ID token signature did not verify.");
+  }
   for (const [name, value] of Object.entries(expected)) {
     if (claims[name] !== value) {
       throw new Error(`The smoke ID token has an unexpected ${name} claim.`);
     }
   }
+  return { header, claims };
+};
+
+const requireArray = (value, label) => {
+  if (!Array.isArray(value)) throw new Error(`Expected ${label} to be an array.`);
+  return value;
+};
+
+const requireNumber = (value, label) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Expected ${label} to be a finite number.`);
+  }
+  return value;
+};
+
+const jsonRequest = async ({ url, method = "GET", headers = {}, body, label }) => {
+  const response = await timed(label, () =>
+    fetch(url, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(requestTimeoutMs),
+    })
+  );
+  return response;
 };
 
 try {
@@ -297,13 +324,19 @@ try {
     throw new Error("OIDC discovery does not match the MCP well-known URLs.");
   }
 
-  const jwksResponse = await timed("JWKS fetch", () =>
+  const jwksResponse = await timed("pre-rotation JWKS fetch", () =>
     fetch(urls.jwksUri, {
       signal: AbortSignal.timeout(requestTimeoutMs),
     })
   );
-  await expectStatus(jwksResponse, 200, "JWKS");
-  const jwks = await jwksResponse.json();
+  await expectStatus(jwksResponse, 200, "Pre-rotation JWKS");
+  const beforeRotationJwks = requireObject(
+    await jwksResponse.json(),
+    "pre-rotation JWKS body"
+  );
+  if (requireArray(beforeRotationJwks.keys, "pre-rotation JWKS keys").length < 2) {
+    throw new Error("Pre-rotation JWKS did not publish an active and successor key.");
+  }
 
   const minted = await call("mint_token", {
     environmentId,
@@ -314,8 +347,8 @@ try {
   if (typeof minted.token !== "string") {
     throw new Error("mint_token did not return a JWT.");
   }
-  await timed("minted JWT signature verification", () =>
-    verifyJwt(minted.token, jwks, {
+  const preRotationJwt = await timed("minted JWT signature verification", () =>
+    verifyJwt(minted.token, beforeRotationJwks, {
       iss: urls.issuer,
       aud: application.clientId,
       tid: tenantId,
@@ -381,6 +414,16 @@ try {
     throw new Error("Hosted login did not return the expected code and state.");
   }
 
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-rotate-mid-authorization-session",
+    injectionPoint: "token.before_sign",
+    action: { type: "rotate_signing_key" },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+
   const tokenResponse = await timed("OIDC token exchange", () =>
     fetch(urls.tokenEndpoint, {
       method: "POST",
@@ -397,16 +440,55 @@ try {
     })
   );
   await expectStatus(tokenResponse, 200, "OIDC token exchange");
-  const tokens = await tokenResponse.json();
-  await timed("OIDC ID token signature verification", () =>
-    verifyJwt(requireString(tokens.id_token, "authorization-code ID token"), jwks, {
+  const tokens = requireObject(await tokenResponse.json(), "OIDC token response");
+  const afterRotationJwksResponse = await timed("post-rotation JWKS fetch", () =>
+    fetch(urls.jwksUri, { signal: AbortSignal.timeout(requestTimeoutMs) })
+  );
+  await expectStatus(afterRotationJwksResponse, 200, "Post-rotation JWKS");
+  const afterRotationJwks = requireObject(
+    await afterRotationJwksResponse.json(),
+    "post-rotation JWKS body"
+  );
+  const postRotationKeys = requireArray(
+    afterRotationJwks.keys,
+    "post-rotation JWKS keys"
+  );
+  const postRotationJwt = await timed("OIDC ID token signature verification", () =>
+    verifyJwt(
+      requireString(tokens.id_token, "authorization-code ID token"),
+      afterRotationJwks,
+      {
+        iss: urls.issuer,
+        aud: application.clientId,
+        tid: tenantId,
+        oid: userId,
+        nonce: authorizationNonce,
+      }
+    )
+  );
+  if (preRotationJwt.header.kid === postRotationJwt.header.kid) {
+    throw new Error("Mid-session rotation did not promote a new signing kid.");
+  }
+  const publishedKids = new Set(postRotationKeys.map(({ kid }) => kid));
+  if (
+    !publishedKids.has(preRotationJwt.header.kid) ||
+    !publishedKids.has(postRotationJwt.header.kid) ||
+    postRotationKeys.length < 3
+  ) {
+    throw new Error("Post-rotation JWKS did not retain the old/new overlap.");
+  }
+  await timed("pre-rotation JWT overlap verification", () =>
+    verifyJwt(minted.token, afterRotationJwks, {
       iss: urls.issuer,
       aud: application.clientId,
       tid: tenantId,
       oid: userId,
-      nonce: authorizationNonce,
     })
   );
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-rotate-mid-authorization-session",
+  });
 
   const initialRefreshToken = requireString(
     tokens.refresh_token,
@@ -444,7 +526,7 @@ try {
   await timed("refreshed Entra ID token signature verification", () =>
     verifyJwt(
       requireString(refreshedTokens.id_token, "refreshed Entra ID token"),
-      jwks,
+      afterRotationJwks,
       {
         iss: urls.issuer,
         aud: application.clientId,
@@ -453,6 +535,428 @@ try {
       }
     )
   );
+
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-clock-forward-once",
+    injectionPoint: "token.before_sign",
+    action: { type: "token_clock_skew", seconds: 300 },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+  const clockSampledAt = Math.floor(Date.now() / 1_000);
+  const skewed = await call("mint_token", {
+    environmentId,
+    clientId: application.clientId,
+    subject: userId,
+    audience: application.clientId,
+  });
+  const skewedClaims = requireObject(skewed.claims, "clock-skew token claims");
+  const skewedIat = requireNumber(skewedClaims.iat, "clock-skew iat");
+  const skewedNbf = requireNumber(skewedClaims.nbf, "clock-skew nbf");
+  const skewedExp = requireNumber(skewedClaims.exp, "clock-skew exp");
+  const baselineClaims = requireObject(minted.claims, "baseline mint claims");
+  const baselineIat = requireNumber(baselineClaims.iat, "baseline iat");
+  const baselineExp = requireNumber(baselineClaims.exp, "baseline exp");
+  if (
+    skewedIat < clockSampledAt + 295 ||
+    skewedIat > Math.floor(Date.now() / 1_000) + 305 ||
+    skewedNbf !== skewedIat ||
+    skewedExp - skewedIat !== baselineExp - baselineIat
+  ) {
+    throw new Error("The one-shot token clock skew did not move temporal claims only.");
+  }
+  for (const claim of ["iss", "aud", "sub", "tid", "oid"]) {
+    if (skewedClaims[claim] !== baselineClaims[claim]) {
+      throw new Error(`Token clock skew unexpectedly changed the ${claim} claim.`);
+    }
+  }
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-clock-forward-once",
+  });
+
+  const brokenVariants = [
+    "expired",
+    "wrong_audience",
+    "not_yet_valid",
+    "bad_signature",
+    "wrong_issuer",
+  ];
+  const brokenTokens = new Map();
+  for (const variant of brokenVariants) {
+    const broken = await call("mint_token", {
+      environmentId,
+      clientId: application.clientId,
+      subject: userId,
+      audience: application.clientId,
+      broken: variant,
+    });
+    const brokenToken = requireString(broken.token, `${variant} token`);
+    if (broken.broken !== variant) {
+      throw new Error(`mint_token did not identify the ${variant} variant.`);
+    }
+    const details = jwtParts(brokenToken);
+    const validSignature = await timed(`${variant} token signature check`, () =>
+      verifyJwtSignature(brokenToken, afterRotationJwks)
+    );
+    if (validSignature !== (variant !== "bad_signature")) {
+      throw new Error(`The ${variant} token had an unexpected signature outcome.`);
+    }
+    brokenTokens.set(variant, details.claims);
+  }
+  const brokenSampledAt = Math.floor(Date.now() / 1_000);
+  if (
+    requireNumber(brokenTokens.get("expired")?.exp, "expired exp") >= brokenSampledAt ||
+    brokenTokens.get("wrong_audience")?.aud === application.clientId ||
+    requireNumber(brokenTokens.get("not_yet_valid")?.nbf, "not-yet-valid nbf") <=
+      brokenSampledAt ||
+    brokenTokens.get("wrong_issuer")?.iss === urls.issuer
+  ) {
+    throw new Error("One or more deterministic broken-token claims were not broken.");
+  }
+
+  const overageUserName = `groups-${suffix}@example.test`;
+  const overageSeed = await call("seed_identities", {
+    environmentId,
+    users: [
+      {
+        userName: overageUserName,
+        displayName: "M6 Group Overage",
+        password: "Synthetic-Overage-Passw0rd!",
+        active: true,
+        mfaState: "none",
+        roles: [],
+      },
+    ],
+    groups: Array.from({ length: 200 }, (_, index) => ({
+      displayName: `M6 Security Group ${String(index + 1).padStart(3, "0")}`,
+      members: [overageUserName],
+    })),
+  });
+  const overageUserId = requireString(
+    overageSeed.users?.[0]?.id,
+    "group-overage user id"
+  );
+  const inlineGroupIds = requireArray(
+    overageSeed.groups,
+    "group-overage seed groups"
+  ).map(({ id }) => requireString(id, "group-overage group id"));
+  if (inlineGroupIds.length !== 200) {
+    throw new Error(
+      "The inline group-overage setup did not create exactly 200 groups."
+    );
+  }
+  const overageApplication = await call("create_application", {
+    environmentId,
+    name: "M6 group-overage client",
+    redirectUris: [redirectUri],
+    grantTypes: ["authorization_code"],
+    appRoles: [],
+    groupClaimsMode: "all",
+  });
+  const inlineGroupsToken = await call("mint_token", {
+    environmentId,
+    clientId: overageApplication.clientId,
+    subject: overageUserId,
+    audience: overageApplication.clientId,
+  });
+  const inlineClaims = requireObject(
+    inlineGroupsToken.claims,
+    "200-group token claims"
+  );
+  if (
+    requireArray(inlineClaims.groups, "200-group inline claim").length !== 200 ||
+    Object.hasOwn(inlineClaims, "_claim_names") ||
+    Object.hasOwn(inlineClaims, "_claim_sources")
+  ) {
+    throw new Error("The Entra 200-group boundary did not remain inline.");
+  }
+
+  const group201 = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: "Groups",
+    method: "POST",
+    body: {
+      schemas: ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      displayName: "M6 Security Group 201",
+      members: [{ value: overageUserId }],
+    },
+    expectedStatus: 201,
+    label: "Entra SCIM group-overage boundary create",
+  });
+  const group201Id = requireString(group201.body?.id, "group 201 id");
+  const overageToken = await call("mint_token", {
+    environmentId,
+    clientId: overageApplication.clientId,
+    subject: overageUserId,
+    audience: overageApplication.clientId,
+  });
+  const overageClaims = requireObject(overageToken.claims, "201-group token claims");
+  const fallbackEndpoint = requireTrustedGroupFallback({
+    claims: overageClaims,
+    graphBaseUrl: requireString(urls.graphBaseUrl, "Entra graphBaseUrl"),
+    userId: overageUserId,
+  });
+  const overageBearer = requireString(overageToken.token, "group-overage token");
+  const invalidFallback = await jsonRequest({
+    url: fallbackEndpoint,
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${overageBearer}`,
+      "content-type": "application/json",
+    },
+    body: { securityEnabledOnly: true, unexpected: true },
+    label: "strict Graph getMemberObjects rejection",
+  });
+  await expectStatus(invalidFallback, 400, "Strict Graph getMemberObjects rejection");
+  const fallback = await jsonRequest({
+    url: fallbackEndpoint,
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${overageBearer}`,
+      "content-type": "Application/JSON; Charset=UTF-8",
+    },
+    body: { securityEnabledOnly: true },
+    label: "strict Graph getMemberObjects fallback",
+  });
+  await expectStatus(fallback, 200, "Strict Graph getMemberObjects fallback");
+  const fallbackBody = requireObject(
+    await fallback.json(),
+    "Graph getMemberObjects response"
+  );
+  const resolvedGroupIds = requireArray(
+    fallbackBody.value,
+    "Graph getMemberObjects values"
+  );
+  if (
+    resolvedGroupIds.length !== 201 ||
+    new Set(resolvedGroupIds).size !== 201 ||
+    !resolvedGroupIds.includes(group201Id) ||
+    inlineGroupIds.some((id) => !resolvedGroupIds.includes(id))
+  ) {
+    throw new Error("Graph fallback did not resolve the exact 201 group memberships.");
+  }
+  const graphFallbackLog = await call("get_request_log", {
+    environmentId,
+    source: "inbound",
+    method: "POST",
+    path: new URL(fallbackEndpoint).pathname,
+    limit: 10,
+  });
+  const graphFallbackEntries = requireArray(
+    graphFallbackLog.entries,
+    "Graph fallback request log entries"
+  );
+  if (
+    graphFallbackEntries.length !== 2 ||
+    !graphFallbackEntries.some(({ responseStatus }) => responseStatus === 200) ||
+    !graphFallbackEntries.some(({ responseStatus }) => responseStatus === 400)
+  ) {
+    throw new Error("The strict Graph fallback requests were not captured exactly.");
+  }
+
+  const patchSchema = "urn:ietf:params:scim:api:messages:2.0:PatchOp";
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-scim-conflict-once",
+    injectionPoint: "scim.before_commit",
+    action: { type: "scim_conflict" },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+  const conflict = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: {
+      schemas: [patchSchema],
+      Operations: [
+        { op: "replace", path: "displayName", value: "Must not persist" },
+        { op: "replace", path: "active", value: false },
+      ],
+    },
+    expectedStatus: 409,
+    label: "injected SCIM uniqueness conflict",
+  });
+  if (conflict.body?.status !== "409" || conflict.body?.scimType !== "uniqueness") {
+    throw new Error("Injected SCIM conflict did not return a uniqueness 409.");
+  }
+  const afterConflict = await jsonRequest({
+    url: endpoint(
+      urls.scimBaseUrl,
+      `Users/${encodeURIComponent(userId)}`,
+      "Entra scimBaseUrl"
+    ),
+    headers: { authorization: scimHeaders.authorization },
+    label: "SCIM conflict atomicity read",
+  });
+  await expectStatus(afterConflict, 200, "SCIM conflict atomicity read");
+  const afterConflictBody = requireObject(
+    await afterConflict.json(),
+    "SCIM conflict atomicity body"
+  );
+  if (
+    afterConflictBody.displayName !== "Ada Smoke" ||
+    afterConflictBody.active !== true
+  ) {
+    throw new Error("The SCIM conflict partially changed the User.");
+  }
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-scim-conflict-once",
+  });
+
+  const missingSchemasPatch = {
+    Operations: [
+      {
+        op: "replace",
+        path: "displayName",
+        value: "M6 tolerated missing schema",
+      },
+    ],
+  };
+  const strictMissingSchemas = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: missingSchemasPatch,
+    expectedStatus: 400,
+    label: "strict SCIM missing-schemas rejection",
+  });
+  if (strictMissingSchemas.body?.scimType !== "invalidValue") {
+    throw new Error("Missing SCIM schemas did not fail strict parsing.");
+  }
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-scim-tolerate-missing-schemas-once",
+    injectionPoint: "scim.patch_parse",
+    action: { type: "scim_patch_tolerance", malformedCase: "missing_schemas" },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+  const toleratedMissingSchemas = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: missingSchemasPatch,
+    expectedStatus: 200,
+    label: "narrow SCIM missing-schemas tolerance",
+  });
+  if (toleratedMissingSchemas.body?.displayName !== "M6 tolerated missing schema") {
+    throw new Error("The missing-schemas tolerance did not apply its one PATCH.");
+  }
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-scim-tolerate-missing-schemas-once",
+  });
+
+  const singletonPatch = {
+    schemas: [patchSchema],
+    Operations: {
+      op: "replace",
+      path: "displayName",
+      value: "M6 tolerated singleton",
+    },
+  };
+  const strictSingleton = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: singletonPatch,
+    expectedStatus: 400,
+    label: "strict SCIM singleton-operations rejection",
+  });
+  if (strictSingleton.body?.scimType !== "invalidValue") {
+    throw new Error("Singleton SCIM Operations did not fail strict parsing.");
+  }
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-scim-tolerate-singleton-once",
+    injectionPoint: "scim.patch_parse",
+    action: { type: "scim_patch_tolerance", malformedCase: "singleton_operations" },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+  const toleratedSingleton = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Users/${encodeURIComponent(userId)}`,
+    method: "PATCH",
+    body: singletonPatch,
+    expectedStatus: 200,
+    label: "narrow SCIM singleton-operations tolerance",
+  });
+  if (toleratedSingleton.body?.displayName !== "M6 tolerated singleton") {
+    throw new Error("The singleton-operations tolerance did not apply its one PATCH.");
+  }
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-scim-tolerate-singleton-once",
+  });
+
+  const raceGroup = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: "Groups",
+    method: "POST",
+    body: {
+      schemas: ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      displayName: "M6 disposable race group",
+      members: [{ value: userId }],
+    },
+    expectedStatus: 201,
+    label: "SCIM race group setup",
+  });
+  const raceGroupId = requireString(raceGroup.body?.id, "SCIM race group id");
+  const racePatch = {
+    schemas: [patchSchema],
+    Operations: [{ op: "replace", path: "displayName", value: "Must not persist" }],
+  };
+  await call("set_scenario", {
+    environmentId,
+    id: "m6-scim-soft-delete-race-once",
+    injectionPoint: "scim.before_commit",
+    action: { type: "scim_soft_delete_race" },
+    probability: 1,
+    remaining: 1,
+    enabled: true,
+  });
+  const race = await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Groups/${encodeURIComponent(raceGroupId)}`,
+    method: "PATCH",
+    body: racePatch,
+    expectedStatus: 404,
+    label: "injected SCIM soft-delete race",
+  });
+  if (race.body?.status !== "404") {
+    throw new Error("The SCIM soft-delete race did not return 404.");
+  }
+  await call("clear_scenario", {
+    environmentId,
+    scenarioId: "m6-scim-soft-delete-race-once",
+  });
+  const hiddenRaceGroup = await jsonRequest({
+    url: endpoint(
+      urls.scimBaseUrl,
+      `Groups/${encodeURIComponent(raceGroupId)}`,
+      "Entra scimBaseUrl"
+    ),
+    headers: { authorization: scimHeaders.authorization },
+    label: "SCIM raced group tombstone read",
+  });
+  await expectStatus(hiddenRaceGroup, 404, "SCIM raced group tombstone read");
+  await scimRequest({
+    baseUrl: urls.scimBaseUrl,
+    path: `Groups/${encodeURIComponent(raceGroupId)}`,
+    method: "PATCH",
+    body: racePatch,
+    expectedStatus: 404,
+    label: "SCIM raced group replay",
+  });
 
   await call("set_scenario", {
     environmentId,
@@ -603,13 +1107,45 @@ try {
   environmentIds.push(oktaEnvironmentId);
 
   const oktaUserName = `grace-${suffix}@example.test`;
+  const oktaMfaUserName = `mfa-${suffix}@example.test`;
+  const oktaExpiredUserName = `expired-${suffix}@example.test`;
+  const oktaLockedUserName = `locked-${suffix}@example.test`;
+  const oktaPassword = "Synthetic-Okta-Passw0rd!";
   const oktaSeeded = await call("seed_identities", {
     environmentId: oktaEnvironmentId,
     users: [
       {
         userName: oktaUserName,
         displayName: "Grace Smoke",
-        password: "Synthetic-Okta-Passw0rd!",
+        password: oktaPassword,
+        passwordState: "valid",
+        active: true,
+        mfaState: "none",
+        roles: [],
+      },
+      {
+        userName: oktaMfaUserName,
+        displayName: "M6 MFA Authn",
+        password: oktaPassword,
+        passwordState: "expired",
+        active: true,
+        mfaState: "required",
+        roles: [],
+      },
+      {
+        userName: oktaExpiredUserName,
+        displayName: "M6 Expired Authn",
+        password: oktaPassword,
+        passwordState: "expired",
+        active: true,
+        mfaState: "none",
+        roles: [],
+      },
+      {
+        userName: oktaLockedUserName,
+        displayName: "M6 Locked Authn",
+        password: oktaPassword,
+        passwordState: "valid",
         active: true,
         mfaState: "none",
         roles: [],
@@ -618,6 +1154,10 @@ try {
     groups: [{ displayName: "M3 Okta Smoke Engineering", members: [oktaUserName] }],
   });
   const oktaUserId = requireString(oktaSeeded.users?.[0]?.id, "Okta User id");
+  const oktaLockedUserId = requireString(
+    oktaSeeded.users?.find(({ userName: value }) => value === oktaLockedUserName)?.id,
+    "locked Okta User id"
+  );
   const oktaGroupId = requireString(oktaSeeded.groups?.[0]?.id, "Okta Group id");
   const oktaUrls = await call("get_wellknown_urls", {
     environmentId: oktaEnvironmentId,
@@ -686,8 +1226,197 @@ try {
     scenarioId: "m3-okta-rate-limit",
   });
 
+  await call("simulate_lifecycle", {
+    environmentId: oktaEnvironmentId,
+    userId: oktaLockedUserId,
+    action: "suspend",
+  });
+  const oktaAuthnEndpoint = requireString(
+    oktaUrls.oktaAuthnEndpoint,
+    "Okta Authn endpoint"
+  );
+  const authenticate = (body, label, headers = {}) =>
+    jsonRequest({
+      url: oktaAuthnEndpoint,
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      label,
+    });
+  const wrongAuthnPassword = "Wrong-Synthetic-Authn-Passw0rd!";
+  for (const candidate of [
+    oktaMfaUserName,
+    oktaExpiredUserName,
+    oktaLockedUserName,
+    `unknown-${suffix}@example.test`,
+  ]) {
+    const invalid = await authenticate(
+      { username: candidate, password: wrongAuthnPassword },
+      "Okta Authn invalid-credentials privacy"
+    );
+    await expectStatus(invalid, 401, "Okta Authn invalid credentials");
+    const invalidBody = requireObject(
+      await invalid.json(),
+      "Okta Authn invalid-credentials body"
+    );
+    if (
+      invalidBody.errorCode !== "E0000004" ||
+      invalidBody.errorSummary !== "Authentication failed" ||
+      requireArray(invalidBody.errorCauses, "Okta Authn error causes").length !== 0
+    ) {
+      throw new Error("Okta Authn invalid credentials leaked account state.");
+    }
+  }
+
+  const mfaAuthn = await authenticate(
+    { username: oktaMfaUserName, password: oktaPassword },
+    "Okta Authn MFA_REQUIRED"
+  );
+  await expectStatus(mfaAuthn, 200, "Okta Authn MFA_REQUIRED");
+  const mfaAuthnBody = requireObject(
+    await mfaAuthn.json(),
+    "Okta Authn MFA_REQUIRED body"
+  );
+  const mfaEmbedded = requireObject(
+    mfaAuthnBody._embedded,
+    "Okta Authn MFA_REQUIRED embedded body"
+  );
+  const mfaFactors = requireArray(
+    mfaEmbedded.factor,
+    "Okta Authn singular embedded factor"
+  );
+  if (
+    mfaAuthnBody.status !== "MFA_REQUIRED" ||
+    Object.hasOwn(mfaEmbedded, "factors") ||
+    mfaFactors.length !== 1 ||
+    mfaFactors[0]?.factorType !== "token:software:totp" ||
+    mfaFactors[0]?.provider !== "OKTA"
+  ) {
+    throw new Error("Okta Authn did not render the singular MFA factor collection.");
+  }
+  const mfaStateToken = requireString(mfaAuthnBody.stateToken, "Okta MFA state token");
+  const currentMfaState = await authenticate(
+    { stateToken: mfaStateToken },
+    "Okta Authn state-token read"
+  );
+  await expectStatus(currentMfaState, 200, "Okta Authn state-token read");
+  const currentMfaBody = requireObject(
+    await currentMfaState.json(),
+    "Okta Authn current state body"
+  );
+  if (
+    currentMfaBody.status !== "MFA_REQUIRED" ||
+    currentMfaBody.stateToken !== mfaStateToken
+  ) {
+    throw new Error("Okta Authn state token did not recover the MFA transaction.");
+  }
+
+  const expiredAuthn = await authenticate(
+    { username: oktaExpiredUserName, password: oktaPassword },
+    "Okta Authn PASSWORD_EXPIRED"
+  );
+  await expectStatus(expiredAuthn, 200, "Okta Authn PASSWORD_EXPIRED");
+  const expiredAuthnBody = requireObject(
+    await expiredAuthn.json(),
+    "Okta Authn PASSWORD_EXPIRED body"
+  );
+  if (
+    expiredAuthnBody.status !== "PASSWORD_EXPIRED" ||
+    expiredAuthnBody._links?.next?.name !== "changePassword"
+  ) {
+    throw new Error("Okta Authn did not render PASSWORD_EXPIRED.");
+  }
+  const expiredStateToken = requireString(
+    expiredAuthnBody.stateToken,
+    "Okta expired-password state token"
+  );
+
+  const lockedAuthn = await authenticate(
+    { username: oktaLockedUserName, password: oktaPassword },
+    "Okta Authn LOCKED_OUT"
+  );
+  await expectStatus(lockedAuthn, 200, "Okta Authn LOCKED_OUT");
+  const lockedAuthnBody = requireObject(
+    await lockedAuthn.json(),
+    "Okta Authn LOCKED_OUT body"
+  );
+  if (
+    lockedAuthnBody.status !== "LOCKED_OUT" ||
+    lockedAuthnBody._links?.next?.name !== "unlock"
+  ) {
+    throw new Error("Okta Authn did not render LOCKED_OUT.");
+  }
+
+  const cookieSecret = `M6Cookie-${suffix}`;
+  const proxySecret = `M6Proxy-${suffix}`;
+  const headerTokenSecret = `M6HeaderToken-${suffix}`;
+  const preservedSafeField = "2026-07-23T00:00:00.000Z";
+  const successAuthn = await authenticate(
+    {
+      username: oktaUserName,
+      password: oktaPassword,
+      passwordChanged: preservedSafeField,
+    },
+    "Okta Authn SUCCESS",
+    {
+      origin: publicOrigin,
+      cookie: `sid=${cookieSecret}`,
+      "proxy-authorization": `Bearer ${proxySecret}`,
+      "x-auth-token": headerTokenSecret,
+    }
+  );
+  await expectStatus(successAuthn, 200, "Okta Authn SUCCESS");
+  const successAuthnBody = requireObject(
+    await successAuthn.json(),
+    "Okta Authn SUCCESS body"
+  );
+  if (
+    successAuthnBody.status !== "SUCCESS" ||
+    successAuthn.headers.get("cache-control") !== "no-store"
+  ) {
+    throw new Error("Okta Authn did not render SUCCESS with no-store semantics.");
+  }
+  const sessionToken = requireString(
+    successAuthnBody.sessionToken,
+    "Okta Authn session token"
+  );
+
+  const authnLog = await call("get_request_log", {
+    environmentId: oktaEnvironmentId,
+    source: "inbound",
+    method: "POST",
+    path: new URL(oktaAuthnEndpoint).pathname,
+    limit: 50,
+  });
+  const authnEntries = requireArray(authnLog.entries, "Okta Authn request log entries");
+  if (authnEntries.length < 9) {
+    throw new Error("The deployed Okta Authn sample was not logged synchronously.");
+  }
+  const serializedAuthnLog = JSON.stringify(authnEntries);
+  requireNoSecretLeak(
+    serializedAuthnLog,
+    [
+      oktaPassword,
+      wrongAuthnPassword,
+      mfaStateToken,
+      expiredStateToken,
+      sessionToken,
+      cookieSecret,
+      proxySecret,
+      headerTokenSecret,
+    ],
+    "Okta Authn request log"
+  );
+  if (
+    !serializedAuthnLog.includes("[REDACTED]") ||
+    !serializedAuthnLog.includes(preservedSafeField) ||
+    !serializedAuthnLog.includes("E0000004")
+  ) {
+    throw new Error("Okta Authn logs did not retain safe evidence around redaction.");
+  }
+
   process.stdout.write(
-    "PASS  M3 MCP, OIDC/refresh, SCIM, Graph, lifecycle cascade, request evidence, and Okta directory acceptance.\n"
+    "PASS  M6 sampled deployed acceptance: M3/M5 regressions plus key rotation, token edges, group overage, SCIM races/tolerance, and Okta Authn/redaction. This is sampled mockOS deployment evidence, not a broad provider-parity claim.\n"
   );
 } finally {
   const cleanupFailures = [];
