@@ -1,6 +1,6 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: M0-M3 accepted; M5 outbound provisioning is locally qualified source with immutable-revision, hosted-CI, and deployment gates still pending
+Status: M0-M3 accepted; M5 source-paired manual deployment and hosted acceptance recorded
 Last reviewed: 2026-07-22
 
 mockOS is an open-core, deterministic identity-platform test double for Entra ID and
@@ -26,15 +26,17 @@ at staging and production, including reverse cleanup and final empty-catalog che
 This qualifies the tested mockOS runtime, not parity with a live Entra tenant or Okta
 organization.
 
-The current M5 source candidate adds a fifteenth MCP tool,
+M5 adds a fifteenth MCP tool,
 `run_provisioning_cycle`, deterministic Entra/Okta outbound SCIM planning, a
 Cloudflare Workflow runtime, SSRF and bounded-HTTP controls, environment-isolated
 target credentials, ordered request-sequence assertions, a source CLI command, and a
 local target-app example. The Worker and worker-kit suites, full `pnpm check`, and a
 fresh two-process `wrangler dev` provisioning e2e are green; see the
-[local M5 source record](./evidence/m5-local-source-qualification.md). No immutable M5
-revision, hosted CI, or staging/production smoke exists yet, so the accepted deployed
-baseline remains M3.
+[local M5 source record](./evidence/m5-local-source-qualification.md). Exact public
+revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` also passed hosted CI, manual
+staging-before-production rollout, and source-paired hosted Workflow acceptance; see
+the [M5 deployment record](./evidence/m5-workers-dev-smoke.md). The guarded GitHub
+promotion workflows were not executed or formally qualified.
 
 The public source remains independently self-hostable. The later public docs-only close
 commit `e446eeda357b5e765401b97b892128fd70ac9ab8` was consumed by the separately
@@ -56,6 +58,7 @@ fixture alone.
 - [M3 staging and production workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md)
 - [M3 hosted CI run](https://github.com/reachjalil/mockos/actions/runs/29886610480)
 - [M5 local source qualification](./evidence/m5-local-source-qualification.md)
+- [M5 deployment and hosted provisioning acceptance](./evidence/m5-workers-dev-smoke.md)
 - Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
   [SCIM](./identity/scim.md)
 - Security: [threat model](./security/threat-model.md) and

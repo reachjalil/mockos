@@ -1,6 +1,6 @@
 # SCIM 2.0 behavior
 
-Status: Accepted bounded M3 inbound SCIM implementation; live-provider parity remains pending and M5 outbound provisioning is a separate source candidate
+Status: Accepted bounded inbound SCIM and tested M5 outbound slice; no live-provider parity claim
 Last reviewed: 2026-07-22
 
 mockOS has an accepted bounded inbound SCIM 2.0 implementation. It includes portable
@@ -128,8 +128,8 @@ against the local HTTP composition and is green.
 The corpus is not a live capture, deployed fixture run, or live-provider conformance
 result. Focused Worker integration, the full M3 gate, and hosted CI are green; the M3
 deployed smoke sampled discovery/PATCH for both profiles rather than all 113 cases.
-Live Entra/Okta comparison remains pending. Outbound SCIM provisioning is now a
-locally qualified but unaccepted M5 source candidate; see the
+Live Entra/Okta comparison remains pending. Outbound SCIM provisioning has separate
+M5 local and source-paired hosted acceptance; see the
 [provisioning quickstart](../quickstarts/provisioning-cycle.md),
 [outbound security design](../security/outbound-provisioning.md), and
 [known limitations](../known-limitations.md).

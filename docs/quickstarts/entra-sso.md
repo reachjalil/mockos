@@ -80,5 +80,5 @@ steps under the Cloudflare Workers test runtime. The
 production and staging flow, including refresh/lifecycle behavior, JWT verification,
 directory samples, and cleanup. This evidence does not claim arbitrary Entra client or
 SDK compatibility or live-provider parity. Client credentials, device flow, UserInfo,
-the locally qualified but undeployed M5 outbound provisioning source candidate, and
+the separately accepted M5 hosted outbound-provisioning flow, and
 provider-shaped custom domains remain outside this quickstart.

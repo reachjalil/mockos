@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M3 baseline accepted; M5 outbound controls are locally qualified source pending hosted and deployed acceptance
+Status: M3 baseline and tested M5 outbound controls accepted; residual risks remain
 Last reviewed: 2026-07-22
 
 ## Assets and trust boundaries
@@ -67,7 +67,8 @@ The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) exercises a boun
 authenticated MCP, environment isolation, OIDC/JWKS, refresh/lifecycle, directory,
 scenario, logging, assertion, and cleanup sample in staging and production. It is
 focused acceptance evidence, not a penetration test, full fixture run, live-provider
-comparison, or evidence for the M5 outbound source candidate.
+comparison, or evidence for M5 outbound provisioning. M5 has a separate
+[deployment record](../evidence/m5-workers-dev-smoke.md).
 
 ## Residual and future work
 
@@ -85,9 +86,9 @@ Operators must treat exported logs as sensitive test artifacts.
 
 M5 outbound SSRF and credential controls are described in
 [outbound provisioning](./outbound-provisioning.md). The Worker and worker-kit suites,
-full repository gate, independent source review, and two-process controlled-target e2e
-are green locally. An immutable revision, hosted CI, and deployed controlled-target
-smoke remain pending. Workers cannot pin DNS answers, so operators must restrict
+full repository gate, independent source review, two-process e2e, hosted CI, and
+source-paired staging/production controlled-target smoke are green. Workers cannot pin
+DNS answers, so operators must restrict
 targets and add external egress enforcement where required. UserInfo, Okta Classic
 `/api/v1/authn`, broad Graph/Okta API parity, and custom-domain routing likewise remain
 outside the accepted boundary.

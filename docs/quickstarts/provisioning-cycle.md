@@ -1,6 +1,6 @@
 # Run a provisioning cycle
 
-Status: M5 locally qualified source quickstart; verify the connected server advertises the tool
+Status: M5 accepted workflow recipe; verify the connected server advertises the tool
 Last reviewed: 2026-07-22
 
 This loop seeds a synthetic directory, runs the deterministic Entra- or Okta-shaped
@@ -41,8 +41,10 @@ processes, connects them through a local service binding while retaining a polic
 synthetic HTTPS target URL, and drives the complete flow through the built CLI and
 authenticated MCP. It creates, seeds, provisions, asserts the four-request User-then-
 Group sequence, validates target state and credential redaction, and cleans up both
-Workers' test state. The CI workflow is configured to run the same command; the current
-The M5 source candidate has no hosted-CI record yet.
+Workers' test state. CI run `29957994237` passed the same command for exact public
+revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`. Separate manual hosted
+staging/production acceptance is recorded in the
+[M5 deployment evidence](../evidence/m5-workers-dev-smoke.md).
 
 ## Create the source environment
 

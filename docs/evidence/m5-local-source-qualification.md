@@ -1,13 +1,14 @@
 # M5 local source qualification
 
-Status: Local source qualification passed; immutable revision, hosted CI, and deployment acceptance remain pending
+Status: Local source qualification passed at the exact M5 revision; deployment evidence recorded separately
 Last reviewed: 2026-07-22
 
 This record captures the final local evidence for the M5 outbound-provisioning source
-candidate. It is intentionally not an acceptance or deployment record: no exact
-immutable candidate revision is recorded here yet, and no hosted CI,
-staging/production deployment, controlled public-HTTPS target smoke, npm publication,
-or live-provider comparison is claimed.
+candidate at public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`.
+It remains a local record, not a deployment record. Hosted CI run `29957994237` and
+the later source-paired staging/production acceptance are recorded in the
+[M5 deployment evidence](./m5-workers-dev-smoke.md). No npm publication or
+live-provider comparison is claimed.
 
 ## Repository gate
 
@@ -50,10 +51,9 @@ state and credential redaction, and cleaned up. The final result was:
 | Final target groups | 1 |
 | Cleanup | Environment and target state removed; child processes and listeners clean |
 
-This proves the local two-process service-binding path only. A deployed acceptance run
-still requires the exact committed revision, hosted CI, immutable Worker version IDs,
-a controlled public-HTTPS target, sanitized evidence, and reverse cleanup at staging
-and production.
+This proves the local two-process service-binding path only. The separate deployment
+record supplies exact CI, Worker versions, controlled public-HTTPS target runs,
+sanitized terminal evidence, and reverse cleanup for staging and production.
 
 ## Self-hosted Access Key defense
 

@@ -1,6 +1,6 @@
 # mockOS testing skill
 
-Status: M5 locally qualified source identity, provisioning, assertion, and cleanup guidance
+Status: M5 source-paired identity, provisioning, assertion, and cleanup guidance
 Last reviewed: 2026-07-22
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
@@ -9,7 +9,7 @@ negotiate the authenticated MCP server, create an isolated Entra ID or Okta
 environment, seed synthetic identities, register a client, and wire request-derived
 provider metadata.
 
-The locally qualified M5 source-candidate workflow covers:
+The tested M5 workflow covers:
 
 - authorization code with required S256 PKCE for Entra ID or Okta;
 - rotating refresh grants with scope narrowing, replay cautions, and provider-correct

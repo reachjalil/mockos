@@ -1,6 +1,6 @@
 # Outbound provisioning security
 
-Status: M5 local source qualification passed; immutable revision, hosted CI, and deployment acceptance remain pending
+Status: M5 source and manual hosted acceptance passed; guarded promotion remains unqualified
 Last reviewed: 2026-07-22
 
 Outbound SCIM turns user-controlled configuration into network access. mockOS treats a
@@ -127,8 +127,9 @@ Source tests cover rejected names and IP families, URL user information, request
 response size caps, redirect mode, timeout signals, per-fetch validation, credential
 redaction and key-rotation collision, ordered outbound assertions, Workflow replay,
 explicit 429 handling, and hosted quota denial/compensation. The full local gate and
-two-process target-app e2e are green. Those results establish the source boundary only.
-Production acceptance additionally requires the exact-revision CI record, staging and
-production Workflow version IDs, a sanitized provisioning smoke, and cleanup evidence;
-see the implementation ledger and milestone evidence rather than inferring deployment
-from this design document.
+two-process target-app e2e are green. Exact-revision CI, staging and production
+Workflow version IDs, sanitized provisioning smoke, and cleanup then passed through
+the source-paired hosted composition; see the
+[M5 deployment evidence](../evidence/m5-workers-dev-smoke.md). That manual rollout did
+not qualify the guarded GitHub promotion workflows, and neither source nor deployed
+evidence is a penetration test or live-provider comparison.

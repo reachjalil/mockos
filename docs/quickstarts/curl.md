@@ -1,6 +1,6 @@
 # Entra OIDC curl walkthrough
 
-Status: Accepted M3 path-mode OIDC, directory, refresh, and lifecycle walkthrough; M5 outbound provisioning is documented separately as an unaccepted source candidate
+Status: Accepted M3 path-mode identity walkthrough; M5 provisioning evidence is documented separately
 Last reviewed: 2026-07-22
 
 This walkthrough uses only synthetic data. It exercises the authenticated HTTP control
@@ -256,4 +256,4 @@ The raw control commands passed in the recorded
 authenticated MCP, OIDC/JWKS, refresh/lifecycle, directory, scenario, logging,
 assertion, and cleanup samples against both staging and production. It does not
 establish general Entra SDK parity, execute every command remotely, or deploy the
-locally qualified M5 outbound provisioning source candidate.
+separately accepted M5 hosted outbound-provisioning flow.

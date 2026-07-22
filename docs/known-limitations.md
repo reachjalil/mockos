@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3 limitations plus locally qualified, unaccepted M5 source boundaries; deliberately candid
+Status: Accepted M3 and manually accepted M5 boundaries; guarded promotion remains unqualified
 Last reviewed: 2026-07-22
 
 - The Entra OIDC fixtures are source-reviewed expectations marked `documented`.
@@ -43,20 +43,24 @@ Last reviewed: 2026-07-22
 - The accepted M3 implementation supports bounded deterministic delay, semantic error,
   and JSON-object mutation actions at known injection points, including
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
-  routing. The M5 source candidate interprets outbound HTTP and rate-limit responses,
+  routing. The M5 runtime interprets outbound HTTP and rate-limit responses,
   but it does not add a scheduler, recurring provisioning cycles, scheduled lifecycle
   events, or the F-series behavior system.
 - The authenticated M3 MCP registry contains 14 management tools, including
-  `simulate_lifecycle`. The M5 source candidate adds `run_provisioning_cycle` as tool
-  15. Its authenticated Worker mount, full local gate, and process e2e are green, but
-  acceptance still requires an immutable revision, hosted CI, and deployment checks.
+  `simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15. Its authenticated
+  mount, local gates, hosted CI, and exact-pair controlled-target acceptance are green.
+  The standalone public staging/production Access Keys were preserved, so the
+  authenticated hosted acceptance ran through the private edge consuming the public
+  runtime rather than those standalone credentials.
   The registry does not yet host
   user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
   OIDC-federated CI access.
-- M5 outbound provisioning is a locally qualified source candidate only.
-  The Worker and worker-kit suites, full `pnpm check`, and fresh two-process
-  `wrangler dev` e2e are green, but an immutable candidate, hosted CI, and exact-
-  candidate staging/production smoke remain pending.
+- M5 outbound provisioning is manually accepted for the exact tested source pair.
+  Public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`, CI run
+  `29957994237`, the six active Worker versions, both terminal-success Workflow runs,
+  and cleanup are recorded in the [M5 deployment evidence](./evidence/m5-workers-dev-smoke.md).
+  This manual source-locked rollout did not execute or qualify either repository's
+  guarded GitHub deployment workflow.
 - Outbound targets require a public HTTPS origin in the supported production path.
   Loopback, private/special IP literals, dotless and special-use names, userinfo,
   product/control hosts, redirects, oversized bodies, and unsafe operation headers are
@@ -88,8 +92,10 @@ Last reviewed: 2026-07-22
   Worker/full local tests and the process e2e cover isolation and reflection/capture
   redaction. `mk_` credentials and the exact active self-host `API_KEY` are rejected
   regardless of prefix; if rotation makes a saved target credential equal the current
-  key, execution fails before any outbound call. Hosted/deployed security evidence is
-  still pending. Use synthetic target credentials only.
+  key, execution fails before any outbound call. The manual acceptance retained no
+  target credential and left target state/capture empty after both runs. This is not a
+  general secret-audit or penetration-test claim. Use synthetic target credentials
+  only.
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
@@ -112,8 +118,9 @@ Last reviewed: 2026-07-22
   object subsets. It executes all 113 SCIM fixtures against the local HTTP composition,
   not every fixture through the Worker runtime; focused Worker coverage is a separate
   suite. The runner does not yet understand JSONPath, regex, or JWT claims. The M5
-  request-log assertion candidate can count repeated non-overlapping ordered sequences,
-  but that capability is separate from the fixture runner and is not yet deployed.
+  request-log assertion can count repeated non-overlapping ordered sequences. That
+  capability is separate from the fixture runner; the M5 acceptance exercised one
+  four-request sequence on each hosted target, not every possible sequence.
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.

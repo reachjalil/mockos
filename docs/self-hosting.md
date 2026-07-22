@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide with accepted M3 reference deployment; M5 provisioning is locally qualified but unaccepted and npm/custom-domain distribution remains unavailable
+Status: Source-build guide with M5 source deployed; standalone authenticated acceptance and npm/custom-domain distribution remain unavailable
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -34,9 +34,9 @@ is not configured and reject a missing or incorrect key with `401`. `/health` an
 mock provider protocol routes do not require that control credential.
 
 The accepted M3 source exposes 14 authenticated MCP management tools, including
-`simulate_lifecycle`. The current M5 source candidate adds `run_provisioning_cycle` as tool
-15; its Worker suite, full repository gate, and two-process provisioning e2e are green
-locally. Path-mode provider
+`simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15; its Worker suite,
+full repository gate, and two-process provisioning e2e are green locally. The
+source-paired hosted flow also passed. Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
@@ -132,7 +132,8 @@ Its keys are deliberately not public. The sanitized production and staging resul
 are recorded in the
 [M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md). That record
 establishes only the bounded sampled M3 routes and does not qualify every fixture,
-live-provider parity, the locally qualified M5 Workflow/provisioning source candidate,
+live-provider parity, an authenticated M5 flow using the preserved standalone public
+Worker Access Keys,
 or a service-level commitment.
 
 ## Distribution limits

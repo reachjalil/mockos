@@ -9,11 +9,11 @@
 <p align="center">Deterministic Entra ID and Okta protocol surfaces for testing real integrations.</p>
 
 > **Project status:** M0 through M3 are accepted at exact revision
-> `8645f405d5e3b922c30d51339b8b27f9fe30d93e`, with green hosted CI and bounded
-> staging/production workers.dev smoke evidence. M5 outbound provisioning is a
-> locally qualified source candidate: its Worker and worker-kit suites,
-> full repository gate, and two-process `wrangler dev` provisioning e2e are green,
-> while an immutable revision, hosted CI, and deployment acceptance remain pending.
+> `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
+> accepted for exact public runtime revision
+> `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`: local/full gates, hosted CI, manual
+> staging-before-production rollout, and source-paired controlled-target Workflow
+> acceptance are green. The guarded GitHub promotion workflows remain unqualified.
 > This is not yet a stable npm
 > release, a live-provider parity claim, or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
@@ -51,12 +51,12 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
-- An accepted authenticated Agents SDK MCP server with 14 typed M3 management tools;
-  the M5 source candidate adds `run_provisioning_cycle` as tool 15
+- An accepted authenticated Agents SDK MCP server whose M5 registry adds
+  `run_provisioning_cycle` as tool 15
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
-- An M5 source candidate for deterministic Entra/Okta outbound SCIM planning and
+- A tested M5 implementation for deterministic Entra/Okta outbound SCIM planning and
   interpretation, batched Cloudflare Workflow execution, bounded/redacted HTTP
   capture, SSRF policy enforcement, and environment-scoped target credentials; the
   current local Worker, worker-kit, repository, and two-process e2e gates are green
@@ -73,10 +73,11 @@ key to them.
 
 Every OIDC provider fixture is marked `documented`, not `implemented` or
 `verified-live`; the 113 SCIM fixtures separately record source-implemented behavior.
-The accepted M3 evidence and current M5 source-candidate evidence remain distinct. M5
-has passed its [local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md),
-but has no recorded immutable candidate, hosted-CI record, or deployed acceptance
-evidence yet.
+The accepted M3 and M5 records remain distinct. M5 passed its
+[local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md)
+and [exact-pair manual deployment/hosted acceptance](./docs/evidence/m5-workers-dev-smoke.md).
+That evidence does not qualify guarded promotion, standalone public Access-Key smoke,
+npm publication, or live-provider parity.
 
 ## Local verification
 

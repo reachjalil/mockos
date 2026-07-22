@@ -1,6 +1,6 @@
 # Hosting modes
 
-Status: M3 workers.dev path mode accepted; M5 outbound provisioning is not yet deployed and wildcard/subdomain mode remains planned
+Status: M5 source deployed in workers.dev path mode; standalone authenticated acceptance and wildcard/subdomain mode remain open
 Last reviewed: 2026-07-22
 
 ## Path mode
@@ -49,9 +49,11 @@ and cleanup checks recorded for both live origins are in the
 [M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md).
 
 Path mode does not imply broad provider API coverage. Microsoft Graph is read-only,
-Okta Classic `/api/v1/authn` and both UserInfo routes are absent. M5 outbound SCIM
-provisioning is locally qualified source but is not part of the accepted live Worker
-revision. See [known limitations](./known-limitations.md).
+Okta Classic `/api/v1/authn` and both UserInfo routes are absent. The M5 public source
+is deployed, and the exact-pinned hosted composition passed controlled-target
+provisioning. Existing standalone public Access Keys were preserved, so no
+authenticated M5 tool flow was run against those two Workers. See
+[known limitations](./known-limitations.md).
 
 ## Subdomain mode
 

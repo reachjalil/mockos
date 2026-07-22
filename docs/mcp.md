@@ -1,6 +1,6 @@
 # MCP interface
 
-Status: M5 authenticated management MCP source candidate; deployed evidence is tracked by exact revision
+Status: M5 authenticated management MCP implemented; deployed evidence is tracked by exact revision
 Last reviewed: 2026-07-22
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -44,9 +44,9 @@ environment clears it. Most tools accept an explicit `environmentId` and otherwi
 resolve the session cursor. Prefer the explicit ID in saved automation because the
 cursor does not cross sessions.
 
-## Exact M5 source-candidate tool registry
+## Exact M5 tool registry
 
-The source candidate exposes these 15 tools:
+The M5 source exposes these 15 tools:
 
 | Tool | Implemented behavior |
 | --- | --- |
@@ -219,8 +219,9 @@ ambiguous terminal outcome; terminal response replay is deferred to F4.
 The evidence ledger links immutable public and hosted candidates to their CI and
 workers.dev smoke records. Treat the newest listed deployment record as authoritative;
 the [M5 local source record](./evidence/m5-local-source-qualification.md) establishes
-only the local source gate and two-process flow. It does not establish that a
-connected endpoint contains the M5 registry or Workflow. Deployed provisioning
-qualification must include an actual public-HTTPS target, ordered outbound assertion,
-terminal Workflow state, credential-safe evidence, and cleanup. None of these source
-or deployed tests constitute comparison with a live Entra tenant or Okta organization.
+the local source gate and two-process flow. The separate
+[M5 deployment record](./evidence/m5-workers-dev-smoke.md) binds exact source/CI to a
+public-HTTPS target, ordered outbound assertion, terminal Workflow state,
+credential-safe evidence, and cleanup. Always verify the connected endpoint's tool
+registry; none of these tests constitute comparison with a live Entra tenant or Okta
+organization.
