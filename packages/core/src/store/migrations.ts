@@ -206,10 +206,46 @@ const migrationV3 = [
     ON request_log(source, provider, method, response_status, sequence DESC)`,
 ] as const;
 
+const migrationV4 = [
+  `ALTER TABLE users
+    ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'`,
+  `ALTER TABLE users
+    ADD COLUMN resource_version INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE users
+    ADD COLUMN scim_json TEXT NOT NULL DEFAULT '{}'`,
+  `UPDATE users SET lifecycle_state = CASE
+    WHEN soft_deleted_at IS NOT NULL THEN 'deleted'
+    WHEN account_enabled = 1 THEN 'active'
+    ELSE 'disabled'
+  END`,
+  `ALTER TABLE groups
+    ADD COLUMN resource_version INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE groups
+    ADD COLUMN scim_json TEXT NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE refresh_tokens ADD COLUMN auth_time INTEGER`,
+  `ALTER TABLE refresh_tokens
+    ADD COLUMN generation INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE refresh_tokens ADD COLUMN parent_token_hash TEXT`,
+  `ALTER TABLE refresh_tokens ADD COLUMN replaced_by_hash TEXT`,
+  `UPDATE refresh_tokens
+    SET auth_time = CAST(strftime('%s', issued_at) AS INTEGER)
+    WHERE auth_time IS NULL`,
+  `ALTER TABLE oauth_access_tokens ADD COLUMN family_id TEXT`,
+  `CREATE INDEX IF NOT EXISTS users_lifecycle_idx
+    ON users(lifecycle_state, created_at, id)`,
+  `CREATE INDEX IF NOT EXISTS users_scim_filter_idx
+    ON users(normalized_user_name, external_id, lifecycle_state)`,
+  `CREATE INDEX IF NOT EXISTS groups_scim_filter_idx
+    ON groups(normalized_display_name, external_id, soft_deleted_at)`,
+  `CREATE INDEX IF NOT EXISTS oauth_access_tokens_family_idx
+    ON oauth_access_tokens(family_id)`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
   { version: 2, statements: migrationV2 },
   { version: 3, statements: migrationV3 },
+  { version: 4, statements: migrationV4 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };

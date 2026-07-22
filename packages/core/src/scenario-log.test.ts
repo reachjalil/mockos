@@ -100,7 +100,7 @@ const scenarioService = (seed: string) => {
 };
 
 describe("scenario service", () => {
-  it("upgrades v2 scenario rows through the append-only v3 migration", () => {
+  it("upgrades v2 scenario rows through later append-only migrations", () => {
     const store = memoryStore();
     expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 2))).toBe(2);
     const legacy = scenarioSpecSchema.parse({
@@ -120,8 +120,8 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(3);
-    expect(getSchemaVersion(store)).toBe(3);
+    expect(applyMigrations(store)).toBe(4);
+    expect(getSchemaVersion(store)).toBe(4);
     const service = new ScenarioService({
       store,
       seed: "upgrade",

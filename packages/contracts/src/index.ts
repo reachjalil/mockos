@@ -1,7 +1,30 @@
 import { z } from "zod";
 
+export * from "./scim";
+
 export const providerIdSchema = z.enum(["entra", "okta"]);
 export type ProviderId = z.infer<typeof providerIdSchema>;
+
+export const directoryUserStateSchema = z.enum([
+  "staged",
+  "active",
+  "disabled",
+  "suspended",
+  "deprovisioned",
+  "deleted",
+]);
+export type DirectoryUserState = z.infer<typeof directoryUserStateSchema>;
+
+export const lifecycleActionSchema = z.enum([
+  "activate",
+  "disable",
+  "reactivate",
+  "suspend",
+  "unsuspend",
+  "deprovision",
+  "delete",
+]);
+export type LifecycleAction = z.infer<typeof lifecycleActionSchema>;
 
 export const environmentIdSchema = z
   .string()
@@ -395,6 +418,39 @@ export const assertRequestsToolInputSchema = z
   .strict();
 export type AssertRequestsToolInput = z.infer<typeof assertRequestsToolInputSchema>;
 
+export const simulateLifecycleToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    userId: z.string().min(1).max(128),
+    action: lifecycleActionSchema,
+  })
+  .strict();
+export type SimulateLifecycleToolInput = z.infer<
+  typeof simulateLifecycleToolInputSchema
+>;
+
+export const lifecycleRevocationResultSchema = z
+  .object({
+    accessTokens: z.number().int().min(0),
+    refreshTokens: z.number().int().min(0),
+  })
+  .strict();
+
+export const lifecycleResultSchema = z
+  .object({
+    userId: z.string().min(1).max(128),
+    provider: providerIdSchema,
+    action: lifecycleActionSchema,
+    previousState: directoryUserStateSchema,
+    currentState: directoryUserStateSchema,
+    changed: z.boolean(),
+    version: z.number().int().min(1),
+    etag: z.string().regex(/^W\/"[1-9][0-9]*"$/),
+    revoked: lifecycleRevocationResultSchema,
+  })
+  .strict();
+export type LifecycleResult = z.infer<typeof lifecycleResultSchema>;
+
 export const wellKnownUrlsSchema = z
   .object({
     issuer: z.url(),
@@ -403,6 +459,8 @@ export const wellKnownUrlsSchema = z
     tokenEndpoint: z.url(),
     jwksUri: z.url(),
     scimBaseUrl: z.url(),
+    graphBaseUrl: z.url().optional(),
+    oktaApiBaseUrl: z.url().optional(),
     userinfoEndpoint: z.url().optional(),
     introspectionEndpoint: z.url().optional(),
     revocationEndpoint: z.url().optional(),
@@ -451,6 +509,7 @@ export const mockosMcpToolNames = [
   "clear_scenario",
   "get_request_log",
   "assert_requests",
+  "simulate_lifecycle",
   "get_wellknown_urls",
   "set_current_environment",
 ] as const;
@@ -468,6 +527,7 @@ export type MockosMcpToolInputs = {
   clear_scenario: ClearScenarioToolInput;
   get_request_log: GetRequestLogToolInput;
   assert_requests: AssertRequestsToolInput;
+  simulate_lifecycle: SimulateLifecycleToolInput;
   get_wellknown_urls: EnvironmentRefToolInput;
   set_current_environment: SetCurrentEnvironmentToolInput;
 };
@@ -484,6 +544,7 @@ export type MockosMcpToolData = {
   clear_scenario: ClearScenarioResult;
   get_request_log: RequestLogPage;
   assert_requests: AssertionResult;
+  simulate_lifecycle: LifecycleResult;
   get_wellknown_urls: WellKnownUrls;
   set_current_environment: CurrentEnvironmentCursor;
 };

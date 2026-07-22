@@ -6,10 +6,14 @@ import {
   environmentConfigSchema,
   getRequestLogToolInputSchema,
   identitySeedSchema,
+  lifecycleResultSchema,
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
   scenarioSpecSchema,
+  SCIM_CORE_USER_SCHEMA,
+  scimUserInputSchema,
+  scimWeakEtag,
   seedIdentitiesToolInputSchema,
 } from "./index";
 
@@ -87,7 +91,7 @@ describe("wire contracts", () => {
     ).toThrow();
   });
 
-  it("locks the broken-token variants and MCP v1 tool names", () => {
+  it("locks the broken-token variants and management tool names", () => {
     expect(brokenTokenVariantSchema.options).toEqual([
       "expired",
       "wrong_audience",
@@ -107,8 +111,33 @@ describe("wire contracts", () => {
       "clear_scenario",
       "get_request_log",
       "assert_requests",
+      "simulate_lifecycle",
       "get_wellknown_urls",
       "set_current_environment",
     ]);
+  });
+
+  it("locks M3 SCIM and lifecycle wire shapes", () => {
+    expect(scimWeakEtag(7)).toBe('W/"7"');
+    expect(
+      scimUserInputSchema.parse({
+        schemas: [SCIM_CORE_USER_SCHEMA],
+        userName: "ada@example.test",
+        active: true,
+      })
+    ).toMatchObject({ userName: "ada@example.test", active: true });
+    expect(
+      lifecycleResultSchema.parse({
+        userId: "usr_12345678",
+        provider: "okta",
+        action: "suspend",
+        previousState: "active",
+        currentState: "suspended",
+        changed: true,
+        version: 2,
+        etag: 'W/"2"',
+        revoked: { accessTokens: 1, refreshTokens: 1 },
+      })
+    ).toMatchObject({ currentState: "suspended", version: 2 });
   });
 });
