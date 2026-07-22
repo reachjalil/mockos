@@ -94,10 +94,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          pnpm --filter @mockos/worker exec wrangler deploy --env staging
+          printf 'API_KEY=%s\n' "$MOCKOS_SMOKE_API_KEY" |
+            pnpm --filter @mockos/worker exec wrangler deploy \
+              --env staging --secrets-file /dev/stdin
           versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env staging --json)
           version_id=$(printf '%s' "$versions" | node --input-type=module -e '
             import { readFileSync } from "node:fs";
@@ -118,10 +121,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          pnpm --filter @mockos/worker exec wrangler deploy --env=
+          printf 'API_KEY=%s\n' "$MOCKOS_SMOKE_API_KEY" |
+            pnpm --filter @mockos/worker exec wrangler deploy \
+              --env= --secrets-file /dev/stdin
           versions=$(pnpm --filter @mockos/worker exec wrangler versions list --env= --json)
           version_id=$(printf '%s' "$versions" | node --input-type=module -e '
             import { readFileSync } from "node:fs";
