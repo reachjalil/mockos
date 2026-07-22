@@ -42,7 +42,23 @@ const compareSubset = (
   path: string,
   failures: FixtureFailure[]
 ): void => {
-  if (typeof expected !== "object" || expected === null || Array.isArray(expected)) {
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual)) {
+      failures.push({ path, message: "expected an array" });
+      return;
+    }
+    if (actual.length !== expected.length) {
+      failures.push({
+        path,
+        message: `expected array length ${expected.length}, received ${actual.length}`,
+      });
+    }
+    for (let index = 0; index < Math.min(expected.length, actual.length); index += 1) {
+      compareSubset(expected[index], actual[index], `${path}[${index}]`, failures);
+    }
+    return;
+  }
+  if (typeof expected !== "object" || expected === null) {
     if (!Object.is(expected, actual)) {
       failures.push({
         path,

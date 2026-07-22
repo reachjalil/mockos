@@ -1,0 +1,35 @@
+{
+  "name": "RFC 7644 reject Group PATCH with no target",
+  "description": "Removing a member selector that matches nothing returns the noTarget SCIM error.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "remove",
+          "path": "members[value eq \"usr_missing\"]"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "noTarget"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

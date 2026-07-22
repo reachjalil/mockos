@@ -1,0 +1,49 @@
+{
+  "name": "Okta PUT deactivates User",
+  "description": "A custom Okta integration can deprovision through a complete PUT with active false.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PUT",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "id": "usr_ada",
+      "userName": "ada@example.test",
+      "displayName": "Ada Lovelace",
+      "name": {
+        "givenName": "Ada",
+        "familyName": "Lovelace"
+      },
+      "active": false,
+      "emails": [
+        {
+          "value": "ada@example.test",
+          "type": "work",
+          "primary": true
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "active": false,
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-scim/guides/scim-20",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

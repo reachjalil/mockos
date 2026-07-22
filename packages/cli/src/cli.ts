@@ -59,6 +59,7 @@ Environment lifecycle:
   env configure                 Apply environment configuration
   env wait                      Wait until an environment is visible
   app create                    Create an OAuth/OIDC application registration
+  lifecycle simulate           Apply an Entra or Okta user lifecycle action
 
 Mock configuration and evidence:
   seed                          Seed users and groups from JSON
@@ -343,6 +344,18 @@ async function runConnectedCommand(
             idempotencyKey: valueOption(args, "idempotency-key"),
           })
         ),
+        args,
+        io
+      );
+    }
+    case "lifecycle simulate": {
+      assertOptions(args, ["env", "user", "action"]);
+      return emitTool(
+        await call(client, "simulate_lifecycle", {
+          environmentId: requiredOption(args, "env"),
+          userId: requiredOption(args, "user"),
+          action: requiredOption(args, "action"),
+        }),
         args,
         io
       );

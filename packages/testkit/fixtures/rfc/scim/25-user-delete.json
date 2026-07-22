@@ -1,0 +1,21 @@
+{
+  "name": "RFC 7644 delete seeded User",
+  "description": "Deleting an existing seeded User with a matching ETag returns no content.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "DELETE",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "if-match": "W/\"1\""
+    }
+  },
+  "expected": {
+    "status": 204
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.6",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

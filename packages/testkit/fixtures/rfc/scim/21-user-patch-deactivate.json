@@ -1,0 +1,41 @@
+{
+  "name": "RFC 7644 patch User active state",
+  "description": "Replacing active with false disables the seeded active User.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "active",
+          "value": false
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "active": false,
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

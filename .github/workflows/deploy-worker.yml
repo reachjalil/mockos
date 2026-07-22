@@ -1,4 +1,4 @@
-name: Deploy worker (M2 gate)
+name: Deploy worker (M3 gate)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ env:
 
 jobs:
   deploy:
-    name: Deploy and run M2 acceptance smoke
+    name: Deploy and run M3 acceptance smoke
     if: >-
       vars.MOCKOS_WORKER_DEPLOY_ENABLED == 'true' &&
       (github.event_name != 'workflow_run' ||
@@ -108,7 +108,7 @@ jobs:
           ')
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
           printf -- '- Staging version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run staging M2 acceptance
+      - name: Run staging M3 acceptance
         env:
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_STAGING_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_STAGING_WORKER_URL }}
@@ -132,7 +132,7 @@ jobs:
           ')
           printf 'version_id=%s\n' "$version_id" >> "$GITHUB_OUTPUT"
           printf -- '- Production version: `%s`\n' "$version_id" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run production M2 acceptance
+      - name: Run production M3 acceptance
         env:
           MOCKOS_SMOKE_API_KEY: ${{ secrets.MOCKOS_SMOKE_API_KEY }}
           MOCKOS_SMOKE_ORIGIN: ${{ vars.MOCKOS_WORKER_URL }}

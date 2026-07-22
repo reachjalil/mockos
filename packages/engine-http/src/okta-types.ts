@@ -39,6 +39,15 @@ export type OktaDeviceCodeTokenRequest = {
   issuerBase: string;
 };
 
+export type OktaRefreshTokenRequest = {
+  clientId: string;
+  clientSecret?: string;
+  grantType: "refresh_token";
+  issuerBase: string;
+  refreshToken: string;
+  scope?: string;
+};
+
 export type OktaTokenResult = {
   accessToken: string;
   expiresIn: number;
@@ -122,6 +131,7 @@ export interface OktaHttpEngine {
   redeemAuthorizationCode(
     input: OktaAuthorizationCodeTokenRequest
   ): OktaAwaitable<OktaTokenResult>;
+  redeemRefreshToken(input: OktaRefreshTokenRequest): OktaAwaitable<OktaTokenResult>;
   renderError(error: unknown): OktaAwaitable<OktaRenderedError>;
   revoke(input: OktaRevocationRequest): OktaAwaitable<void>;
   validateAuthorizationRequest?(input: OktaAuthorizationRequest): OktaAwaitable<void>;

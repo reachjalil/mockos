@@ -8,11 +8,14 @@
 
 <p align="center">Deterministic Entra ID and Okta protocol surfaces for testing real integrations.</p>
 
-> **Project status:** M0 through M2 are implemented and pass the local repository
-> gate. The M2 candidate is deployed to staging and production workers.dev targets,
-> the authenticated end-to-end acceptance smoke passed both, and hosted CI is green
-> for the exact deployed revision. The M2 gate is satisfied. This is not yet a stable
-> npm release, a broad provider-parity claim, or a production-SLA service. See the
+> **Project status:** M0 through M2 passed the local, hosted-CI, and deployed acceptance
+> gates recorded in the evidence ledger. M3 now has focused local evidence for its
+> Worker integration, lifecycle cascades, provider directory APIs, refresh-token
+> rotation, and all 113 SCIM fixtures. The full local M3 `pnpm check` is green;
+> hosted CI, deployed smoke, and live-provider parity are still pending. The live
+> workers.dev targets remain M2 qualification surfaces.
+> This is not yet a stable npm release, a broad provider-parity claim, or a
+> production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -29,26 +32,42 @@ on public packages, never the reverse.
 ## What exists now
 
 - Workspace and package scaffolding
-- Runtime-independent contracts, migrations, directory/application repositories, and
-  Entra OIDC core
+- Runtime-independent contracts, append-only migrations, versioned User/Group and
+  application repositories, SCIM filter/PATCH behavior, and provider lifecycle policy
 - An Okta OIDC profile covering discovery, hosted authorization code + S256 PKCE,
-  token introspection and revocation, and RFC 8628 device authorization in the local
-  Worker integration suite
+  refresh exchange, token introspection and revocation, and RFC 8628 device
+  authorization in local tests
+- Entra and Okta refresh-token rotation with scope narrowing, replay-family
+  invalidation, and lifecycle-driven access/refresh revocation
+- A locally exercised SCIM 2.0 Users/Groups source candidate at `/scim/v2`, bounded
+  Microsoft Graph reads at `/graph/v1.0`, and an Okta Users/Groups lifecycle API at
+  `/api/v1`
 - A synchronous `node:sqlite` test store
 - Deterministic test clock and RNG, persisted deterministic scenarios, bounded request
   logs, and request assertions
 - Fixture schema, loader, runner, 30 source-reviewed Entra OIDC fixtures, and 22
-  source-reviewed Okta OIDC fixtures
+  source-reviewed Okta OIDC fixtures, plus a locally green 113-case RFC/Entra/Okta
+  SCIM corpus
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
-  login, S256 PKCE, code redemption, Entra claims, and JWKS signature verification
-- An authenticated Agents SDK MCP server with 13 typed management tools
-- The `@mockos/cli` 0.1.0 command surface for the M2 operator loop, with capability
-  negotiation for later commands
-- Staging and production Worker deployments with a repeatable acceptance smoke,
-  deployment workflow, documentation, CI, and a repository testing skill
+  login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
+  claims, and JWKS signature verification in focused local suites
+- An authenticated Agents SDK MCP server with 14 typed management tools, including
+  `simulate_lifecycle`
+- The unpublished `@mockos/cli` 0.1.0 source command surface, including
+  `lifecycle simulate` and capability negotiation
+- Historical M2 staging and production Worker deployments with a repeatable acceptance
+  smoke, deployment workflow, documentation, CI, and a repository testing skill
 
-Every initial provider fixture is marked `documented`, not `implemented` or
-`verified-live`; runtime tests and the deployed smoke are separate evidence.
+Management and protocol credentials are deliberately separate: MCP requires the
+configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values and
+the Okta API accepts a non-empty synthetic SSWS value. Those directory checks are mock
+scheme/presence boundaries, not production authorization; never forward the management
+key to them.
+
+Every OIDC provider fixture is marked `documented`, not `implemented` or
+`verified-live`; all 113 SCIM fixtures separately record locally executed
+source-candidate behavior. Local runtime tests and the historical M2 deployed smoke
+remain distinct evidence.
 
 ## Local verification
 

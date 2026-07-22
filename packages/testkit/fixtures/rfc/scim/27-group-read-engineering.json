@@ -1,0 +1,32 @@
+{
+  "name": "RFC 7644 read seeded Group",
+  "description": "A Group item read returns the static Engineering seed and its initial weak entity tag.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"1\""
+    },
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      "id": "grp_engineering",
+      "displayName": "Engineering",
+      "meta": {
+        "resourceType": "Group",
+        "version": "W/\"1\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

@@ -1,0 +1,30 @@
+{
+  "name": "RFC 7644 first Group pagination window",
+  "description": "Group pagination is one-based and count limits the seeded collection to one resource.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Groups",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "startIndex": "1",
+      "count": "1"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 1,
+      "startIndex": 1,
+      "itemsPerPage": 1
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

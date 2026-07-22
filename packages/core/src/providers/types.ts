@@ -1,4 +1,4 @@
-import type { ProviderId, SemanticErrorCode } from "@mockos/contracts";
+import type { ProviderId, ScimDialect, SemanticErrorCode } from "@mockos/contracts";
 import type { UserRecord } from "../directory";
 
 export interface ProviderUrlContext {
@@ -97,7 +97,7 @@ export interface ProviderProfile {
   discovery(context: ProviderUrlContext): OidcDiscoveryDocument;
   readonly claims: ClaimMapper;
   readonly errors: ErrorCatalog;
-  readonly scimDialect: Readonly<Record<string, unknown>>;
+  readonly scimDialect: ScimDialect;
   readonly provisioning: Readonly<Record<string, unknown>>;
   readonly loginPage: Readonly<Record<string, unknown>>;
   readonly authn?: Readonly<Record<string, unknown>>;

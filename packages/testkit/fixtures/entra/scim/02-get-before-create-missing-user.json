@@ -1,0 +1,29 @@
+{
+  "name": "Microsoft Entra get-before-create returns zero Users",
+  "description": "An unmatched joining userName returns an empty ListResponse so Entra can proceed to create.",
+  "provider": "entra",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "userName eq \"new.entra@example.test\""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 0,
+      "startIndex": 1,
+      "itemsPerPage": 0
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

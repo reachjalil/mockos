@@ -1,0 +1,29 @@
+{
+  "name": "RFC 7644 filter presence operator",
+  "description": "The pr operator matches both seeded Users with a given name.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "name.givenName pr"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 2,
+      "startIndex": 1,
+      "itemsPerPage": 2
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Okta get-before-create finds User by userName",
+  "description": "Okta filters by userName before deciding whether a downstream User already exists.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "userName eq \"ada@example.test\""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 1,
+      "startIndex": 1,
+      "itemsPerPage": 1
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-scim/guides/scim-20",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

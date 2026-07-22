@@ -218,6 +218,7 @@ describe("management MCP", () => {
         "seed_identities",
         "set_current_environment",
         "set_scenario",
+        "simulate_lifecycle",
       ].sort()
     );
 
@@ -359,6 +360,7 @@ describe("management MCP", () => {
     const wellKnownData = wellKnown?.structuredContent?.data as
       | {
           authorizationEndpoint?: string;
+          graphBaseUrl?: string;
           issuer?: string;
           jwksUri?: string;
           openidConfiguration?: string;
@@ -375,6 +377,7 @@ describe("management MCP", () => {
       tokenEndpoint: `${managementBase}/${environment?.tenantId}/oauth2/v2.0/token`,
       jwksUri: `${managementBase}/${environment?.tenantId}/discovery/v2.0/keys`,
       scimBaseUrl: `${managementBase}/scim/v2`,
+      graphBaseUrl: `${managementBase}/graph/v1.0`,
     });
     expect(normalTokenData?.claims?.iss).toBe(managementIssuer);
 

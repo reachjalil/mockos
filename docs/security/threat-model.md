@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M2 baseline controls implemented and exercised; residual controls remain
+Status: M2 baseline accepted; M3 directory, refresh, and lifecycle controls are a locally tested source candidate
 Last reviewed: 2026-07-22
 
 ## Assets and trust boundaries
@@ -12,17 +12,25 @@ attacker-controllable. MCP and `/__mockos/v1/*` control operations cross a stron
 authorization boundary.
 
 The control credential authenticates the operator, not a provider-protocol client. It
-must never be sent to an environment's OIDC, OAuth, or future SCIM endpoint. The Worker
-fails closed with `503` when `API_KEY` is not configured and returns `401` for a missing
-or incorrect Bearer or `X-API-Key` credential. `/health` and provider protocol routes
-remain public by design.
+must never be sent to an environment's OIDC, OAuth, SCIM, Graph, or Okta directory
+endpoint. The Worker fails closed with `503` when `API_KEY` is not configured and
+returns `401` for a missing or incorrect Bearer or `X-API-Key` credential. `/health`
+and provider protocol routes remain public by design.
+
+M3 directory authentication is intentionally a mock protocol boundary: SCIM and Graph
+require a non-empty Bearer value, and the Okta `/api/v1` surface requires a non-empty
+SSWS value. Scheme-and-presence validation is not authorization and must never be
+presented as a production identity control. Environment URLs and synthetic directory
+credentials should be treated as test artifacts, not security boundaries.
 
 Primary threats are environment-ID guessing, cross-environment SQL access, OAuth
 redirect abuse, code replay, refresh-token theft, signing-key confusion, stored XSS in
-hosted pages or logs, secret leakage through logs, unbounded SQLite growth, denial of
-service, and SSRF from future outbound provisioning.
+hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
+cross-environment directory access, parser or body resource exhaustion, secret leakage
+through logs, unbounded SQLite growth, denial of service, and SSRF from future outbound
+provisioning.
 
-## M2 implemented controls
+## Implemented controls and evidence boundaries
 
 - Authenticated MCP and HTTP control routes compare against the configured Access Key,
   fail closed when it is absent, and remove control credentials before forwarding.
@@ -32,11 +40,21 @@ service, and SSRF from future outbound provisioning.
   and S256-PKCE-bound where configured.
 - Application secrets, refresh tokens, and tracked OAuth access tokens are stored as
   hashes. Signing keys remain environment-local.
+- Refresh grants authenticate the client, forbid scope escalation, consume and replace
+  the token atomically, preserve absolute family expiry, and revoke the family plus
+  associated tracked access tokens on replay or concurrent double redemption.
+- Provider-valid disable, suspend, deprovision, and delete transitions revoke effective
+  access/refresh credentials in the same transaction as the state change. User deletion
+  also removes Group membership and increments affected Group versions atomically.
 - Hosted form values are HTML-escaped, and token/login responses use no-store cache
   controls where applicable.
 - Environment TTLs, request-log row and byte budgets, captured body/header limits,
   assertion result limits, scenario-size limits, and scenario-delay limits bound the
   implemented persistence and fault-injection paths.
+- SCIM, Graph, and Okta directory adapters bound request paths, identifiers, query or
+  filter sizes, page sizes, and supported operations. SCIM and Okta writes stream
+  through 1 MiB body limits; SCIM additionally bounds filter tokens/depth/nodes and
+  PATCH operations/depth/nodes.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
 
@@ -44,14 +62,16 @@ The [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) exercises authen
 MCP, environment isolation by identifier, OIDC/JWKS verification, scenario injection,
 request logging, assertions, and cleanup in staging and production. It is focused
 acceptance evidence, not a penetration test or a claim that every threat is closed.
+The M3 refresh, lifecycle, SCIM, Graph, Okta directory, 14-tool MCP, and CLI paths have
+focused local tests only; the M2 smoke does not qualify them.
 
 ## Residual and future work
 
-The self-hosted M2 deployment uses one coarse operator key per target. Per-environment
-authorization, automated key rotation, account governance, abuse protection, and
-private hosted-control-plane policy are later milestones. workers.dev path mode also
-lacks provider-shaped wildcard hosts, so client compatibility remains intentionally
-bounded.
+The reference self-hosted deployment uses one coarse operator key per target.
+Per-environment authorization, automated key rotation, account governance, abuse
+protection, and private hosted-control-plane policy are later milestones. workers.dev
+path mode also lacks provider-shaped wildcard hosts, so client compatibility remains
+intentionally bounded.
 
 Environment logs intentionally retain test protocol bodies and mock tokens because
 assertion is the product. This is not permission to send production secrets, account
@@ -60,4 +80,6 @@ Operators must treat exported logs as sensitive test artifacts.
 
 Outbound SSRF-specific controls are in
 [outbound provisioning](./outbound-provisioning.md). That feature is not implemented
-at M2; a target control listed there is not evidence that its mitigation has landed.
+in the M3 source candidate; a target control listed there is not evidence that its
+mitigation has landed. UserInfo, Okta Classic `/api/v1/authn`, broad Graph/Okta API
+parity, and custom-domain routing likewise remain outside the current boundary.

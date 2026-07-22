@@ -1,0 +1,28 @@
+{
+  "name": "RFC 7644 reject User create without SCIM media type",
+  "description": "A JSON write without Content-Type is rejected as unsupported media.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "POST",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "userName": "missing-media@example.test"
+    }
+  },
+  "expected": {
+    "status": 415,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "415"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.1",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

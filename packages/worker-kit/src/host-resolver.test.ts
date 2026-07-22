@@ -53,6 +53,40 @@ describe("resolveEnvironmentRequest", () => {
     });
   });
 
+  it("routes SCIM and Graph surfaces to the named environment", () => {
+    expect(
+      resolveEnvironmentRequest(
+        `https://mockos.example/e/${environmentId}/scim/v2/Users`,
+        { hostingMode: "path" }
+      )
+    ).toMatchObject({
+      environmentId,
+      forwardedPath: "/scim/v2/Users",
+      issuerBase: `https://mockos.example/e/${environmentId}`,
+      provider: "scim",
+    });
+    expect(
+      resolveEnvironmentRequest(
+        `https://mockos.example/e/${environmentId}/graph/v1.0/users`,
+        { hostingMode: "path" }
+      )
+    ).toMatchObject({
+      environmentId,
+      forwardedPath: "/graph/v1.0/users",
+      issuerBase: `https://mockos.example/e/${environmentId}`,
+      provider: "graph",
+    });
+    expect(
+      resolveEnvironmentRequest(`https://mockos.example/e/${environmentId}/api/v1`, {
+        hostingMode: "path",
+      })
+    ).toMatchObject({
+      environmentId,
+      forwardedPath: "/api/v1",
+      provider: "okta",
+    });
+  });
+
   it("returns a tenant locator for the Entra login host", () => {
     const result = resolveEnvironmentRequest(
       `https://login.id.mockos.live/${tenantId}/v2.0/.well-known/openid-configuration`,

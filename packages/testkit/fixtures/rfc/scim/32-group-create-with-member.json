@@ -1,0 +1,41 @@
+{
+  "name": "RFC 7644 create Group with seeded member",
+  "description": "A Group create accepts a reference to an existing static User id.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "POST",
+    "path": "/scim/v2/Groups",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      "displayName": "Compilers",
+      "members": [
+        {
+          "value": "usr_grace"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 201,
+    "headers": {
+      "etag": "W/\"1\""
+    },
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      "displayName": "Compilers",
+      "meta": {
+        "resourceType": "Group",
+        "version": "W/\"1\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.3",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

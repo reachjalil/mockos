@@ -1,0 +1,30 @@
+{
+  "name": "RFC 7644 reject empty PATCH Operations",
+  "description": "A PatchOp request must contain at least one operation.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": []
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidValue"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

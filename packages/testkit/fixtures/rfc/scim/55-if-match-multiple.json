@@ -1,0 +1,37 @@
+{
+  "name": "RFC 7644 reject multiple If-Match tags",
+  "description": "The M3 SCIM version precondition accepts a single entity tag rather than a comma-separated set.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json",
+      "if-match": "W/\"1\", W/\"2\""
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "active",
+          "value": false
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidVers"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

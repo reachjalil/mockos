@@ -1,0 +1,24 @@
+{
+  "name": "RFC 7644 reject bearer scheme without credential",
+  "description": "A Bearer authorization value without a credential is unauthorized.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer"
+    }
+  },
+  "expected": {
+    "status": 401,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "401"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

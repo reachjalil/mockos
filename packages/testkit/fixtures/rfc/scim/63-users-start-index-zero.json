@@ -1,0 +1,28 @@
+{
+  "name": "RFC 7644 reject zero pagination startIndex",
+  "description": "SCIM pagination is one-based, so startIndex zero is invalid.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "startIndex": "0"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidValue"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

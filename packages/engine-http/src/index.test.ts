@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createEntraHttpApp, type EntraHttpEngine } from "./index";
+import { describe, expect, it, vi } from "vitest";
+import { createEntraHttpApp, type EntraHttpEngine, OAuthProtocolError } from "./index";
 
 const tenantId = "0f6f4756-741d-4a4b-83b2-5f2e37ec621d";
 
@@ -95,5 +95,122 @@ describe("Entra authorization response modes", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "invalid_request" });
+  });
+});
+
+describe("Entra token grants", () => {
+  const issuer = `https://login.mockos.test/e/test/${tenantId}/v2.0`;
+  const tokenPath = `https://do.internal/${tenantId}/oauth2/v2.0/token`;
+  const withIssuer = (body: URLSearchParams) => ({
+    method: "POST",
+    headers: { "x-mockos-issuer-base": issuer },
+    body,
+  });
+
+  it("dispatches validated authorization-code and refresh-token requests", async () => {
+    const token = vi.fn(() => ({
+      accessToken: "access-token",
+      expiresIn: 3_600,
+      refreshToken: "replacement-refresh-token",
+      scope: "openid offline_access",
+    }));
+    const app = createEntraHttpApp({ engine: { ...engine, token } });
+
+    const authorizationCode = await app.request(
+      tokenPath,
+      withIssuer(
+        new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: "mock-client",
+          client_secret: "mock-client-secret",
+          code: "authorization-code",
+          redirect_uri: "https://client.example/callback",
+          code_verifier: "verifier",
+        })
+      )
+    );
+    expect(authorizationCode.status).toBe(200);
+    expect(token).toHaveBeenNthCalledWith(1, {
+      grantType: "authorization_code",
+      issuerBase: issuer,
+      clientId: "mock-client",
+      clientSecret: "mock-client-secret",
+      code: "authorization-code",
+      redirectUri: "https://client.example/callback",
+      codeVerifier: "verifier",
+    });
+
+    const refresh = await app.request(
+      tokenPath,
+      withIssuer(
+        new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "mock-client",
+          client_secret: "mock-client-secret",
+          refresh_token: "current-refresh-token",
+          scope: "openid offline_access",
+        })
+      )
+    );
+    expect(refresh.status).toBe(200);
+    expect(await refresh.json()).toMatchObject({
+      token_type: "Bearer",
+      expires_in: 3_600,
+      access_token: "access-token",
+      refresh_token: "replacement-refresh-token",
+      scope: "openid offline_access",
+    });
+    expect(token).toHaveBeenNthCalledWith(2, {
+      grantType: "refresh_token",
+      issuerBase: issuer,
+      clientId: "mock-client",
+      clientSecret: "mock-client-secret",
+      refreshToken: "current-refresh-token",
+      scope: "openid offline_access",
+    });
+  });
+
+  it("rejects a refresh grant without a refresh_token before engine dispatch", async () => {
+    const token = vi.fn(engine.token);
+    const response = await createEntraHttpApp({ engine: { ...engine, token } }).request(
+      tokenPath,
+      withIssuer(
+        new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "mock-client",
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: "invalid_request",
+      error_description: expect.stringContaining("'refresh_token'"),
+    });
+    expect(token).not.toHaveBeenCalled();
+  });
+
+  it("renders disabled-user refresh failures as Entra AADSTS50057 errors", async () => {
+    const token = vi.fn(() => {
+      throw new OAuthProtocolError("USER_DISABLED", "User account is disabled.");
+    });
+    const response = await createEntraHttpApp({ engine: { ...engine, token } }).request(
+      tokenPath,
+      withIssuer(
+        new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "mock-client",
+          refresh_token: "current-refresh-token",
+        })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-ms-request-id")).toBeTruthy();
+    expect(await response.json()).toMatchObject({
+      error: "invalid_grant",
+      error_codes: [50057],
+      error_description: expect.stringContaining("AADSTS50057"),
+    });
   });
 });

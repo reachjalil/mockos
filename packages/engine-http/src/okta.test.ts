@@ -47,11 +47,17 @@ const createFakeEngine = (): OktaHttpEngine => ({
   jwks: vi.fn(() => ({ keys: [] })),
   pollDeviceAuthorization: vi.fn(() => tokenResult),
   redeemAuthorizationCode: vi.fn(() => tokenResult),
+  redeemRefreshToken: vi.fn(() => tokenResult),
   renderError: vi.fn((error: unknown) => {
-    const status =
-      error instanceof OAuthProtocolError && error.semanticCode === "BAD_CLIENT_SECRET"
-        ? 401
-        : 400;
+    const semanticCode =
+      error instanceof OAuthProtocolError ? error.semanticCode : "INVALID_REQUEST";
+    const status = semanticCode === "BAD_CLIENT_SECRET" ? 401 : 400;
+    const oauthError =
+      semanticCode === "BAD_CLIENT_SECRET"
+        ? "invalid_client"
+        : semanticCode === "USER_DISABLED"
+          ? "invalid_grant"
+          : "invalid_request";
     return {
       status,
       headers: {
@@ -59,7 +65,7 @@ const createFakeEngine = (): OktaHttpEngine => ({
         ...(status === 401 ? { "www-authenticate": 'Basic realm="Okta"' } : {}),
       },
       body: {
-        error: status === 401 ? "invalid_client" : "invalid_request",
+        error: oauthError,
         error_description:
           error instanceof Error ? error.message : "The OAuth request is invalid.",
       },
@@ -197,7 +203,7 @@ describe("Okta HTTP adapter", () => {
     expect(html).toContain('name="state" value="state-02"');
   });
 
-  it("dispatches authorization-code and device-code token grants", async () => {
+  it("dispatches authorization-code, refresh-token, and device-code grants", async () => {
     const app = createOktaHttpApp({ engine });
     const authorizationCode = await app.request(
       "https://do.internal/oauth2/default/v1/token",
@@ -230,6 +236,34 @@ describe("Okta HTTP adapter", () => {
       code: "fixture-code",
       redirectUri: "https://client.example/callback",
       codeVerifier: "okta-verifier-abcdefghijklmnopqrstuvwxyz-0123456789-ABCDE",
+    });
+
+    const refresh = await app.request(
+      "https://do.internal/oauth2/default/v1/token",
+      withIssuer({
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "0oaMockClient",
+          client_secret: "okta-client-secret",
+          refresh_token: "current-refresh-token",
+          scope: "openid profile",
+        }),
+      })
+    );
+    expect(refresh.status).toBe(200);
+    expect(await refresh.json()).toMatchObject({
+      token_type: "Bearer",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    expect(engine.redeemRefreshToken).toHaveBeenCalledWith({
+      grantType: "refresh_token",
+      issuerBase: issuer,
+      clientId: "0oaMockClient",
+      clientSecret: "okta-client-secret",
+      refreshToken: "current-refresh-token",
+      scope: "openid profile",
     });
 
     const deviceCode = await app.request(
@@ -375,5 +409,48 @@ describe("Okta HTTP adapter", () => {
       error_description: "Client authentication failed.",
     });
     expect(engine.renderError).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates refresh input and renders disabled-user refresh errors", async () => {
+    const app = createOktaHttpApp({ engine });
+    const missingToken = await app.request(
+      "https://do.internal/oauth2/default/v1/token",
+      withIssuer({
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "0oaMockClient",
+          client_secret: "okta-client-secret",
+        }),
+      })
+    );
+    expect(missingToken.status).toBe(400);
+    expect(await missingToken.json()).toMatchObject({
+      error: "invalid_request",
+      error_description: expect.stringContaining("'refresh_token'"),
+    });
+    expect(engine.redeemRefreshToken).not.toHaveBeenCalled();
+
+    vi.mocked(engine.redeemRefreshToken).mockRejectedValueOnce(
+      new OAuthProtocolError("USER_DISABLED", "The resource owner account is disabled.")
+    );
+    const disabled = await app.request(
+      "https://do.internal/oauth2/default/v1/token",
+      withIssuer({
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "0oaMockClient",
+          client_secret: "okta-client-secret",
+          refresh_token: "current-refresh-token",
+        }),
+      })
+    );
+    expect(disabled.status).toBe(400);
+    expect(disabled.headers.get("x-okta-request-id")).toBe("req_fake");
+    expect(await disabled.json()).toEqual({
+      error: "invalid_grant",
+      error_description: "The resource owner account is disabled.",
+    });
   });
 });

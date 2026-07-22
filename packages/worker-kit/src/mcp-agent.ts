@@ -218,6 +218,13 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
         await this.#requireEnvironment(environmentId);
         return this.#environment(environmentId).assertRequests(assertion);
       },
+      simulateLifecycle: async (environmentId, input) => {
+        await this.#requireEnvironment(environmentId);
+        return this.#environment(environmentId).simulateLifecycle(
+          input.userId,
+          input.action
+        );
+      },
       getWellKnownUrls: async (environmentId) => {
         const config = await this.#requireEnvironment(environmentId);
         const location = publicLocation(config, this.env);

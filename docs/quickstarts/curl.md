@@ -1,13 +1,14 @@
 # Entra OIDC curl walkthrough
 
-Status: M2 source and workers.dev path-mode flow implemented; evidence linked below
+Status: M2 path-mode OIDC flow deployed; M3 directory, refresh, and lifecycle examples target the local source candidate only
 Last reviewed: 2026-07-22
 
 This walkthrough uses only synthetic data. It exercises the authenticated HTTP control
 routes and the same public protocol routes as the
-[Worker integration test](../../apps/worker/test/oidc.integration.test.ts). The M2
-remote MCP interface is the preferred automation surface; the source-built CLI is
-documented in the [CLI guide](../../packages/cli/README.md).
+[Worker integration test](../../apps/worker/test/oidc.integration.test.ts). The main
+hosted-login sequence has historical M2 deployment evidence. A later section probes
+M3 source-candidate SCIM, Graph, refresh, and lifecycle behavior against a local Worker.
+The source-built CLI is documented in the [CLI guide](../../packages/cli/README.md).
 
 ## Choose a Worker
 
@@ -48,6 +49,10 @@ key is published. Never enter a Cloudflare credential, production identity, or r
 application secret into this walkthrough. A missing server-side `API_KEY` fails closed
 with `503`, while a missing or incorrect client credential receives `401`.
 
+Those live origins have only the recorded M2 evidence. Do not run the M3-specific
+commands below against them unless a later M3 deployment record explicitly qualifies
+the same revision.
+
 ## Configure synthetic state
 
 Create the environment:
@@ -76,7 +81,7 @@ Register the application:
 curl --fail-with-body --request POST \
   --header "Authorization: Bearer $MOCKOS_API_KEY" \
   --header 'Content-Type: application/json' \
-  --data "{\"name\":\"curl PKCE client\",\"clientId\":\"$MOCKOS_CLIENT\",\"clientSecret\":\"$MOCKOS_CLIENT_SECRET\",\"redirectUris\":[\"$MOCKOS_REDIRECT\"],\"grantTypes\":[\"authorization_code\"],\"appRoles\":[],\"groupClaimsMode\":\"none\"}" \
+  --data "{\"name\":\"curl PKCE client\",\"clientId\":\"$MOCKOS_CLIENT\",\"clientSecret\":\"$MOCKOS_CLIENT_SECRET\",\"redirectUris\":[\"$MOCKOS_REDIRECT\"],\"grantTypes\":[\"authorization_code\",\"refresh_token\"],\"appRoles\":[],\"groupClaimsMode\":\"none\"}" \
   "$MOCKOS_ORIGIN/__mockos/v1/environments/$MOCKOS_ENV/applications"
 ```
 
@@ -104,7 +109,7 @@ curl --fail-with-body --get \
   --data-urlencode "redirect_uri=$MOCKOS_REDIRECT" \
   --data-urlencode 'response_type=code' \
   --data-urlencode 'response_mode=query' \
-  --data-urlencode 'scope=openid profile email' \
+  --data-urlencode 'scope=openid profile email offline_access' \
   --data-urlencode 'state=curl-state' \
   --data-urlencode 'nonce=curl-nonce' \
   --data-urlencode "code_challenge=$MOCKOS_PKCE_CHALLENGE" \
@@ -123,7 +128,7 @@ curl --silent --show-error --dump-header - --output /dev/null \
   --data-urlencode "redirect_uri=$MOCKOS_REDIRECT" \
   --data-urlencode 'response_type=code' \
   --data-urlencode 'response_mode=query' \
-  --data-urlencode 'scope=openid profile email' \
+  --data-urlencode 'scope=openid profile email offline_access' \
   --data-urlencode 'state=curl-state' \
   --data-urlencode 'nonce=curl-nonce' \
   --data-urlencode "code_challenge=$MOCKOS_PKCE_CHALLENGE" \
@@ -156,6 +161,87 @@ curl --fail-with-body \
 The automated integration test additionally verifies the ID-token RS256 signature and
 the `iss`, `aud`, `tid`, `oid`, `upn`, and `nonce` claims.
 
+## Probe the local M3 source candidate
+
+Keep `MOCKOS_ORIGIN=http://127.0.0.1:8787` for this section. SCIM and Graph use
+non-empty synthetic Bearer values that check only scheme and presence; they are not
+real provider tokens. Never substitute `MOCKOS_API_KEY` as a protocol credential.
+
+Inspect SCIM discovery and the seeded User:
+
+```sh
+curl --fail-with-body \
+  --header 'Authorization: Bearer synthetic-scim-token' \
+  "$MOCKOS_ORIGIN/e/$MOCKOS_ENV/scim/v2/ServiceProviderConfig"
+
+curl --fail-with-body --get \
+  --header 'Authorization: Bearer synthetic-scim-token' \
+  --data-urlencode 'filter=userName eq "ada@example.test"' \
+  "$MOCKOS_ORIGIN/e/$MOCKOS_ENV/scim/v2/Users"
+```
+
+The same Entra environment exposes bounded, read-only Graph User/Group views:
+
+```sh
+curl --fail-with-body --get \
+  --header 'Authorization: Bearer synthetic-graph-token' \
+  --data-urlencode '$select=id,displayName,userPrincipalName' \
+  --data-urlencode "\$filter=userPrincipalName eq 'ada@example.test'" \
+  "$MOCKOS_ORIGIN/e/$MOCKOS_ENV/graph/v1.0/users"
+```
+
+For an Okta environment, SCIM uses the same `/scim/v2` path. The bounded Users/Groups
+API instead uses a synthetic SSWS value:
+
+```sh
+export MOCKOS_OKTA_ENV=replace-with-local-okta-environment-id
+
+curl --fail-with-body \
+  --header 'Authorization: SSWS synthetic-okta-api-token' \
+  "$MOCKOS_ORIGIN/e/$MOCKOS_OKTA_ENV/api/v1/users"
+```
+
+The application and authorization request above permit `refresh_token` and request
+`offline_access`. Copy the first token response's synthetic refresh token into
+`MOCKOS_REFRESH_TOKEN`, then redeem it once locally:
+
+```sh
+export MOCKOS_REFRESH_TOKEN=replace-with-synthetic-refresh-token
+
+curl --fail-with-body --request POST \
+  --header 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=refresh_token' \
+  --data-urlencode "client_id=$MOCKOS_CLIENT" \
+  --data-urlencode "client_secret=$MOCKOS_CLIENT_SECRET" \
+  --data-urlencode "refresh_token=$MOCKOS_REFRESH_TOKEN" \
+  "$MOCKOS_ORIGIN/e/$MOCKOS_ENV/$MOCKOS_TENANT/oauth2/v2.0/token"
+```
+
+Success returns a replacement refresh token. Reusing the consumed token fails closed
+and revokes its family. A provider-valid disable, suspend, deprovision, or delete also
+revokes effective tracked credentials. The source CLI reaches that behavior through
+the 14-tool MCP candidate; copy the seeded User ID before invoking it:
+
+```sh
+pnpm --filter @mockos/cli build
+export MOCKOS_USER_ID=replace-with-seeded-user-id
+
+node packages/cli/dist/bin.js doctor \
+  --endpoint "$MOCKOS_ORIGIN/mcp" \
+  --json
+node packages/cli/dist/bin.js lifecycle simulate \
+  --endpoint "$MOCKOS_ORIGIN/mcp" \
+  --env "$MOCKOS_ENV" \
+  --user "$MOCKOS_USER_ID" \
+  --action disable \
+  --json
+```
+
+`doctor` must advertise `simulate_lifecycle`; stop rather than assuming compatibility
+if it does not. Entra accepts `activate`, `disable`, `reactivate`, and `delete`; Okta
+accepts `activate`, `reactivate`, `suspend`, `unsuspend`, `deprovision`, and `delete`
+only from valid states.
+
 ## Clean up
 
 ```sh
@@ -169,4 +255,4 @@ The raw control commands passed in the recorded
 [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) proves authenticated MCP
 setup and cleanup, OIDC/JWKS verification, deterministic scenario injection, request
 logging, and assertions against both staging and production. It does not establish
-general Entra SDK parity.
+general Entra SDK parity or deployment of the M3 commands in this walkthrough.

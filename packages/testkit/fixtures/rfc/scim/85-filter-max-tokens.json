@@ -1,0 +1,28 @@
+{
+  "name": "RFC 7644 bound filter token count",
+  "description": "A filter containing more than 256 parser tokens produces invalidFilter.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "userName eq \"limit-0@example.test\" or userName eq \"limit-1@example.test\" or userName eq \"limit-2@example.test\" or userName eq \"limit-3@example.test\" or userName eq \"limit-4@example.test\" or userName eq \"limit-5@example.test\" or userName eq \"limit-6@example.test\" or userName eq \"limit-7@example.test\" or userName eq \"limit-8@example.test\" or userName eq \"limit-9@example.test\" or userName eq \"limit-10@example.test\" or userName eq \"limit-11@example.test\" or userName eq \"limit-12@example.test\" or userName eq \"limit-13@example.test\" or userName eq \"limit-14@example.test\" or userName eq \"limit-15@example.test\" or userName eq \"limit-16@example.test\" or userName eq \"limit-17@example.test\" or userName eq \"limit-18@example.test\" or userName eq \"limit-19@example.test\" or userName eq \"limit-20@example.test\" or userName eq \"limit-21@example.test\" or userName eq \"limit-22@example.test\" or userName eq \"limit-23@example.test\" or userName eq \"limit-24@example.test\" or userName eq \"limit-25@example.test\" or userName eq \"limit-26@example.test\" or userName eq \"limit-27@example.test\" or userName eq \"limit-28@example.test\" or userName eq \"limit-29@example.test\" or userName eq \"limit-30@example.test\" or userName eq \"limit-31@example.test\" or userName eq \"limit-32@example.test\" or userName eq \"limit-33@example.test\" or userName eq \"limit-34@example.test\" or userName eq \"limit-35@example.test\" or userName eq \"limit-36@example.test\" or userName eq \"limit-37@example.test\" or userName eq \"limit-38@example.test\" or userName eq \"limit-39@example.test\" or userName eq \"limit-40@example.test\" or userName eq \"limit-41@example.test\" or userName eq \"limit-42@example.test\" or userName eq \"limit-43@example.test\" or userName eq \"limit-44@example.test\" or userName eq \"limit-45@example.test\" or userName eq \"limit-46@example.test\" or userName eq \"limit-47@example.test\" or userName eq \"limit-48@example.test\" or userName eq \"limit-49@example.test\" or userName eq \"limit-50@example.test\" or userName eq \"limit-51@example.test\" or userName eq \"limit-52@example.test\" or userName eq \"limit-53@example.test\" or userName eq \"limit-54@example.test\" or userName eq \"limit-55@example.test\" or userName eq \"limit-56@example.test\" or userName eq \"limit-57@example.test\" or userName eq \"limit-58@example.test\" or userName eq \"limit-59@example.test\" or userName eq \"limit-60@example.test\" or userName eq \"limit-61@example.test\" or userName eq \"limit-62@example.test\" or userName eq \"limit-63@example.test\" or userName eq \"limit-64@example.test\""
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidFilter"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

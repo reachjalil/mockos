@@ -1,0 +1,28 @@
+{
+  "name": "RFC 7644 reject unbalanced filter grouping",
+  "description": "An unterminated parenthesized expression produces invalidFilter.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "(userName eq \"ada@example.test\""
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidFilter"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

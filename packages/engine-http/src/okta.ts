@@ -379,6 +379,7 @@ export const createOktaHttpApp = ({
       const issuerBase = issuerFromRequest(context.req.raw, issuerHeader);
       const { clientId, clientSecret } = clientCredentials(form, context.req.raw);
       const grantType = required(formValue(form, "grant_type"), "grant_type");
+      const scope = formValue(form, "scope");
       const result =
         grantType === "authorization_code"
           ? await engine.redeemAuthorizationCode({
@@ -390,16 +391,28 @@ export const createOktaHttpApp = ({
               redirectUri: required(formValue(form, "redirect_uri"), "redirect_uri"),
               codeVerifier: required(formValue(form, "code_verifier"), "code_verifier"),
             })
-          : grantType === DEVICE_CODE_GRANT_TYPE
-            ? await engine.pollDeviceAuthorization({
+          : grantType === "refresh_token"
+            ? await engine.redeemRefreshToken({
                 grantType,
                 issuerBase,
                 clientId,
-                deviceCode: required(formValue(form, "device_code"), "device_code"),
+                ...(clientSecret ? { clientSecret } : {}),
+                refreshToken: required(
+                  formValue(form, "refresh_token"),
+                  "refresh_token"
+                ),
+                ...(scope !== undefined ? { scope } : {}),
               })
-            : (() => {
-                throw new OAuthProtocolError("UNSUPPORTED_GRANT");
-              })();
+            : grantType === DEVICE_CODE_GRANT_TYPE
+              ? await engine.pollDeviceAuthorization({
+                  grantType,
+                  issuerBase,
+                  clientId,
+                  deviceCode: required(formValue(form, "device_code"), "device_code"),
+                })
+              : (() => {
+                  throw new OAuthProtocolError("UNSUPPORTED_GRANT");
+                })();
       return context.json(tokenResponse(result), 200, noStoreHeaders);
     } catch (error) {
       return errorResponse(engine, error);

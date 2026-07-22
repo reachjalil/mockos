@@ -17,7 +17,12 @@ import {
   SystemClock,
   uuidFromRng,
 } from "./determinism";
-import { ApplicationRepository, GroupRepository, UserRepository } from "./directory";
+import {
+  ApplicationRepository,
+  GroupRepository,
+  LifecycleService,
+  UserRepository,
+} from "./directory";
 import { type JwtPayload, SigningKeyService } from "./keys";
 import { RequestLogService } from "./log";
 import { OAuthService } from "./oauth";
@@ -93,6 +98,7 @@ export class Engine {
   readonly groups: GroupRepository;
   readonly applications: ApplicationRepository;
   readonly apps: ApplicationRepository;
+  readonly lifecycle: LifecycleService;
   readonly keys: SigningKeyService;
   readonly oauth: OAuthService;
   readonly scenarios: ScenarioService;
@@ -120,6 +126,12 @@ export class Engine {
     this.groups = new GroupRepository(this.#store, this.clock, this.rng);
     this.applications = new ApplicationRepository(this.#store, this.clock, this.rng);
     this.apps = this.applications;
+    this.lifecycle = new LifecycleService({
+      provider: this.providerId,
+      users: this.users,
+      store: this.#store,
+      clock: this.clock,
+    });
     this.keys = new SigningKeyService(this.#store, this.clock, this.rng);
     this.scenarios = new ScenarioService({
       store: this.#store,

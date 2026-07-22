@@ -25,6 +25,9 @@ import {
   environmentRefToolInputSchema,
   getRequestLogToolInputSchema,
   type IdentitySeed,
+  type LifecycleAction,
+  type LifecycleResult,
+  lifecycleResultSchema,
   type MintedToken,
   type MintTokenRequest,
   type MockosMcpToolName,
@@ -42,6 +45,7 @@ import {
   seedIdentitiesToolInputSchema,
   setCurrentEnvironmentToolInputSchema,
   setScenarioToolInputSchema,
+  simulateLifecycleToolInputSchema,
   type WellKnownUrls,
   wellKnownUrlsSchema,
 } from "@mockos/contracts";
@@ -118,6 +122,11 @@ export type MockosToolDependencies = {
     assertion: AssertionSpec,
     context: MockosToolRequestContext
   ): Promise<AssertionResult>;
+  simulateLifecycle(
+    environmentId: string,
+    input: { userId: string; action: LifecycleAction },
+    context: MockosToolRequestContext
+  ): Promise<LifecycleResult>;
   getWellKnownUrls(
     environmentId: string,
     context: MockosToolRequestContext
@@ -510,6 +519,29 @@ export const registerMockosTools = (
     }
   );
 
+  const simulateLifecycle = server.registerTool(
+    "simulate_lifecycle",
+    {
+      title: "Simulate provider lifecycle transition",
+      description:
+        "Applies an Entra or Okta user lifecycle action, including token revocation, in the current or named environment.",
+      inputSchema: simulateLifecycleToolInputSchema,
+      outputSchema: envelopeSchema(lifecycleResultSchema),
+      annotations: destructiveAnnotations,
+    },
+    async ({ environmentId, userId, action }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return dependencies.simulateLifecycle(resolvedId, { userId, action }, context);
+      });
+    }
+  );
+
   const getWellKnownUrls = server.registerTool(
     "get_wellknown_urls",
     {
@@ -564,9 +596,10 @@ export const registerMockosTools = (
     clear_scenario: clearScenario,
     get_request_log: getRequestLog,
     assert_requests: assertRequests,
+    simulate_lifecycle: simulateLifecycle,
     get_wellknown_urls: getWellKnownUrls,
     set_current_environment: setCurrentEnvironment,
   };
 };
 
-export const MCP_IMPLEMENTATION_MILESTONE = "M2" as const;
+export const MCP_IMPLEMENTATION_MILESTONE = "M3" as const;

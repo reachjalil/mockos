@@ -1,0 +1,21 @@
+{
+  "name": "RFC 7644 reject missing SCIM authorization",
+  "description": "Every SCIM request requires a bearer credential.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users/usr_ada"
+  },
+  "expected": {
+    "status": 401,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "401"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

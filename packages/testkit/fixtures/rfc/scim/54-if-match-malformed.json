@@ -1,0 +1,37 @@
+{
+  "name": "RFC 7644 reject malformed If-Match",
+  "description": "An unquoted numeric If-Match value is not a valid SCIM entity tag.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json",
+      "if-match": "1"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "active",
+          "value": false
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidVers"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

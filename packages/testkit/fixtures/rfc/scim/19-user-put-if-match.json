@@ -1,0 +1,43 @@
+{
+  "name": "RFC 7644 replace User with matching If-Match",
+  "description": "A matching weak ETag permits a User PUT and the mutation advances the version.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PUT",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json",
+      "if-match": "W/\"1\""
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "id": "usr_ada",
+      "userName": "ada@example.test",
+      "displayName": "Ada King",
+      "name": {
+        "givenName": "Ada",
+        "familyName": "King"
+      },
+      "active": true
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "displayName": "Ada King",
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

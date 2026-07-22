@@ -1,0 +1,40 @@
+{
+  "name": "Microsoft Entra filtered email PATCH path",
+  "description": "An Entra-style filtered multi-valued email path replaces the selected work email value.",
+  "provider": "entra",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "Replace",
+          "path": "emails[type eq \"work\"].value",
+          "value": "ada.entra@example.test"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity/app-provisioning/use-scim-to-provision-users-and-groups",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

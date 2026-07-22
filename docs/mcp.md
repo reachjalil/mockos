@@ -1,12 +1,14 @@
 # MCP interface
 
-Status: M2 authenticated management MCP implemented and workers.dev-smoke-tested
+Status: M3 authenticated management MCP source candidate locally tested; deployed evidence remains M2
 Last reviewed: 2026-07-22
 
-mockOS exposes an authenticated management server at `/mcp`. The M2 Worker uses
+mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
 MCP TypeScript client. Automated integration tests cover `initialize`, `tools/list`,
-authenticated `tools/call`, session-local environment selection, and cleanup.
+authenticated `tools/call`, session-local environment selection, lifecycle cascades,
+and cleanup. The 14-tool M3 registry is a source-candidate claim; the live workers.dev
+targets have only the separately recorded M2 deployment evidence.
 
 ## Authentication fails closed
 
@@ -24,8 +26,8 @@ URLs, fixtures, logs, or reports.
 
 ## Transport and session behavior
 
-M2 is deliberately POST-only Streamable HTTP. `POST /mcp` carries initialization,
-notifications, and requests. `GET /mcp` returns `405` with
+The current source is deliberately POST-only Streamable HTTP. `POST /mcp` carries
+initialization, notifications, and requests. `GET /mcp` returns `405` with
 `Allow: POST, DELETE, OPTIONS`, which declares the optional standalone server-sent
 event stream unsupported. A standards-compliant client falls back to POST-only
 operation, and the CLI keeps each response attached to its originating POST.
@@ -41,10 +43,9 @@ environment clears it. Most tools accept an explicit `environmentId` and otherwi
 resolve the session cursor. Prefer the explicit ID in saved automation because the
 cursor does not cross sessions.
 
-## Exact M2 tool registry
+## Exact M3 source-candidate tool registry
 
-The server exposes these 13 tools—no provisioning or lifecycle tools are mounted in
-M2:
+The source candidate exposes these 14 tools:
 
 | Tool | Implemented behavior |
 | --- | --- |
@@ -59,14 +60,52 @@ M2:
 | `clear_scenario` | Clear one scenario or all scenarios in an environment |
 | `get_request_log` | Return a filtered, newest-first page of captured request entries |
 | `assert_requests` | Count exact request matches and return matching request IDs |
+| `simulate_lifecycle` | Apply a provider- and state-valid User lifecycle action and report state/version/ETag plus effective token revocations |
 | `get_wellknown_urls` | Derive provider URLs from the active public origin and environment |
 | `set_current_environment` | Set or clear the transport session's environment cursor |
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
 error result containing a problem document. SDK schema-validation failures occur before
-handler entry and return the SDK's generic input-validation error instead. A returned
-`scimBaseUrl` is reserved endpoint metadata; it does not claim that SCIM is implemented.
+handler entry and return the SDK's generic input-validation error instead.
+
+## Returned protocol URLs and mock authentication
+
+`get_wellknown_urls` returns request-derived OIDC/OAuth URLs and `scimBaseUrl`. Entra
+environments also return `graphBaseUrl`; Okta environments return `oktaApiBaseUrl`.
+Never construct or persist an absolute issuer from an old host.
+
+These are deliberately separate trust boundaries:
+
+- `/mcp` requires the configured management Access Key.
+- `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
+- Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
+- Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
+
+The three directory credentials check the expected scheme and presence for protocol
+testing; they do not validate a real provider token and are not production
+authorization. Never reuse or forward the MCP Access Key as a directory credential.
+The SCIM source candidate provides ServiceProviderConfig, ResourceTypes, Schemas, and
+versioned Users/Groups CRUD, filter, pagination, ETag, and PATCH behavior. Graph is a
+bounded read surface for Users, Groups, and direct memberships. The Okta API covers
+the tested Users/Groups CRUD, direct membership, and lifecycle routes; Classic
+`/api/v1/authn` is not implemented.
+
+## Lifecycle and refresh-token families
+
+Lifecycle actions are provider- and state-specific. Entra supports `activate`,
+`disable`, `reactivate`, and `delete`; Okta supports `activate`, `reactivate`,
+`suspend`, `unsuspend`, `deprovision`, and `delete`, with deletion requiring a
+deprovisioned User. Invalid transitions fail closed.
+
+Disabling, suspending, deprovisioning, or deleting a User revokes effective access and
+refresh tokens in the same transaction as the state change. Refresh grants authenticate
+the client, reject scope escalation, rotate the token within its family, preserve the
+original authentication time and absolute family expiry, and detect replay. Replaying
+or concurrently redeeming an already consumed token invalidates its refresh family and
+associated access tokens. A known token belonging to a newly disabled User returns the
+provider-shaped disabled-account error: Entra `invalid_grant` with `AADSTS50057`, or
+Okta `invalid_grant` with `The resource owner account is disabled.`
 
 ## Token minting
 
@@ -103,6 +142,9 @@ Routed Worker requests map to these injection points:
 | `oauth.device.activate` | Hosted device activation |
 | `oauth.introspect` | Introspection endpoint |
 | `oauth.revoke` | Revocation endpoint |
+| `scim.request` | SCIM discovery and Users/Groups requests |
+| `graph.request` | Microsoft Graph directory requests |
+| `okta.api` | Okta Users/Groups and lifecycle API requests |
 | `http.request` | Any other routed environment request |
 | `*` | Catch-all considered after an exact match |
 
@@ -115,7 +157,7 @@ are bounded to 64 KiB when serialized.
 
 ## Request logs and assertions
 
-The M2 Worker records inbound environment protocol requests after routing. Entries
+The Worker records inbound environment protocol requests after routing. Entries
 include method, exact public path, selected request/response headers and bounded bodies,
 status, duration, provider, timestamp, correlation ID, and request ID. Pagination is
 newest-first and cursor-bound to its filters. The row ring and byte budget are bounded;
@@ -139,4 +181,7 @@ authenticated MCP initialization and tool discovery, environment creation, ident
 application seeding, discovery, hosted Entra PKCE login, token/JWKS verification, a
 one-shot MFA-required scenario, request-log query/assertion, scenario clearing, and
 environment cleanup against staging and production Worker targets. This proves the
-deployed mockOS loop, not parity with a live Entra or Okta provider.
+deployed M2 mockOS loop, not the M3 source candidate or parity with a live Entra or
+Okta provider. M3-focused local evidence lives in the core refresh/lifecycle tests,
+SCIM/filter/PATCH/HTTP suites, provider directory Worker suite, and OAuth lifecycle
+cascade Worker test; repository-wide, hosted-CI, and deployed M3 gates remain pending.

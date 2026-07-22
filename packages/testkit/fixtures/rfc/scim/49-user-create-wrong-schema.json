@@ -1,0 +1,30 @@
+{
+  "name": "RFC 7644 reject wrong schema on User create",
+  "description": "A Group schema cannot identify a User request body.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "POST",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      "userName": "wrong-schema@example.test"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidValue"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.12",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

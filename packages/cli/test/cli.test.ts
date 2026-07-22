@@ -240,6 +240,45 @@ describe("mockOS CLI", () => {
     ]);
   });
 
+  it("maps lifecycle simulation to the M3 management contract", async () => {
+    const test = harness();
+    const client = new FakeClient();
+    client.tools = [{ name: "simulate_lifecycle" }];
+    client.results.set("simulate_lifecycle", {
+      userId: "usr_12345678",
+      previousState: "active",
+      currentState: "suspended",
+      changed: true,
+    });
+
+    const exitCode = await runCli(
+      [
+        "lifecycle",
+        "simulate",
+        "--env",
+        "env_12345678",
+        "--user",
+        "usr_12345678",
+        "--action",
+        "suspend",
+        "--json",
+      ],
+      dependencies(client, test.io)
+    );
+
+    expect(exitCode).toBe(0);
+    expect(client.calls).toEqual([
+      {
+        name: "simulate_lifecycle",
+        input: {
+          environmentId: "env_12345678",
+          userId: "usr_12345678",
+          action: "suspend",
+        },
+      },
+    ]);
+  });
+
   it("returns a distinct assertion exit code and writes JUnit", async () => {
     const test = harness();
     test.files.set("assertion.json", JSON.stringify({ path: "/token" }));

@@ -202,6 +202,7 @@ const oktaDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   ],
   grant_types_supported: [
     "authorization_code",
+    "refresh_token",
     "urn:ietf:params:oauth:grant-type:device_code",
   ],
   code_challenge_methods_supported: ["S256"],
@@ -256,7 +257,12 @@ export const oktaProfile: ProviderProfile = {
     };
   },
   errors: oktaErrorCatalog,
-  scimDialect: { patchStyle: "okta", acceptsEnterpriseExtension: true },
+  scimDialect: {
+    patchStyle: "okta",
+    acceptsEnterpriseExtension: true,
+    groupPatchSuccessStatus: 200,
+    supportsPathlessReplace: true,
+  },
   provisioning: { usersBeforeGroups: true, deprovision: "deactivate" },
   loginPage: { theme: "okta", productName: "Okta" },
   authn: { classic: true },

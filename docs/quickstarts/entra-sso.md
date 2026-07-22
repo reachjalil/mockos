@@ -1,6 +1,6 @@
 # Test Entra SSO
 
-Status: M2 Entra flow live in workers.dev path mode; compatibility remains bounded
+Status: M2 Entra code flow live in workers.dev path mode; M3 refresh, directory, and lifecycle follow-ons are local source candidates
 Last reviewed: 2026-07-22
 
 1. Choose a local Worker or a live workers.dev origin from
@@ -45,9 +45,39 @@ Use the returned environment ID for `seed`, `app create`, `wellknown`, and clean
 commands described in the [CLI guide](../../packages/cli/README.md). Profiles contain
 control credentials; keep the owner-only config file out of Git.
 
+## Local M3 follow-on
+
+The staging profile above points at the historical M2 deployment. For the M3 source
+candidate, start a local Worker, save a separate `local` profile, and use `doctor` to
+confirm that the server advertises all 14 tools including `simulate_lifecycle`.
+
+Register an application permitting `authorization_code` and `refresh_token`, request
+`offline_access`, and redeem the returned refresh token once. The replacement rotates
+within the same family; scope escalation and replay fail closed. Then use the synthetic
+User ID returned by `seed` to exercise the Entra lifecycle cascade:
+
+```sh
+node packages/cli/dist/bin.js lifecycle simulate \
+  --profile local \
+  --env env_replace_me \
+  --user usr_replace_me \
+  --action disable \
+  --json
+```
+
+The result reports the previous/current state, resource version and ETag, and effective
+access/refresh-token revocation counts. A subsequent refresh for that User must fail
+with Entra-shaped `invalid_grant` / `AADSTS50057`. The local path-mode environment also
+offers `/e/<environment>/scim/v2` for inbound SCIM and
+`/e/<environment>/graph/v1.0` for bounded read-only directory queries. Use separate
+non-empty synthetic Bearer values for those test surfaces, never the MCP Access Key.
+The [curl walkthrough](./curl.md) contains concise probes.
+
 Do not use real passwords, tenants, or tokens. The repository
 [integration test](../../apps/worker/test/oidc.integration.test.ts) demonstrates these
 steps under the Cloudflare Workers test runtime. The
 [M2 workers.dev smoke](../evidence/m2-workers-dev-smoke.md) records the corresponding
 deployed production and staging flow, including JWT verification and cleanup. This
-evidence does not claim arbitrary Entra client or SDK compatibility.
+evidence does not claim arbitrary Entra client or SDK compatibility, M3 deployment,
+or live-provider parity. Client credentials, device flow, UserInfo, outbound
+provisioning, and provider-shaped custom domains remain outside this quickstart.

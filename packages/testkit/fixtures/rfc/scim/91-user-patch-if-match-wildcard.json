@@ -1,0 +1,42 @@
+{
+  "name": "RFC 7644 User PATCH accepts If-Match wildcard",
+  "description": "The If-Match wildcard permits mutation of an existing seeded User and advances its version.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json",
+      "if-match": "*"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "active",
+          "value": false
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "active": false,
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

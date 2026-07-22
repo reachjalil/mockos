@@ -1,0 +1,33 @@
+{
+  "name": "RFC 7644 reject stale If-Match on User PUT",
+  "description": "A stale User version precondition fails without applying the replacement.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PUT",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json",
+      "if-match": "W/\"9\""
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "id": "usr_ada",
+      "userName": "ada@example.test",
+      "displayName": "Should Not Apply",
+      "active": true
+    }
+  },
+  "expected": {
+    "status": 412,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "412"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

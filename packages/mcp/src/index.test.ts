@@ -8,6 +8,8 @@ import {
   type EnvironmentConfig,
   type EnvironmentPatch,
   type IdentitySeed,
+  type LifecycleAction,
+  type LifecycleResult,
   type MintedToken,
   type MintTokenRequest,
   mockosMcpToolNames,
@@ -199,6 +201,29 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
     };
   }
 
+  async simulateLifecycle(
+    environmentId: string,
+    input: { userId: string; action: LifecycleAction },
+    _context: MockosToolRequestContext
+  ): Promise<LifecycleResult> {
+    const environment = this.requireEnvironment(environmentId);
+    this.calls.push({
+      environmentId,
+      operation: `lifecycle:${input.action}:${input.userId}`,
+    });
+    return {
+      userId: input.userId,
+      provider: environment.provider,
+      action: input.action,
+      previousState: "active",
+      currentState: input.action === "disable" ? "disabled" : "active",
+      changed: input.action === "disable",
+      version: input.action === "disable" ? 2 : 1,
+      etag: input.action === "disable" ? 'W/"2"' : 'W/"1"',
+      revoked: { accessTokens: 1, refreshTokens: 1 },
+    };
+  }
+
   async getWellKnownUrls(
     environmentId: string,
     _context: MockosToolRequestContext
@@ -381,6 +406,16 @@ describe("registerMockosTools", () => {
     });
     expect(assertion).toMatchObject({ pass: true, matched: 1 });
 
+    const lifecycle = await callData<LifecycleResult>(client, "simulate_lifecycle", {
+      userId: "user_1",
+      action: "disable",
+    });
+    expect(lifecycle).toMatchObject({
+      previousState: "active",
+      currentState: "disabled",
+      version: 2,
+    });
+
     const urls = await callData<WellKnownUrls>(client, "get_wellknown_urls", {});
     expect(urls.issuer).toContain(ENVIRONMENT_ID);
 
@@ -405,6 +440,7 @@ describe("registerMockosTools", () => {
       "set-scenario:force_mfa",
       "get-request-log",
       "assert-requests",
+      "lifecycle:disable:user_1",
       "get-well-known",
       "clear-scenario:force_mfa",
       "delete",

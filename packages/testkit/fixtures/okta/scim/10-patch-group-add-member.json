@@ -1,0 +1,45 @@
+{
+  "name": "Okta Group PATCH adds filtered-dialect member",
+  "description": "Okta adds a User through the members path with an array value.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "add",
+          "path": "members",
+          "value": [
+            {
+              "value": "usr_grace",
+              "display": "grace@example.test"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "grp_engineering",
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-scim/guides/scim-20",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

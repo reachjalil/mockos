@@ -9,9 +9,15 @@ import type {
 } from "./types";
 
 export { OAuthProtocolError, renderEntraError } from "./errors";
+export { createGraphHttpApp } from "./graph";
+export type * from "./graph";
 export { renderEntraLoginPage, renderOktaLoginPage } from "./login";
+export { createOktaDirectoryApi, OktaApiError } from "./okta-api";
+export type * from "./okta-api";
 export { createOktaHttpApp, renderOktaDeviceActivationPage } from "./okta";
 export type * from "./okta-types";
+export { createScimHttpApp, ScimHttpError } from "./scim";
+export type * from "./scim";
 export type * from "./types";
 
 const noStoreHeaders = {
@@ -137,17 +143,33 @@ const tokenRequest = (
       throw new OAuthProtocolError("BAD_CLIENT_SECRET");
     }
   }
-  return {
+  const grantType = required(get("grant_type"), "grant_type");
+  const clientId = required(basicClientId ?? get("client_id"), "client_id");
+  const clientSecret = basicClientSecret ?? get("client_secret");
+  const scope = get("scope");
+  const common = {
     issuerBase,
-    grantType: required(get("grant_type"), "grant_type"),
-    clientId: required(basicClientId ?? get("client_id"), "client_id"),
-    clientSecret: basicClientSecret ?? get("client_secret"),
-    code: get("code"),
-    redirectUri: get("redirect_uri"),
-    codeVerifier: get("code_verifier"),
-    refreshToken: get("refresh_token"),
-    scope: get("scope"),
+    clientId,
+    ...(clientSecret !== undefined ? { clientSecret } : {}),
+    ...(scope !== undefined ? { scope } : {}),
   };
+  if (grantType === "authorization_code") {
+    return {
+      ...common,
+      grantType,
+      code: required(get("code"), "code"),
+      redirectUri: required(get("redirect_uri"), "redirect_uri"),
+      codeVerifier: required(get("code_verifier"), "code_verifier"),
+    };
+  }
+  if (grantType === "refresh_token") {
+    return {
+      ...common,
+      grantType,
+      refreshToken: required(get("refresh_token"), "refresh_token"),
+    };
+  }
+  throw new OAuthProtocolError("UNSUPPORTED_GRANT");
 };
 
 const appendAuthorizationResult = (

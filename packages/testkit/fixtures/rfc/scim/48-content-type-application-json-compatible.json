@@ -1,0 +1,38 @@
+{
+  "name": "SCIM JSON compatibility media type for User create",
+  "description": "The M3 compatibility profile accepts application/json for a SCIM User create.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "POST",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "userName": "json-compatible@example.test",
+      "displayName": "JSON Compatible",
+      "active": true
+    }
+  },
+  "expected": {
+    "status": 201,
+    "headers": {
+      "etag": "W/\"1\""
+    },
+    "bodyContains": {
+      "userName": "json-compatible@example.test",
+      "displayName": "JSON Compatible",
+      "meta": {
+        "version": "W/\"1\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.1",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "application/json is an explicit mockOS compatibility allowance in addition to application/scim+json."
+}

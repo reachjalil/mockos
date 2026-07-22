@@ -18,7 +18,7 @@ export type ResolvedEnvironmentRequest = {
   forwardedPath: string;
   issuerBase: string;
   locator: EnvironmentLocator;
-  provider: "entra" | "okta" | "scim";
+  provider: "entra" | "graph" | "okta" | "scim";
   publicBase: string;
   tenantId?: string;
 };
@@ -43,12 +43,16 @@ const classifyPath = (pathname: string) => {
   if (
     pathname === "/activate" ||
     pathname.startsWith("/oauth2/") ||
+    pathname === "/api/v1" ||
     pathname.startsWith("/api/v1/")
   ) {
     return { provider: "okta" as const };
   }
   if (pathname === "/scim/v2" || pathname.startsWith("/scim/v2/")) {
     return { provider: "scim" as const };
+  }
+  if (pathname === "/graph/v1.0" || pathname.startsWith("/graph/v1.0/")) {
+    return { provider: "graph" as const };
   }
   return undefined;
 };

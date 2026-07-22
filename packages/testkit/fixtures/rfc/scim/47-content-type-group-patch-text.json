@@ -1,0 +1,35 @@
+{
+  "name": "RFC 7644 reject Group PATCH with text media type",
+  "description": "A PATCH body declared as text/plain is rejected as unsupported media.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "text/plain"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "displayName",
+          "value": "Nope"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 415,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "415"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.1",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

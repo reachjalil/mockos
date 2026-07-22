@@ -11,6 +11,18 @@ import {
   SeededRng,
 } from "./index.js";
 
+const jsonFilesRecursively = async (directory: string): Promise<string[]> => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return jsonFilesRecursively(path);
+      return entry.isFile() && entry.name.endsWith(".json") ? [path] : [];
+    })
+  );
+  return nested.flat().sort();
+};
+
 describe("NodeSqlStore", () => {
   it("supports reads, writes, and rollback", () => {
     const store = new NodeSqlStore();
@@ -72,6 +84,39 @@ describe("conformance fixtures", () => {
     expect(fixtures.every(({ status }) => status === "documented")).toBe(true);
   });
 
+  it("locks the M3 SCIM conformance corpus", async () => {
+    const directories = {
+      rfc: fileURLToPath(new URL("../fixtures/rfc/scim", import.meta.url)),
+      entra: fileURLToPath(new URL("../fixtures/entra/scim", import.meta.url)),
+      okta: fileURLToPath(new URL("../fixtures/okta/scim", import.meta.url)),
+    } as const;
+    const [rfc, entra, okta] = await Promise.all([
+      loadFixtures(await jsonFilesRecursively(directories.rfc)),
+      loadFixtures(await jsonFilesRecursively(directories.entra)),
+      loadFixtures(await jsonFilesRecursively(directories.okta)),
+    ]);
+    const fixtures = [...rfc, ...entra, ...okta];
+    const providerCounts = (corpus: typeof fixtures) => ({
+      entra: corpus.filter(({ provider }) => provider === "entra").length,
+      okta: corpus.filter(({ provider }) => provider === "okta").length,
+    });
+    const statusCounts = (corpus: typeof fixtures) => ({
+      documented: corpus.filter(({ status }) => status === "documented").length,
+      implemented: corpus.filter(({ status }) => status === "implemented").length,
+    });
+
+    expect(fixtures).toHaveLength(113);
+    expect(new Set(fixtures.map(({ name }) => name)).size).toBe(113);
+    expect(fixtures.every(({ area }) => area === "scim")).toBe(true);
+    expect(providerCounts(rfc)).toEqual({ entra: 0, okta: 91 });
+    expect(providerCounts(entra)).toEqual({ entra: 10, okta: 0 });
+    expect(providerCounts(okta)).toEqual({ entra: 0, okta: 12 });
+    expect(statusCounts(fixtures)).toEqual({ documented: 0, implemented: 113 });
+    expect(
+      fixtures.filter(({ status }) => status === "documented").map(({ name }) => name)
+    ).toEqual([]);
+  });
+
   it("reports exact and subset mismatches", async () => {
     const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
     const [file] = (await readdir(directory)).filter((name) => name.endsWith(".json"));
@@ -83,5 +128,41 @@ describe("conformance fixtures", () => {
       body: fixture.expected.body ?? fixture.expected.bodyContains,
     }));
     expect(() => assertFixtureResults(results)).not.toThrow();
+  });
+
+  it("compares independently parsed subset arrays and reports nested paths", async () => {
+    const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
+    const [file] = (await readdir(directory)).filter((name) => name.endsWith(".json"));
+    if (!file) throw new Error("expected at least one fixture");
+    const [loaded] = await loadFixtures([join(directory, file)]);
+    if (!loaded) throw new Error("expected the fixture to load");
+
+    const expectedBody = {
+      envelope: { values: [{ identity: { userName: "ada@example.test" } }] },
+    };
+    const fixture = {
+      ...loaded,
+      expected: { status: 200, bodyContains: expectedBody },
+    };
+    const independentlyParsed = JSON.parse(
+      JSON.stringify(expectedBody)
+    ) as typeof expectedBody;
+    const [equalResult] = await runFixtures([fixture], () => ({
+      status: 200,
+      body: independentlyParsed,
+    }));
+    expect(equalResult?.failures).toEqual([]);
+
+    independentlyParsed.envelope.values[0] = {
+      identity: { userName: "grace@example.test" },
+    };
+    const [mismatchResult] = await runFixtures([fixture], () => ({
+      status: 200,
+      body: independentlyParsed,
+    }));
+    expect(mismatchResult?.failures).toContainEqual({
+      path: "body.envelope.values[0].identity.userName",
+      message: 'expected "ada@example.test", received "grace@example.test"',
+    });
   });
 });

@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: M2 source-build and deployment guide; npm and custom-domain distribution remain unavailable
+Status: Source-build guide for the M3 candidate; reference deployment evidence remains M2 and npm/custom-domain distribution remains unavailable
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -33,6 +33,14 @@ The control plane fails closed. `/mcp` and `/__mockos/v1/*` return `503` if `API
 is not configured and reject a missing or incorrect key with `401`. `/health` and the
 mock provider protocol routes do not require that control credential.
 
+The current source candidate exposes 14 authenticated MCP management tools, including
+`simulate_lifecycle`. Its path-mode provider surfaces include SCIM for both provider
+profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
+`/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
+`/e/<environment>/api/v1`. Entra and Okta token endpoints also have local refresh
+redemption/rotation coverage. These are source claims, not evidence about the live
+workers.dev revisions.
+
 Save a local CLI profile without putting the key directly in the command line:
 
 ```sh
@@ -44,11 +52,30 @@ printf '%s' "$MOCKOS_API_KEY" | node packages/cli/dist/bin.js login \
   --api-key-stdin
 
 node packages/cli/dist/bin.js doctor --profile local
+node packages/cli/dist/bin.js mcp tools --profile local --json
 ```
 
 Profiles are stored with owner-only permissions in
 `${XDG_CONFIG_HOME:-~/.config}/mockos/config.json`. Keep that file out of Git and
 never reuse a production credential for local development.
+
+`doctor` should advertise `simulate_lifecycle` before a source workflow depends on it.
+After seeding a synthetic User, apply a provider-valid transition with:
+
+```sh
+node packages/cli/dist/bin.js lifecycle simulate \
+  --profile local \
+  --env env_replace_me \
+  --user usr_replace_me \
+  --action disable \
+  --json
+```
+
+SCIM and Graph accept non-empty synthetic Bearer values; the Okta directory API accepts
+a non-empty synthetic SSWS value. Those checks are for protocol tests, not production
+authorization. Never use the MCP Access Key as a directory token. UserInfo, Okta
+Classic `/api/v1/authn`, outbound provisioning, and broad Graph/Okta API compatibility
+remain unavailable; see [known limitations](./known-limitations.md).
 
 ## Deploy your Worker
 
@@ -85,14 +112,18 @@ pnpm --filter @mockos/worker exec wrangler secret put API_KEY
 
 These commands mutate the authenticated Cloudflare account. Confirm the account and
 target before running them, then execute the authenticated smoke against that exact
-origin. The repository's reference deployment is live in workers.dev path mode at:
+origin. A self-deployment proves only the revision and checks you ran; it is not the
+project's M3 acceptance record. The repository's reference deployment is live in
+workers.dev path mode at:
 
 - `https://mockos-staging.workspaceagent.workers.dev`
 - `https://mockos.workspaceagent.workers.dev`
 
 Its keys are deliberately not public. The sanitized production and staging results
 are recorded in the
-[M2 workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md).
+[M2 workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md). That record does
+not establish deployment of SCIM, Graph, Okta directory APIs, refresh rotation,
+lifecycle cascade, or the 14-tool MCP candidate.
 
 ## Distribution limits
 

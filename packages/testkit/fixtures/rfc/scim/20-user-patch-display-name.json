@@ -1,0 +1,41 @@
+{
+  "name": "RFC 7644 patch User displayName",
+  "description": "A replace operation updates a single User attribute and advances the version.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "replace",
+          "path": "displayName",
+          "value": "Ada Augusta Lovelace"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "displayName": "Ada Augusta Lovelace",
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

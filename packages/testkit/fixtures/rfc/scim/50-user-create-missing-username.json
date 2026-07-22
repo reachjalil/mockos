@@ -1,0 +1,30 @@
+{
+  "name": "RFC 7644 reject User without userName",
+  "description": "The required User userName attribute must be present.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "POST",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "displayName": "Missing Username"
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "400",
+      "scimType": "invalidValue"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.12",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

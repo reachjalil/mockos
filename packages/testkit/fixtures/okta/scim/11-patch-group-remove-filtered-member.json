@@ -1,0 +1,39 @@
+{
+  "name": "Okta Group PATCH removes filtered member",
+  "description": "Okta removes a User with a members valuePath selector.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PATCH",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": [
+        {
+          "op": "remove",
+          "path": "members[value eq \"usr_ada\"]"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "grp_engineering",
+      "meta": {
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/api/openapi/okta-scim/guides/scim-20",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

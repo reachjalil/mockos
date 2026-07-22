@@ -210,7 +210,12 @@ export const entraProfile: ProviderProfile = {
     ...(context.roles?.length ? { roles: [...context.roles] } : {}),
   }),
   errors: entraErrorCatalog,
-  scimDialect: { patchStyle: "entra", acceptsEnterpriseExtension: true },
+  scimDialect: {
+    patchStyle: "entra",
+    acceptsEnterpriseExtension: true,
+    groupPatchSuccessStatus: 204,
+    supportsPathlessReplace: false,
+  },
   provisioning: { usersBeforeGroups: true, deprovision: "disable_then_delete" },
   loginPage: { theme: "entra", productName: "Microsoft" },
   tokenPolicy: {

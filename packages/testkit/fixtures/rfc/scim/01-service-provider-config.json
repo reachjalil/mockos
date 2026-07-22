@@ -1,0 +1,39 @@
+{
+  "name": "RFC 7644 service provider configuration discovery",
+  "description": "The SCIM service advertises PATCH, filter, ETag, pagination, and unsupported bulk and sort capabilities.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/ServiceProviderConfig",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
+      "patch": {
+        "supported": true
+      },
+      "filter": {
+        "supported": true,
+        "maxResults": 200
+      },
+      "bulk": {
+        "supported": false
+      },
+      "sort": {
+        "supported": false
+      },
+      "etag": {
+        "supported": true
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

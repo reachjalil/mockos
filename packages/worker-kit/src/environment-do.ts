@@ -11,6 +11,8 @@ import {
   environmentPatchSchema,
   type IdentitySeed,
   identitySeedSchema,
+  type LifecycleAction,
+  type LifecycleResult,
   type MintedToken,
   type MintTokenRequest,
   mintTokenRequestSchema,
@@ -28,11 +30,15 @@ import {
   MAX_REQUEST_LOG_BODY_BYTES,
   OAuthError,
   type RenderedProviderError,
+  ScimService,
   type UserRecord,
 } from "@mockos/core";
 import {
   createEntraHttpApp,
+  createGraphHttpApp,
+  createOktaDirectoryApi,
   createOktaHttpApp,
+  createScimHttpApp,
   type EntraAuthorizationLogin,
   type EntraAuthorizationRequest,
   type EntraHttpEngine,
@@ -43,6 +49,10 @@ import {
   type OktaHttpEngine,
   type OktaRenderedError,
 } from "@mockos/engine-http";
+import {
+  createGraphDirectoryEngine,
+  createOktaDirectoryEngine,
+} from "./directory-http";
 import { DoSqlStore } from "./do-sql-store";
 
 const CONFIG_KEY = "environment_config";
@@ -60,6 +70,10 @@ const JSON_MUTATION_INJECTION_POINTS = new Set([
 ]);
 
 type MetaRow = { key: string; value: string };
+
+type HttpApplication = {
+  fetch(request: Request): Promise<Response> | Response;
+};
 
 export type SeedIdentitiesResult = {
   groups: Array<{ displayName: string; id: string }>;
@@ -169,8 +183,14 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
       });
     },
     async token(input: EntraTokenRequest) {
-      if (input.grantType !== "authorization_code") {
-        throw new OAuthProtocolError("UNSUPPORTED_GRANT");
+      if (input.grantType === "refresh_token") {
+        return engine.oauth.redeemRefreshToken({
+          refreshToken: input.refreshToken,
+          clientId: input.clientId,
+          issuerBase: input.issuerBase,
+          ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
+          ...(input.scope ? { scope: input.scope } : {}),
+        });
       }
       return engine.oauth.redeemAuthorizationCode({
         code: requireAuthorizationField(input.code, "code"),
@@ -284,6 +304,8 @@ const createOktaHttpEngine = (engine: Engine): OktaHttpEngine => {
       engine.oauth.pollDeviceAuthorization(input),
     redeemAuthorizationCode: ({ grantType: _grantType, ...input }) =>
       engine.oauth.redeemAuthorizationCode(input),
+    redeemRefreshToken: ({ grantType: _grantType, ...input }) =>
+      engine.oauth.redeemRefreshToken(input),
     introspect: (input) => engine.oauth.introspectToken(input),
     revoke: (input) => engine.oauth.revokeToken(input),
     renderError,
@@ -381,6 +403,15 @@ const protocolPath = (request: Request) => {
 };
 
 const injectionPointFor = (pathname: string): string => {
+  if (pathname === "/scim/v2" || pathname.startsWith("/scim/v2/")) {
+    return "scim.request";
+  }
+  if (pathname === "/graph/v1.0" || pathname.startsWith("/graph/v1.0/")) {
+    return "graph.request";
+  }
+  if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
+    return "okta.api";
+  }
   if (pathname.endsWith("/.well-known/openid-configuration")) {
     return "oidc.discovery";
   }
@@ -401,6 +432,68 @@ const injectionPointFor = (pathname: string): string => {
   if (pathname.endsWith("/v1/revoke")) return "oauth.revoke";
   if (pathname.endsWith("/activate")) return "oauth.device.activate";
   return "http.request";
+};
+
+const scenarioErrorResponse = (
+  engine: Engine,
+  config: EnvironmentConfig,
+  path: string,
+  code: Parameters<Engine["renderError"]>[0]
+) => {
+  if (path === "/api/v1" || path.startsWith("/api/v1/")) {
+    return responseFromRenderedError(
+      config.provider,
+      engine.renderError(code, undefined, "api")
+    );
+  }
+  if (path === "/scim/v2" || path.startsWith("/scim/v2/")) {
+    const status = code === "RATE_LIMITED" ? 429 : 400;
+    return Response.json(
+      {
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+        status: String(status),
+        detail:
+          code === "RATE_LIMITED"
+            ? "The mock SCIM service has exceeded its configured rate limit."
+            : `The injected SCIM request failed with ${code}.`,
+      },
+      {
+        status,
+        headers: {
+          "content-type": "application/scim+json; charset=utf-8",
+          ...(status === 429 ? { "retry-after": "1" } : {}),
+        },
+      }
+    );
+  }
+  if (path === "/graph/v1.0" || path.startsWith("/graph/v1.0/")) {
+    const status = code === "RATE_LIMITED" ? 429 : 400;
+    const requestId = crypto.randomUUID();
+    return Response.json(
+      {
+        error: {
+          code: code === "RATE_LIMITED" ? "TooManyRequests" : "BadRequest",
+          message: `The injected Graph request failed with ${code}.`,
+          innerError: {
+            date: new Date().toISOString(),
+            "request-id": requestId,
+            "client-request-id": requestId,
+          },
+        },
+      },
+      {
+        status,
+        headers: {
+          "request-id": requestId,
+          ...(status === 429 ? { "retry-after": "1" } : {}),
+        },
+      }
+    );
+  }
+  return responseFromRenderedError(
+    config.provider,
+    engine.renderError(code, undefined, "oauth")
+  );
 };
 
 const responseFromRenderedError = (
@@ -452,9 +545,7 @@ export class EnvironmentDurableObject extends DurableObject {
   #enginePromise: Promise<Engine> | undefined;
   #httpApp:
     | {
-        app:
-          | ReturnType<typeof createEntraHttpApp>
-          | ReturnType<typeof createOktaHttpApp>;
+        app: HttpApplication;
         generation: number;
       }
     | undefined;
@@ -577,13 +668,17 @@ export class EnvironmentDurableObject extends DurableObject {
     }
     const groups: SeedIdentitiesResult["groups"] = [];
     for (const group of seed.groups) {
-      const created = engine.groups.create(group);
-      groups.push({ id: created.id, displayName: created.displayName });
-      for (const member of group.members) {
+      const { members, ...groupInput } = group;
+      const memberIds = members.map((member) => {
         const user = engine.users.findByUserName(member);
         if (!user) throw new Error(`Unknown group member: ${member}`);
-        engine.groups.addMember(created.id, user.id);
-      }
+        return user.id;
+      });
+      const created = engine.groups.create({
+        ...groupInput,
+        memberIds,
+      });
+      groups.push({ id: created.id, displayName: created.displayName });
     }
     await this.#touch();
     return { users, groups };
@@ -711,6 +806,16 @@ export class EnvironmentDurableObject extends DurableObject {
     return result;
   }
 
+  async simulateLifecycle(
+    userId: string,
+    action: LifecycleAction
+  ): Promise<LifecycleResult> {
+    const engine = await this.#engine();
+    const result = engine.lifecycle.simulate(userId, action);
+    await this.#touch();
+    return result;
+  }
+
   async getWellKnownUrls(
     publicBase: string,
     issuerBase: string
@@ -725,6 +830,9 @@ export class EnvironmentDurableObject extends DurableObject {
       tokenEndpoint: urls.token(context),
       jwksUri: urls.jwks(context),
       scimBaseUrl: `${publicBase.replace(/\/+$/, "")}/scim/v2`,
+      ...(engine.providerId === "entra"
+        ? { graphBaseUrl: `${publicBase.replace(/\/+$/, "")}/graph/v1.0` }
+        : { oktaApiBaseUrl: `${publicBase.replace(/\/+$/, "")}/api/v1` }),
       userinfoEndpoint: urls.userInfo(context),
       ...(urls.introspection
         ? { introspectionEndpoint: urls.introspection(context) }
@@ -774,10 +882,40 @@ export class EnvironmentDurableObject extends DurableObject {
     let httpApp =
       this.#httpApp?.generation === generation ? this.#httpApp.app : undefined;
     if (!httpApp) {
-      httpApp =
+      const oidcApp =
         config.provider === "entra"
           ? createEntraHttpApp({ engine: createEntraHttpEngine(engine) })
           : createOktaHttpApp({ engine: createOktaHttpEngine(engine) });
+      const directoryApp =
+        config.provider === "entra"
+          ? createGraphHttpApp({
+              engine: createGraphDirectoryEngine(engine),
+              now: () => engine.clock.now(),
+            })
+          : createOktaDirectoryApi({ engine: createOktaDirectoryEngine(engine) });
+      const scimApp = createScimHttpApp(
+        new ScimService({
+          users: engine.users,
+          groups: engine.groups,
+          lifecycle: engine.lifecycle,
+          provider: engine.provider,
+        })
+      );
+      httpApp = {
+        fetch: (candidate) => {
+          const candidatePath = new URL(candidate.url).pathname;
+          const isScimPath =
+            candidatePath === "/scim/v2" || candidatePath.startsWith("/scim/v2/");
+          const isDirectoryPath =
+            config.provider === "entra"
+              ? candidatePath === "/graph/v1.0" ||
+                candidatePath.startsWith("/graph/v1.0/")
+              : candidatePath === "/api/v1" || candidatePath.startsWith("/api/v1/");
+          return (
+            isScimPath ? scimApp : isDirectoryPath ? directoryApp : oidcApp
+          ).fetch(candidate);
+        },
+      };
       if (generation === this.#configGeneration) {
         this.#httpApp = { app: httpApp, generation };
       }
@@ -785,8 +923,9 @@ export class EnvironmentDurableObject extends DurableObject {
 
     const startedAt = Date.now();
     const path = protocolPath(request);
+    const routedPath = new URL(request.url).pathname;
     const requestBodyPromise = readBoundedBody(request.clone().body);
-    const decision = engine.scenarios.decide(injectionPointFor(path), {
+    const decision = engine.scenarios.decide(injectionPointFor(routedPath), {
       method: request.method,
       path,
       provider: config.provider,
@@ -797,10 +936,7 @@ export class EnvironmentDurableObject extends DurableObject {
       response = await httpApp.fetch(request);
     } else if (decision.type === "error") {
       if (request.body) void request.body.cancel().catch(() => undefined);
-      response = responseFromRenderedError(
-        config.provider,
-        engine.renderError(decision.code, undefined, "oauth")
-      );
+      response = scenarioErrorResponse(engine, config, routedPath, decision.code);
     } else {
       response = await httpApp.fetch(request);
       if (decision.type === "mutate") {
@@ -827,6 +963,7 @@ export class EnvironmentDurableObject extends DurableObject {
     const correlationId =
       response.headers.get("x-ms-request-id") ??
       response.headers.get("x-okta-request-id") ??
+      response.headers.get("request-id") ??
       (typeof responseJson?.correlation_id === "string"
         ? responseJson.correlation_id
         : undefined) ??

@@ -1,0 +1,29 @@
+{
+  "name": "RFC 7644 filter equality operator",
+  "description": "The eq operator locates the seeded Ada User by userName.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "filter": "userName eq \"ada@example.test\""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 1,
+      "startIndex": 1,
+      "itemsPerPage": 1
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.2",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

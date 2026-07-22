@@ -1,0 +1,30 @@
+{
+  "name": "RFC 7644 second User pagination window",
+  "description": "The second one-resource window preserves totalResults and reports startIndex two.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    },
+    "query": {
+      "startIndex": "2",
+      "count": "1"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      "totalResults": 2,
+      "startIndex": 2,
+      "itemsPerPage": 1
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4.2.4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

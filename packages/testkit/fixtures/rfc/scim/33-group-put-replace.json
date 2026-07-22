@@ -1,0 +1,42 @@
+{
+  "name": "RFC 7644 replace Group with PUT",
+  "description": "PUT replaces the seeded Group name and advances its resource version.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PUT",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+      "id": "grp_engineering",
+      "displayName": "Platform Engineering",
+      "members": [
+        {
+          "value": "usr_ada"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "grp_engineering",
+      "displayName": "Platform Engineering",
+      "meta": {
+        "resourceType": "Group",
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.1",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

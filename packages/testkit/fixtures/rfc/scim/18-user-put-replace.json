@@ -1,0 +1,52 @@
+{
+  "name": "RFC 7644 replace User with PUT",
+  "description": "PUT replaces the seeded User representation and increments its version.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "PUT",
+    "path": "/scim/v2/Users/usr_ada",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "content-type": "application/scim+json"
+    },
+    "body": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "id": "usr_ada",
+      "userName": "ada@example.test",
+      "displayName": "Ada Byron",
+      "name": {
+        "givenName": "Ada",
+        "familyName": "Byron"
+      },
+      "active": true,
+      "emails": [
+        {
+          "value": "ada@example.test",
+          "type": "work",
+          "primary": true
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"2\""
+    },
+    "bodyContains": {
+      "id": "usr_ada",
+      "userName": "ada@example.test",
+      "displayName": "Ada Byron",
+      "active": true,
+      "meta": {
+        "resourceType": "User",
+        "version": "W/\"2\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.5.1",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

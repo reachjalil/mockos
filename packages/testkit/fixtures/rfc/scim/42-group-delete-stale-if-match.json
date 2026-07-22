@@ -1,0 +1,25 @@
+{
+  "name": "RFC 7644 reject stale If-Match on Group DELETE",
+  "description": "A stale version precondition prevents deletion of the seeded Group.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "DELETE",
+    "path": "/scim/v2/Groups/grp_engineering",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token",
+      "if-match": "W/\"9\""
+    }
+  },
+  "expected": {
+    "status": 412,
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      "status": "412"
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.14",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}

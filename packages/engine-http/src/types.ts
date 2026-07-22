@@ -22,17 +22,29 @@ export type EntraAuthorizationResult = {
   code: string;
 };
 
-export type EntraTokenRequest = {
+type EntraTokenRequestBase = {
   clientId: string;
   clientSecret?: string;
-  code?: string;
-  codeVerifier?: string;
-  grantType: string;
   issuerBase: string;
-  redirectUri?: string;
-  refreshToken?: string;
+};
+
+export type EntraAuthorizationCodeTokenRequest = EntraTokenRequestBase & {
+  code: string;
+  codeVerifier: string;
+  grantType: "authorization_code";
+  redirectUri: string;
   scope?: string;
 };
+
+export type EntraRefreshTokenRequest = EntraTokenRequestBase & {
+  grantType: "refresh_token";
+  refreshToken: string;
+  scope?: string;
+};
+
+export type EntraTokenRequest =
+  | EntraAuthorizationCodeTokenRequest
+  | EntraRefreshTokenRequest;
 
 export type EntraTokenResult = {
   accessToken: string;

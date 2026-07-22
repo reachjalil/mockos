@@ -5,6 +5,7 @@ import {
   type CreatedApplication,
   Engine,
   FixedClock,
+  hashSecret,
   pkceS256,
   SeededRng,
   type SqlRow,
@@ -142,6 +143,7 @@ describe("Okta OIDC profile", () => {
       device_authorization_endpoint: `${issuer}/v1/device/authorize`,
       grant_types_supported: [
         "authorization_code",
+        "refresh_token",
         "urn:ietf:params:oauth:grant-type:device_code",
       ],
     });
@@ -294,6 +296,352 @@ describe("Okta OIDC profile", () => {
     ).rejects.toMatchObject({
       code: "BAD_CLIENT_SECRET",
       oauthError: "invalid_client",
+    });
+  });
+
+  it("rotates refresh tokens with bounded scopes and revokes a replayed family", async () => {
+    const { store, clock, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const credentials = {
+      clientId: application.clientId,
+      clientSecret: "okta-client-secret",
+      issuerBase: issuer,
+    };
+    const initial = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const originalToken = initial.refreshToken ?? "";
+    const originalHash = await hashSecret(originalToken);
+    const original = store.get<{
+      auth_time: number;
+      consumed_at: string | null;
+      expires_at: string;
+      family_id: string;
+      generation: number;
+      parent_token_hash: string | null;
+      replaced_by_hash: string | null;
+      revoked_at: string | null;
+      token_hash: string;
+    }>("SELECT * FROM refresh_tokens WHERE token_hash = ?", originalHash);
+    expect(original).toMatchObject({
+      token_hash: originalHash,
+      auth_time: 1_784_721_600,
+      generation: 0,
+      parent_token_hash: null,
+      replaced_by_hash: null,
+      consumed_at: null,
+      revoked_at: null,
+    });
+    expect(original?.token_hash).not.toBe(originalToken);
+
+    clock.advance(60_000);
+    const rotated = await engine.oauth.redeemRefreshToken({
+      refreshToken: originalToken,
+      scope: "openid profile",
+      ...credentials,
+    });
+    expect(rotated).toMatchObject({
+      scope: "openid profile",
+      tokenType: "Bearer",
+    });
+    expect(rotated.refreshToken).toMatch(/^refresh_/);
+    expect(rotated.refreshToken).not.toBe(originalToken);
+    const replacementHash = await hashSecret(rotated.refreshToken ?? "");
+    const consumed = store.get<{
+      consumed_at: string | null;
+      replaced_by_hash: string | null;
+    }>(
+      "SELECT consumed_at, replaced_by_hash FROM refresh_tokens WHERE token_hash = ?",
+      originalHash
+    );
+    expect(consumed?.consumed_at).toBe("2026-07-22T12:01:00.000Z");
+    expect(consumed?.replaced_by_hash).toBe(replacementHash);
+    const replacement = store.get<{
+      auth_time: number;
+      expires_at: string;
+      family_id: string;
+      generation: number;
+      parent_token_hash: string | null;
+      scope: string;
+      token_hash: string;
+    }>("SELECT * FROM refresh_tokens WHERE token_hash = ?", replacementHash);
+    expect(replacement).toMatchObject({
+      token_hash: replacementHash,
+      family_id: original?.family_id,
+      auth_time: original?.auth_time,
+      generation: 1,
+      parent_token_hash: originalHash,
+      expires_at: original?.expires_at,
+      scope: "openid profile",
+    });
+    const refreshedClaims = await engine.verifyToken(rotated.idToken ?? "");
+    expect(refreshedClaims).toMatchObject({
+      auth_time: 1_784_721_600,
+      iat: 1_784_721_660,
+    });
+
+    await expect(
+      engine.oauth.introspectToken({ token: originalToken, ...credentials })
+    ).resolves.toEqual({ active: false });
+    await expect(
+      engine.oauth.introspectToken({
+        token: rotated.refreshToken ?? "",
+        ...credentials,
+      })
+    ).resolves.toMatchObject({ active: true, scope: "openid profile" });
+
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        refreshToken: originalToken,
+        ...credentials,
+      })
+    ).rejects.toMatchObject({
+      code: "INVALID_GRANT",
+      oauthError: "invalid_grant",
+    });
+    await expect(
+      engine.oauth.introspectToken({
+        token: rotated.refreshToken ?? "",
+        ...credentials,
+      })
+    ).resolves.toEqual({ active: false });
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM refresh_tokens
+         WHERE family_id = ? AND revoked_at IS NULL`,
+        original?.family_id ?? ""
+      )?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM oauth_access_tokens
+         WHERE family_id = ? AND revoked_at IS NULL`,
+        original?.family_id ?? ""
+      )?.count
+    ).toBe(0);
+  });
+
+  it("rejects refresh scope escalation without consuming the token", async () => {
+    const { store, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const tokens = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const refreshToken = tokens.refreshToken ?? "";
+    const tokenHash = await hashSecret(refreshToken);
+    const credentials = {
+      clientId: application.clientId,
+      clientSecret: "okta-client-secret",
+      issuerBase: issuer,
+    };
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        refreshToken,
+        scope: "openid profile administrator",
+        ...credentials,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_SCOPE", oauthError: "invalid_scope" });
+    expect(
+      store.get<{ consumed_at: string | null; revoked_at: string | null }>(
+        "SELECT consumed_at, revoked_at FROM refresh_tokens WHERE token_hash = ?",
+        tokenHash
+      )
+    ).toEqual({ consumed_at: null, revoked_at: null });
+    await expect(
+      engine.oauth.redeemRefreshToken({ refreshToken, ...credentials })
+    ).resolves.toMatchObject({ refreshToken: expect.stringMatching(/^refresh_/) });
+  });
+
+  it("rolls back refresh consumption when replacement persistence fails", async () => {
+    const { store, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const tokens = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const refreshToken = tokens.refreshToken ?? "";
+    const tokenHash = await hashSecret(refreshToken);
+    const credentials = {
+      clientId: application.clientId,
+      clientSecret: "okta-client-secret",
+      issuerBase: issuer,
+    };
+    const accessCount = store.get<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM oauth_access_tokens"
+    )?.count;
+    store.database.exec(`CREATE TRIGGER reject_rotated_refresh
+      BEFORE INSERT ON refresh_tokens WHEN NEW.generation > 0
+      BEGIN SELECT RAISE(ABORT, 'reject rotated refresh'); END`);
+    await expect(
+      engine.oauth.redeemRefreshToken({ refreshToken, ...credentials })
+    ).rejects.toThrow(/reject rotated refresh/);
+    expect(
+      store.get<{
+        consumed_at: string | null;
+        replaced_by_hash: string | null;
+        revoked_at: string | null;
+      }>(
+        `SELECT consumed_at, replaced_by_hash, revoked_at
+         FROM refresh_tokens WHERE token_hash = ?`,
+        tokenHash
+      )
+    ).toEqual({ consumed_at: null, replaced_by_hash: null, revoked_at: null });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM oauth_access_tokens")
+        ?.count
+    ).toBe(accessCount);
+    store.database.exec("DROP TRIGGER reject_rotated_refresh");
+    await expect(
+      engine.oauth.redeemRefreshToken({ refreshToken, ...credentials })
+    ).resolves.toMatchObject({ refreshToken: expect.stringMatching(/^refresh_/) });
+  });
+
+  it("serializes concurrent refresh redemption and revokes the replayed family", async () => {
+    const { store, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const tokens = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const refreshToken = tokens.refreshToken ?? "";
+    const tokenHash = await hashSecret(refreshToken);
+    const familyId = store.get<{ family_id: string }>(
+      "SELECT family_id FROM refresh_tokens WHERE token_hash = ?",
+      tokenHash
+    )?.family_id;
+    const input = {
+      refreshToken,
+      clientId: application.clientId,
+      clientSecret: "okta-client-secret",
+      issuerBase: issuer,
+    };
+    const attempts = await Promise.allSettled([
+      engine.oauth.redeemRefreshToken(input),
+      engine.oauth.redeemRefreshToken(input),
+    ]);
+    expect(attempts.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM refresh_tokens
+         WHERE family_id = ? AND revoked_at IS NULL`,
+        familyId ?? ""
+      )?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM oauth_access_tokens
+         WHERE family_id = ? AND revoked_at IS NULL`,
+        familyId ?? ""
+      )?.count
+    ).toBe(0);
+  });
+
+  it("revokes only effective tokens on suspension and preserves disabled errors", async () => {
+    const { clock, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const tokens = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    clock.advance(3_601_000);
+    expect(engine.lifecycle.apply(user.id, "suspend")).toMatchObject({
+      previousState: "active",
+      currentState: "suspended",
+      changed: true,
+      version: 2,
+      etag: 'W/"2"',
+      revoked: { accessTokens: 0, refreshTokens: 1 },
+    });
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        refreshToken: tokens.refreshToken ?? "",
+        clientId: application.clientId,
+        clientSecret: "okta-client-secret",
+        issuerBase: issuer,
+      })
+    ).rejects.toMatchObject({ code: "USER_DISABLED", oauthError: "invalid_grant" });
+    expect(engine.lifecycle.apply(user.id, "unsuspend")).toMatchObject({
+      previousState: "suspended",
+      currentState: "active",
+      revoked: { accessTokens: 0, refreshTokens: 0 },
+    });
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        refreshToken: tokens.refreshToken ?? "",
+        clientId: application.clientId,
+        clientSecret: "okta-client-secret",
+        issuerBase: issuer,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_GRANT" });
+  });
+
+  it("rolls back the lifecycle transition when credential revocation fails", async () => {
+    const { store, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    await issueAuthorizationCodeTokens({ engine, user, application, issuer });
+    store.database.exec(`CREATE TRIGGER reject_refresh_revocation
+      BEFORE UPDATE OF revoked_at ON refresh_tokens
+      WHEN NEW.revoked_at IS NOT NULL
+      BEGIN SELECT RAISE(ABORT, 'reject refresh revocation'); END`);
+
+    expect(() => engine.lifecycle.apply(user.id, "suspend")).toThrow(
+      /reject refresh revocation/
+    );
+    expect(engine.users.requireById(user.id)).toMatchObject({
+      lifecycleState: "active",
+      accountEnabled: true,
+      resourceVersion: 1,
+    });
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM oauth_access_tokens
+         WHERE user_id = ? AND revoked_at IS NOT NULL`,
+        user.id
+      )?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM refresh_tokens
+         WHERE user_id = ? AND revoked_at IS NOT NULL`,
+        user.id
+      )?.count
+    ).toBe(0);
+
+    store.database.exec("DROP TRIGGER reject_refresh_revocation");
+    expect(engine.lifecycle.apply(user.id, "suspend")).toMatchObject({
+      currentState: "suspended",
+      revoked: { accessTokens: 1, refreshTokens: 1 },
     });
   });
 });

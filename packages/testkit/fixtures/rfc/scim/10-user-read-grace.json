@@ -1,0 +1,34 @@
+{
+  "name": "RFC 7644 read seeded inactive User",
+  "description": "A User item read returns the static disabled Grace seed as active false.",
+  "provider": "okta",
+  "area": "scim",
+  "request": {
+    "method": "GET",
+    "path": "/scim/v2/Users/usr_grace",
+    "headers": {
+      "authorization": "Bearer fixture-scim-token"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "etag": "W/\"1\""
+    },
+    "bodyContains": {
+      "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+      "id": "usr_grace",
+      "userName": "grace@example.test",
+      "displayName": "Grace Hopper",
+      "active": false,
+      "meta": {
+        "resourceType": "User",
+        "version": "W/\"1\""
+      }
+    }
+  },
+  "provenance": "rfc",
+  "sourceUrl": "https://datatracker.ietf.org/doc/html/rfc7644#section-3.4",
+  "lastVerified": "2026-07-22",
+  "status": "implemented"
+}
