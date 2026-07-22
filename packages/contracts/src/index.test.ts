@@ -11,11 +11,14 @@ import {
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
+  SCIM_PATCH_PARSE_INJECTION_POINT,
   scenarioSpecSchema,
   scimUserInputSchema,
   scimWeakEtag,
   seedIdentitiesToolInputSchema,
+  setScenarioToolInputSchema,
 } from "./index";
 
 describe("wire contracts", () => {
@@ -111,6 +114,72 @@ describe("wire contracts", () => {
         id: "too-slow",
         injectionPoint: "*",
         action: { type: "delay", milliseconds: 30_001 },
+      })
+    ).toThrow();
+    expect(() =>
+      setScenarioToolInputSchema.parse({
+        environmentId: "environment_123",
+        id: "misrouted-tool-action",
+        injectionPoint: "scim.request",
+        action: { type: "scim_patch_tolerance", malformedCase: "missing_schemas" },
+      })
+    ).toThrow(/locked to scim\.patch_parse/);
+  });
+
+  it("locks typed SCIM edge actions to reserved internal injection points", () => {
+    expect(
+      scenarioSpecSchema.parse({
+        id: "conflict-once",
+        injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+        action: { type: "scim_conflict" },
+        remaining: 1,
+      })
+    ).toMatchObject({
+      injectionPoint: SCIM_BEFORE_COMMIT_INJECTION_POINT,
+      action: { type: "scim_conflict" },
+    });
+    expect(
+      scenarioSpecSchema.parse({
+        id: "tolerate-singleton",
+        injectionPoint: SCIM_PATCH_PARSE_INJECTION_POINT,
+        action: {
+          type: "scim_patch_tolerance",
+          malformedCase: "singleton_operations",
+        },
+      })
+    ).toMatchObject({
+      action: { malformedCase: "singleton_operations" },
+    });
+
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "public-conflict",
+        injectionPoint: "scim.request",
+        action: { type: "scim_conflict" },
+      })
+    ).toThrow(/locked to scim\.before_commit/);
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "catch-all-race",
+        injectionPoint: "*",
+        action: { type: "scim_soft_delete_race" },
+      })
+    ).toThrow(/locked to scim\.before_commit/);
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "generic-internal",
+        injectionPoint: SCIM_PATCH_PARSE_INJECTION_POINT,
+        action: { type: "delay", milliseconds: 1 },
+      })
+    ).toThrow(/accepts only its typed SCIM action/);
+    expect(() =>
+      scenarioSpecSchema.parse({
+        id: "broad-tolerance",
+        injectionPoint: SCIM_PATCH_PARSE_INJECTION_POINT,
+        action: {
+          type: "scim_patch_tolerance",
+          malformedCase: "any_invalid_patch",
+        },
       })
     ).toThrow();
   });

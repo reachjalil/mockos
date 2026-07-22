@@ -1568,6 +1568,7 @@ export class EnvironmentDurableObject extends DurableObject {
           groups: engine.groups,
           lifecycle: engine.lifecycle,
           provider: engine.provider,
+          scenarios: engine.scenarios,
         })
       );
       httpApp = {

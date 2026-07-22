@@ -1,0 +1,35 @@
+{
+  "name": "m6-scim-tolerate-singleton-operations",
+  "description": "An explicit singleton_operations scenario wraps exactly one operation object.",
+  "provider": "okta",
+  "resourceType": "User",
+  "scenario": {
+    "id": "tolerate-singleton-once",
+    "injectionPoint": "scim.patch_parse",
+    "action": {
+      "type": "scim_patch_tolerance",
+      "malformedCase": "singleton_operations"
+    },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": {
+        "op": "replace",
+        "path": "displayName",
+        "value": "Tolerated singleton"
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": { "displayName": "Tolerated singleton" },
+    "stored": {
+      "displayName": "Tolerated singleton",
+      "resourceVersion": 2,
+      "deleted": false
+    }
+  }
+}

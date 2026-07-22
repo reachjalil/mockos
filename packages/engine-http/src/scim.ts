@@ -25,6 +25,7 @@ export type ScimResourceResult<T> = {
 };
 
 export type ScimHttpEngine = {
+  normalizePatchRequest?(value: unknown): unknown;
   serviceProviderConfig(baseUrl: string): Record<string, unknown>;
   resourceTypes(baseUrl: string): ScimListResponse;
   schemas(baseUrl: string): ScimListResponse;
@@ -270,8 +271,13 @@ const normalizePatch = (value: unknown): unknown => {
   };
 };
 
-const patchBody = async (request: Request): Promise<ScimPatchRequest> => {
-  const normalized = normalizePatch(await boundedJson(request));
+const patchBody = async (
+  request: Request,
+  engine: ScimHttpEngine
+): Promise<ScimPatchRequest> => {
+  const raw = await boundedJson(request);
+  const tolerated = engine.normalizePatchRequest?.(raw) ?? raw;
+  const normalized = normalizePatch(tolerated);
   if (normalized && typeof normalized === "object" && !Array.isArray(normalized)) {
     const operations = Reflect.get(normalized, "Operations");
     if (Array.isArray(operations) && operations.length > 100) {
@@ -514,7 +520,7 @@ export const createScimHttpApp = (engine: ScimHttpEngine) => {
     return jsonResponse(result.resource, 200, result.etag, result.location);
   });
   app.patch("/scim/v2/Users/:id", async (context) => {
-    const patch = await patchBody(context.req.raw);
+    const patch = await patchBody(context.req.raw, engine);
     const result = await engine.patchUser(
       routeIdentifier(context.req.param("id")),
       patch,
@@ -573,7 +579,7 @@ export const createScimHttpApp = (engine: ScimHttpEngine) => {
     return jsonResponse(result.resource, 200, result.etag, result.location);
   });
   app.patch("/scim/v2/Groups/:id", async (context) => {
-    const patch = await patchBody(context.req.raw);
+    const patch = await patchBody(context.req.raw, engine);
     const result = await engine.patchGroup(
       routeIdentifier(context.req.param("id")),
       patch,

@@ -2,10 +2,13 @@ import {
   type DirectoryUserState,
   type LifecycleAction,
   type ProviderId,
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_GROUP_SCHEMA,
   SCIM_CORE_USER_SCHEMA,
   SCIM_ENTERPRISE_USER_SCHEMA,
   SCIM_LIST_RESPONSE_SCHEMA,
+  SCIM_PATCH_OP_SCHEMA,
+  SCIM_PATCH_PARSE_INJECTION_POINT,
   type ScimDialect,
   type ScimGroupInput,
   type ScimGroupResource,
@@ -30,8 +33,11 @@ import {
   type UserRepository,
 } from "../directory";
 import { getProviderProfile, type ProviderProfile } from "../providers";
+import type { ScenarioDecision } from "../scenario";
 import {
+  assertScimIfMatch,
   formatScimEtag,
+  parseScimEtag,
   parseScimIfMatch,
   ScimProtocolError,
   type ScimVersionPrecondition,
@@ -50,6 +56,12 @@ export interface ScimServiceDependencies {
   readonly lifecycle: LifecycleService;
   readonly provider: ProviderId | Pick<ProviderProfile, "id" | "scimDialect">;
   readonly dialect?: ScimDialect;
+  readonly scenarios?: {
+    decideExact(
+      injectionPoint: string,
+      context?: Readonly<Record<string, unknown>>
+    ): ScenarioDecision;
+  };
 }
 
 export interface ScimServiceResourceResult<T> {
@@ -81,6 +93,35 @@ const getCaseInsensitive = (
     (candidate) => candidate.toLowerCase() === normalized
   );
   return key === undefined ? undefined : { key, value: record[key] };
+};
+
+const matchingCaseInsensitiveKeys = (
+  record: Readonly<Record<string, unknown>>,
+  name: string
+): readonly string[] => {
+  const normalized = name.toLowerCase();
+  return Object.keys(record).filter((key) => key.toLowerCase() === normalized);
+};
+
+const tolerateMalformedPatch = (
+  value: unknown,
+  malformedCase: "missing_schemas" | "singleton_operations"
+): unknown => {
+  if (!isRecord(value)) return value;
+  const schemaKeys = matchingCaseInsensitiveKeys(value, "schemas");
+  const operationKeys = matchingCaseInsensitiveKeys(value, "Operations");
+  if (operationKeys.length !== 1) return value;
+  const operationKey = operationKeys[0];
+  if (operationKey === undefined) return value;
+
+  if (malformedCase === "missing_schemas") {
+    if (schemaKeys.length !== 0 || !Array.isArray(value[operationKey])) return value;
+    return { ...value, schemas: [SCIM_PATCH_OP_SCHEMA] };
+  }
+
+  const operations = value[operationKey];
+  if (!isRecord(operations)) return value;
+  return { ...value, [operationKey]: [operations] };
 };
 
 const safeUserScim = (
@@ -392,6 +433,7 @@ export class ScimService {
   readonly providerId: ProviderId;
   readonly dialect: ScimDialect;
   readonly groupPatchSuccessStatus: 200 | 204;
+  readonly #scenarios?: ScimServiceDependencies["scenarios"];
 
   constructor(options: ScimServiceDependencies) {
     this.users = options.users;
@@ -404,6 +446,20 @@ export class ScimService {
     this.providerId = profile.id;
     this.dialect = options.dialect ?? profile.scimDialect;
     this.groupPatchSuccessStatus = this.dialect.groupPatchSuccessStatus;
+    this.#scenarios = options.scenarios;
+  }
+
+  normalizePatchRequest(value: unknown): unknown {
+    return this.#sync(() => {
+      const decision = this.#scenarios?.decideExact(SCIM_PATCH_PARSE_INJECTION_POINT, {
+        provider: this.providerId,
+      }) ?? { type: "pass" as const };
+      if (decision.type === "pass") return value;
+      if (decision.type === "scim_patch_tolerance") {
+        return tolerateMalformedPatch(value, decision.malformedCase);
+      }
+      throw new Error("Invalid scenario action at the SCIM patch-parse boundary.");
+    });
   }
 
   serviceProviderConfig(baseUrl: string): Record<string, unknown> {
@@ -523,6 +579,7 @@ export class ScimService {
         input.name?.formatted ??
         ([givenName, familyName].filter(Boolean).join(" ") || input.userName);
       const active = input.active ?? true;
+      this.#beforeCommit("User", "create");
       const record = await this.users.create({
         ...(input.externalId === undefined ? {} : { externalId: input.externalId }),
         userName: input.userName,
@@ -567,6 +624,7 @@ export class ScimService {
   ): Promise<ScimServiceResourceResult<ScimGroupResource>> {
     return this.#async(async () => {
       this.#assertResourceSchemas(input.schemas, "Group");
+      this.#beforeCommit("Group", "create");
       const record = this.groups.create({
         ...(input.externalId === undefined ? {} : { externalId: input.externalId }),
         displayName: input.displayName,
@@ -599,10 +657,18 @@ export class ScimService {
         groups: current.groups,
         meta: current.meta,
       });
+      const precondition = parseScimIfMatch(ifMatch);
+      this.#beforeCommit(
+        "User",
+        "replace",
+        id,
+        precondition,
+        parseScimEtag(current.meta.version)
+      );
       const record = await this.#persistUser(
         this.users.requireById(id),
         desired,
-        parseScimIfMatch(ifMatch)
+        precondition
       );
       return this.#userResult(record, baseUrl);
     });
@@ -622,6 +688,13 @@ export class ScimService {
       });
       const precondition = parseScimIfMatch(ifMatch);
       const desired = scimUserResourceSchema.parse(applied.resource);
+      this.#beforeCommit(
+        "User",
+        "patch",
+        id,
+        precondition,
+        parseScimEtag(current.meta.version)
+      );
       const record = await this.#persistUser(
         this.users.requireById(id),
         desired,
@@ -638,6 +711,7 @@ export class ScimService {
         throw new DirectoryResourceNotFoundError("User", id);
       }
       const precondition = parseScimIfMatch(ifMatch);
+      this.#beforeCommit("User", "delete", id, precondition, current.resourceVersion);
       if (this.providerId === "okta" && current.lifecycleState !== "deprovisioned") {
         this.lifecycle.apply(id, "deprovision", precondition);
         this.lifecycle.apply(id, "delete");
@@ -656,7 +730,15 @@ export class ScimService {
     return this.#async(async () => {
       this.#assertResourceSchemas(input.schemas, "Group");
       this.#assertMatchingId(input.id, id);
-      this.#requiredGroup(id, baseUrl);
+      const current = this.#requiredGroup(id, baseUrl);
+      const precondition = parseScimIfMatch(ifMatch);
+      this.#beforeCommit(
+        "Group",
+        "replace",
+        id,
+        precondition,
+        parseScimEtag(current.meta.version)
+      );
       const mutation = this.groups.updateScim(
         id,
         {
@@ -665,7 +747,7 @@ export class ScimService {
           scim: groupScimFromInput(input),
           memberIds: input.members?.map((member) => member.value) ?? [],
         },
-        parseScimIfMatch(ifMatch)
+        precondition
       );
       return this.#groupResult(mutation.record, baseUrl);
     });
@@ -684,6 +766,14 @@ export class ScimService {
         dialect: this.dialect,
       });
       const desired = scimGroupResourceSchema.parse(applied.resource);
+      const precondition = parseScimIfMatch(ifMatch);
+      this.#beforeCommit(
+        "Group",
+        "patch",
+        id,
+        precondition,
+        parseScimEtag(current.meta.version)
+      );
       const mutation = this.groups.updateScim(
         id,
         applied.changed
@@ -694,7 +784,7 @@ export class ScimService {
               memberIds: desired.members.map((member) => member.value),
             }
           : {},
-        parseScimIfMatch(ifMatch)
+        precondition
       );
       return this.#groupResult(mutation.record, baseUrl);
     });
@@ -702,8 +792,58 @@ export class ScimService {
 
   async deleteGroup(id: string, ifMatch: string | undefined): Promise<void> {
     return this.#async(async () => {
-      this.groups.deleteScim(id, parseScimIfMatch(ifMatch));
+      const current = this.groups.findById(id);
+      if (!current || current.softDeletedAt) {
+        throw new DirectoryResourceNotFoundError("Group", id);
+      }
+      const precondition = parseScimIfMatch(ifMatch);
+      this.#beforeCommit("Group", "delete", id, precondition, current.resourceVersion);
+      this.groups.deleteScim(id, precondition);
     });
+  }
+
+  #beforeCommit(
+    resourceType: "User" | "Group",
+    operation: "create" | "replace" | "patch" | "delete",
+    id?: string,
+    precondition?: ScimVersionPrecondition,
+    currentVersion?: number
+  ): void {
+    if (currentVersion !== undefined) {
+      assertScimIfMatch(precondition, currentVersion);
+    }
+    const decision = this.#scenarios?.decideExact(SCIM_BEFORE_COMMIT_INJECTION_POINT, {
+      operation,
+      provider: this.providerId,
+      resourceType,
+    }) ?? { type: "pass" as const };
+    if (decision.type === "pass") return;
+    if (decision.type === "scim_conflict") {
+      throw new ScimProtocolError(
+        409,
+        "The injected SCIM write lost a deterministic uniqueness race.",
+        "uniqueness"
+      );
+    }
+    if (decision.type === "scim_soft_delete_race") {
+      if (operation === "create" || id === undefined) {
+        throw new ScimProtocolError(
+          409,
+          "The injected SCIM soft-delete race requires an existing resource.",
+          "uniqueness"
+        );
+      }
+      if (resourceType === "User") {
+        this.lifecycle.applyConcurrentSoftDelete(id, precondition);
+      } else {
+        this.groups.deleteScim(id, precondition);
+      }
+      throw new ScimProtocolError(
+        404,
+        `The ${resourceType} was concurrently soft-deleted before the write committed.`
+      );
+    }
+    throw new Error("Invalid scenario action at the SCIM commit boundary.");
   }
 
   #userResource(record: UserRecord, baseUrl: string): ScimUserResource {

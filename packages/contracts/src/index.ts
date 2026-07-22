@@ -139,6 +139,15 @@ export const semanticErrorCodeSchema = z.enum([
 ]);
 export type SemanticErrorCode = z.infer<typeof semanticErrorCodeSchema>;
 
+export const SCIM_BEFORE_COMMIT_INJECTION_POINT = "scim.before_commit" as const;
+export const SCIM_PATCH_PARSE_INJECTION_POINT = "scim.patch_parse" as const;
+
+export const scimPatchToleranceCaseSchema = z.enum([
+  "missing_schemas",
+  "singleton_operations",
+]);
+export type ScimPatchToleranceCase = z.infer<typeof scimPatchToleranceCaseSchema>;
+
 export const scenarioActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("delay"),
@@ -149,9 +158,17 @@ export const scenarioActionSchema = z.discriminatedUnion("type", [
     type: z.literal("mutate"),
     patch: z.record(z.string(), z.unknown()),
   }),
+  z.object({ type: z.literal("scim_conflict") }).strict(),
+  z.object({ type: z.literal("scim_soft_delete_race") }).strict(),
+  z
+    .object({
+      type: z.literal("scim_patch_tolerance"),
+      malformedCase: scimPatchToleranceCaseSchema,
+    })
+    .strict(),
 ]);
 
-export const scenarioSpecSchema = z
+const scenarioSpecObjectSchema = z
   .object({
     id: z.string().min(1).max(128),
     injectionPoint: z.string().min(1).max(128),
@@ -161,6 +178,44 @@ export const scenarioSpecSchema = z
     enabled: z.boolean().default(true),
   })
   .strict();
+
+type ScenarioInjectionLockInput = {
+  readonly injectionPoint: string;
+  readonly action: z.infer<typeof scenarioActionSchema>;
+};
+
+const enforceScenarioInjectionLock = (
+  value: ScenarioInjectionLockInput,
+  context: z.RefinementCtx
+): void => {
+  const internalAction = value.action.type;
+  const expectedPoint =
+    internalAction === "scim_conflict" || internalAction === "scim_soft_delete_race"
+      ? SCIM_BEFORE_COMMIT_INJECTION_POINT
+      : internalAction === "scim_patch_tolerance"
+        ? SCIM_PATCH_PARSE_INJECTION_POINT
+        : undefined;
+  const internalPoint =
+    value.injectionPoint === SCIM_BEFORE_COMMIT_INJECTION_POINT ||
+    value.injectionPoint === SCIM_PATCH_PARSE_INJECTION_POINT;
+  if (expectedPoint !== undefined && value.injectionPoint !== expectedPoint) {
+    context.addIssue({
+      code: "custom",
+      path: ["injectionPoint"],
+      message: `${internalAction} is locked to ${expectedPoint}.`,
+    });
+  } else if (expectedPoint === undefined && internalPoint) {
+    context.addIssue({
+      code: "custom",
+      path: ["action"],
+      message: `${value.injectionPoint} accepts only its typed SCIM action.`,
+    });
+  }
+};
+
+export const scenarioSpecSchema = scenarioSpecObjectSchema.superRefine(
+  enforceScenarioInjectionLock
+);
 export type ScenarioSpec = z.infer<typeof scenarioSpecSchema>;
 
 export const requestLogSourceSchema = z.enum(["inbound", "outbound", "control"]);
@@ -419,9 +474,10 @@ export type MintedToken = z.infer<typeof mintedTokenSchema>;
 export const setScenarioToolInputSchema = z
   .object({
     environmentId: environmentIdSchema.optional(),
-    ...scenarioSpecSchema.shape,
+    ...scenarioSpecObjectSchema.shape,
   })
-  .strict();
+  .strict()
+  .superRefine(enforceScenarioInjectionLock);
 export type SetScenarioToolInput = z.infer<typeof setScenarioToolInputSchema>;
 
 export const clearScenarioToolInputSchema = z

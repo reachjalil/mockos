@@ -57,6 +57,31 @@ checks, primary-value normalization, membership de-duplication, and semantic no-
 detection. Entra-specific member-array removal and Okta-style pathless replacement are
 selected through provider profiles rather than engine forks.
 
+### M6 deterministic edge scenarios (source candidate)
+
+The M6 source slice adds three typed actions at two reserved internal injection points.
+They are synthetic application-test controls, not observed Entra or Okta behavior:
+
+| Injection point | Typed action | Bounded behavior |
+| --- | --- | --- |
+| `scim.before_commit` | `scim_conflict` | Rejects the next SCIM write with `409 uniqueness` before any requested field, lifecycle, version, or membership mutation commits |
+| `scim.before_commit` | `scim_soft_delete_race` | For an existing User or Group, atomically commits only the competing tombstone and returns `404`; selecting it for create fails with `409` and inserts nothing |
+| `scim.patch_parse` | `scim_patch_tolerance` | Enables exactly one selected malformed PATCH repair: add a missing PatchOp `schemas` field or wrap one singleton `Operations` object in an array |
+
+The action and point are locked together by the wire schema. Generic delay, error, and
+response-mutation actions cannot use these internal points; SCIM edge actions cannot be
+moved to `scim.request`, `*`, or another protocol point. Strict PATCH parsing remains
+the default. Internal evaluation is exact-only, so an existing `*` catch-all is neither
+executed nor consumed at either boundary. A tolerance action repairs only `missing_schemas` or
+`singleton_operations`; it does not remove unknown fields, coerce values, repair both
+defects at once, or broaden operation/path semantics.
+
+Race and conflict decisions use the persisted deterministic scenario evaluator. A
+one-shot action is consumed once; a replay then observes the committed directory state.
+For a soft-delete race, concurrent and later writes therefore converge on `404`. User
+tombstoning removes memberships and bumps affected Group versions through the existing
+directory transaction, while the losing requested patch never partially persists.
+
 Resources use weak entity tags of the form `W/"<positive decimal>"`. `If-Match` is
 optional and accepts the current tag or `*`; a stale precondition returns `412` without
 a `scimType`. Semantic no-ops preserve `updatedAt`, the resource version, and the ETag.
@@ -124,6 +149,13 @@ names, area, provider distribution, and implementation/documentation status. It 
 113 source-implemented fixtures and zero documented-only fixtures. The dedicated
 [fixture executor](../../packages/engine-http/src/scim-fixtures.test.ts) runs all 113
 against the local HTTP composition and is green.
+
+Eight additional synthetic M6 regression fixtures under
+[`packages/testkit/fixtures/m6/scim`](../../packages/testkit/fixtures/m6/scim) exercise
+strict-default parsing, each narrow tolerance, case isolation, pre-commit conflict, and
+Group soft-delete behavior. They are intentionally separate from the 113
+source-reviewed provider/RFC conformance fixtures and do not change that corpus's
+evidence count.
 
 The corpus is not a live capture, deployed fixture run, or live-provider conformance
 result. Focused Worker integration, the full M3 gate, and hosted CI are green; the M3

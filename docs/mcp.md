@@ -140,7 +140,7 @@ count, and enabled flag. Evaluation uses the environment seed, scenario ID, and 
 evaluation count, so the same stored state produces a reproducible sequence. Exact
 injection points take priority over the literal `*` catch-all.
 
-Routed Worker requests map to these injection points:
+Routed Worker requests and the reserved internal SCIM seams use these injection points:
 
 | Injection point | Routed surface |
 | --- | --- |
@@ -153,6 +153,8 @@ Routed Worker requests map to these injection points:
 | `oauth.introspect` | Introspection endpoint |
 | `oauth.revoke` | Revocation endpoint |
 | `scim.request` | SCIM discovery and Users/Groups requests |
+| `scim.patch_parse` | Reserved internal SCIM PATCH parser boundary |
+| `scim.before_commit` | Reserved internal SCIM write boundary |
 | `graph.request` | Microsoft Graph directory requests |
 | `okta.api` | Okta Users/Groups and lifecycle API requests |
 | `http.request` | Any other routed environment request |
@@ -164,6 +166,15 @@ or a shallow JSON-object mutation. Mutation is restricted to
 `oauth.introspect`; selecting mutation for another point fails instead of attempting to
 rewrite HTML, redirects, or empty bodies. Scenario specifications and mutation patches
 are bounded to 64 KiB when serialized.
+
+The M6 SCIM source slice also defines injection-locked typed actions. `scim_conflict`
+and `scim_soft_delete_race` are valid only at `scim.before_commit`.
+`scim_patch_tolerance` is valid only at `scim.patch_parse` and requires
+`malformedCase: "missing_schemas"` or `"singleton_operations"`. Generic actions are
+rejected at those reserved points, and the SCIM actions are rejected at every public
+request point and at `*`. Internal evaluation is exact-only and does not execute or
+consume a `*` catch-all. These controls are synthetic deterministic test cases, not
+provider-parity evidence.
 
 ## Request logs and assertions
 

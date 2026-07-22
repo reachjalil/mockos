@@ -30,7 +30,9 @@ The tested M5 workflow covers:
 - `mint_token` negative cases for expired, wrong-audience, not-yet-valid,
   bad-signature, and wrong-issuer tokens;
 - deterministic delay, semantic-error, and restricted JSON-mutation scenarios,
-  including `scim.request`, `graph.request`, and `okta.api` error/delay routing; and
+  including `scim.request`, `graph.request`, and `okta.api` error/delay routing;
+- the M6 SCIM source slice's injection-locked conflict, soft-delete race, and two
+  explicit malformed-PATCH tolerance recipes, with strict parsing as the default; and
 - filtered request logs plus literal request/response-body matchers and complete non-
   overlapping ordered-sequence assertions before cleanup.
 

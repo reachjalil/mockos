@@ -1,0 +1,32 @@
+{
+  "name": "m6-scim-tolerance-is-case-specific",
+  "description": "Selecting missing_schemas does not also tolerate singleton Operations.",
+  "provider": "entra",
+  "resourceType": "User",
+  "scenario": {
+    "id": "missing-schema-only",
+    "injectionPoint": "scim.patch_parse",
+    "action": { "type": "scim_patch_tolerance", "malformedCase": "missing_schemas" },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": {
+        "op": "replace",
+        "path": "displayName",
+        "value": "Must not persist"
+      }
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": { "status": "400", "scimType": "invalidValue" },
+    "stored": {
+      "displayName": "Before edge case",
+      "resourceVersion": 1,
+      "deleted": false
+    }
+  }
+}

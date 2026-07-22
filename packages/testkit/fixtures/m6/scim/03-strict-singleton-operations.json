@@ -1,0 +1,26 @@
+{
+  "name": "m6-scim-strict-singleton-operations",
+  "description": "PATCH remains strict by default when Operations is an object instead of an array.",
+  "provider": "okta",
+  "resourceType": "User",
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+      "Operations": {
+        "op": "replace",
+        "path": "displayName",
+        "value": "Must not persist"
+      }
+    }
+  },
+  "expected": {
+    "status": 400,
+    "bodyContains": { "status": "400", "scimType": "invalidValue" },
+    "stored": {
+      "displayName": "Before edge case",
+      "resourceVersion": 1,
+      "deleted": false
+    }
+  }
+}

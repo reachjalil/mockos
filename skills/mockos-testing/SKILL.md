@@ -301,6 +301,8 @@ Call `set_scenario` with a stable scenario ID and one implemented injection poin
 - `oauth.introspect`
 - `oauth.revoke`
 - `scim.request`
+- `scim.patch_parse` (reserved for its typed PATCH-tolerance action)
+- `scim.before_commit` (reserved for typed SCIM conflict/race actions)
 - `graph.request`
 - `okta.api`
 - `http.request`
@@ -317,6 +319,37 @@ reproducible.
 
 Clear one scenario before enabling the next unless interaction between scenarios is
 the test subject. Prefer `remaining: 1` for a one-shot failure.
+
+For the M6 SCIM source slice, use only these injection-locked recipes:
+
+1. To prove conflict handling, set `injectionPoint: "scim.before_commit"`,
+   `action: { "type": "scim_conflict" }`, and `remaining: 1`. Send one create,
+   replace, PATCH, or delete request. Require `409` with `scimType: "uniqueness"`,
+   then read the resource and prove that requested fields, lifecycle, membership, and
+   ETag did not partially change. A deliberate replay occurs after the one-shot action
+   is consumed and should follow the normal current-state rules.
+2. To reproduce a delete race, create an isolated disposable User or Group first, then
+   set `injectionPoint: "scim.before_commit"`,
+   `action: { "type": "scim_soft_delete_race" }`, and `remaining: 1`. The losing
+   write returns `404`; require the resource to be hidden and only the tombstone-side
+   effects to exist. For a User, verify direct memberships were removed and affected
+   Group ETags advanced. Concurrent or later replay writes must also return `404`.
+   Do not use this action on create: that combination fails with `409` and inserts
+   nothing.
+3. Keep malformed PATCH strict unless the application explicitly needs a compatibility
+   case. At `scim.patch_parse`, select
+   `{ "type": "scim_patch_tolerance", "malformedCase": "missing_schemas" }` to
+   add only the missing PatchOp schema field, or use `"singleton_operations"` to wrap
+   exactly one operation object in an array. Set `remaining: 1`, test the same payload
+   without the scenario first and require `400`, then enable the selected case. Do not
+   expect one selection to repair the other case, combined defects, unknown fields,
+   invalid paths, missing values, or type coercions.
+
+Generic delay/error/mutate actions are invalid at the two reserved internal SCIM
+points. The three typed actions are invalid at `scim.request`, `*`, and all non-SCIM
+points. Reserved internal evaluation does not execute or consume a `*` catch-all. Treat
+schema rejection as a failed test setup rather than weakening the point or switching
+to a generic action.
 
 ## Diagnose and assert requests
 

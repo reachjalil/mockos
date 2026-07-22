@@ -1,0 +1,29 @@
+{
+  "name": "m6-scim-tolerate-missing-schemas",
+  "description": "An explicit missing_schemas scenario adds only the PatchOp schema field.",
+  "provider": "entra",
+  "resourceType": "User",
+  "scenario": {
+    "id": "tolerate-missing-schemas-once",
+    "injectionPoint": "scim.patch_parse",
+    "action": { "type": "scim_patch_tolerance", "malformedCase": "missing_schemas" },
+    "remaining": 1
+  },
+  "request": {
+    "path": "/scim/v2/Users/usr_edge",
+    "body": {
+      "Operations": [
+        { "op": "replace", "path": "displayName", "value": "Tolerated missing schema" }
+      ]
+    }
+  },
+  "expected": {
+    "status": 200,
+    "bodyContains": { "displayName": "Tolerated missing schema" },
+    "stored": {
+      "displayName": "Tolerated missing schema",
+      "resourceVersion": 2,
+      "deleted": false
+    }
+  }
+}
