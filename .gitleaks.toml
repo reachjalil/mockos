@@ -1,0 +1,14 @@
+title = "mockOS Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "curl-auth-header"
+
+[[rules.allowlists]]
+description = "Allow the documented, non-secret SCIM and Graph protocol placeholders only"
+condition = "AND"
+regexTarget = "match"
+regexes = ['''Authorization: Bearer synthetic-(?:scim|graph)-token''']
+paths = ['''^docs/quickstarts/curl\.md$''']
