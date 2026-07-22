@@ -1,6 +1,6 @@
 # mockOS testing skill
 
-Status: M5 source-paired identity, provisioning, assertion, and cleanup guidance
+Status: M5 source-paired workflow plus bounded M6 Classic Authn source guidance
 Last reviewed: 2026-07-22
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
@@ -19,6 +19,9 @@ The tested M5 workflow covers:
 - SCIM discovery and versioned synthetic User/Group CRUD/PATCH with weak ETags;
 - bounded Entra Graph reads and Okta Users/Groups/lifecycle API checks using separate
   test-only credential schemes;
+- bounded Okta Classic primary authentication with password-before-state privacy,
+  deterministic initial states, transaction cancellation/replay checks, and Authn log
+  redaction;
 - the 15-tool MCP registry, including `simulate_lifecycle` and
   `run_provisioning_cycle`;
 - deterministic Entra- and Okta-shaped outbound SCIM planning through a durable
@@ -47,7 +50,8 @@ session is terminated. Every identity, password, application secret, directory
 Bearer/SSWS value, target credential, and provider token used as test data must be
 synthetic.
 
-Okta Classic Authn, broad Graph/Okta API parity, SAML, unrecorded hosted
-qualification, and npm publication remain outside the workflow. Use only immutable
-CI/deployment records linked by the implementation ledger, and never present mockOS
-source or deployment evidence as live-provider parity.
+The rest of the Okta Classic Authn transaction machine, broad Graph/Okta API parity,
+SAML, unrecorded hosted qualification, and npm publication remain outside the
+workflow. Use only immutable CI/deployment records linked by the implementation
+ledger, and never present mockOS source or deployment evidence as live-provider
+parity.

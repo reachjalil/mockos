@@ -8,7 +8,7 @@ description: >-
   deterministic scenarios, assert ordered request/response shapes, and clean up. Use
   when wiring or testing an application's enterprise identity integration or
   reproducing provider-shaped failures; do not claim unrecorded hosted qualification,
-  Okta Classic Authn, or broad provider parity.
+  the complete Okta Classic Authn transaction machine, or broad provider parity.
 ---
 
 # Test with mockOS
@@ -27,9 +27,11 @@ profile as metadata unless the status ledger names its runtime evidence.
    behavior expected for each negative case.
 3. Separate implemented surfaces from gaps. SCIM, bounded Entra Graph reads, tested
    Okta Users/Groups lifecycle APIs, refresh rotation, and deterministic outbound SCIM
-   provisioning are available in the locally qualified M5 source candidate. Okta Classic
-   `/api/v1/authn`, broad Graph/Okta parity, Entra UserInfo/client credentials/device
-   flow, and SAML remain unavailable; never invent routes for them.
+   provisioning are available in the locally qualified M5 source candidate. The M6
+   source candidate adds bounded Okta Classic `/api/v1/authn` primary states,
+   transaction retrieval, and cancellation. Broad Graph/Okta parity, the remaining
+   Classic transitions, Entra UserInfo/client credentials/device flow, and SAML remain
+   unavailable; never invent routes for them.
 
 ## Connect to management MCP
 
@@ -71,8 +73,8 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
    the secret.
 4. Call `get_wellknown_urls` with the explicit environment ID. Configure the
    application from its returned issuer/endpoints and record `scimBaseUrl` plus
-   `graphBaseUrl` for Entra or `oktaApiBaseUrl` for Okta. Never construct or persist an
-   issuer from memory.
+   `graphBaseUrl` for Entra or `oktaApiBaseUrl` plus `oktaAuthnEndpoint` for Okta. Never
+   construct or persist an issuer or Authn endpoint from memory.
 5. Verify discovery before login and require every absolute URL to use the active host.
    Treat a missing provider-specific directory URL as a capability mismatch.
 
@@ -95,9 +97,42 @@ the implemented flow as needed:
 5. Introspect an access or refresh token with the synthetic client credentials.
 6. Revoke it, then verify introspection returns `{ "active": false }`.
 
-Do not claim Okta Classic Authn, client-credentials redemption, or live-provider
-parity. Use the provider-specific directory workflow below for the bounded organization
-API surface.
+Do not claim the complete Okta Classic transaction machine, client-credentials
+redemption, or live-provider parity. Use the bounded primary-authentication recipe
+below and the provider-specific directory workflow for the organization API surface.
+
+## Exercise bounded Okta Classic primary authentication
+
+Use only the returned `oktaAuthnEndpoint` and synthetic credentials. This endpoint is a
+public mock sign-in boundary; do not attach the MCP Access Key or the directory `SSWS`
+credential.
+
+1. Seed separate active Users for `SUCCESS`, `MFA_REQUIRED`, and
+   `PASSWORD_EXPIRED`. Set `mfaState: "required"` for MFA and
+   `passwordState: "expired"` for expiry. To test `LOCKED_OUT`, seed an active User and
+   apply Okta `suspend` through `simulate_lifecycle` before authenticating it.
+2. Send a wrong password to the MFA, expired, and suspended Users before each positive
+   case. Require the same HTTP 401 `E0000004` body returned for an unknown User; any
+   state-specific response before password verification is a privacy failure.
+3. Send the valid synthetic password. Require `MFA_REQUIRED` to win when both MFA and
+   expiry are configured, `PASSWORD_EXPIRED` only without required MFA, and
+   `LOCKED_OUT` only for the suspended User. The bounded lockout case models Okta's
+   explicit show-lockout-failures policy.
+4. Keep a returned `stateToken` in memory, post it to `oktaAuthnEndpoint` to retrieve
+   the same current state, then post it to `<oktaAuthnEndpoint>/cancel`. Reusing it must
+   return HTTP 401 `E0000011`. In a separate disposable state transaction, suspend the
+   User and then unsuspend it; the pre-suspension token must still return `E0000011`
+   after reactivation. Never print or persist the token.
+5. A valid active User without required MFA returns `SUCCESS` and a five-minute
+   one-time `sessionToken`. The source has an atomic consume-once core seam, but no
+   Sessions API exchange route; do not invent one or claim an application cookie.
+6. Query the inbound request log for the exact Authn path. Password, `stateToken`, and
+   `sessionToken` fields must appear as `[REDACTED]`; do not quote raw protocol bodies in
+   the report.
+
+Factor verification, password change, unlock/recovery execution, warnings, enrollment,
+and other Classic states are deliberately unavailable even when a response includes a
+provider-shaped next-operation link.
 
 ## Rotate refresh tokens and test the lifecycle cascade
 
@@ -165,8 +200,9 @@ For Okta, use the returned `oktaApiBaseUrl` and a synthetic SSWS credential to e
 the tested Users/Groups CRUD, direct membership, filter/paging, and lifecycle routes.
 Use a separate directory-only User for mutating lifecycle tests so it cannot invalidate
 the refresh-family case. Prefer MCP `simulate_lifecycle` for the token-bearing User
-because its result reports the coordinated revocation counts. Do not call Classic
-`/api/v1/authn` or infer other Okta organization APIs.
+because its result reports the coordinated revocation counts. Keep this SSWS-protected
+management workflow separate from the public `oktaAuthnEndpoint`, and do not infer
+other Okta organization APIs.
 
 ## Run the outbound provisioning loop
 

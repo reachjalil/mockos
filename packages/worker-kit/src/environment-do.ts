@@ -43,6 +43,7 @@ import {
   Engine,
   MAX_REQUEST_LOG_BODY_BYTES,
   OAuthError,
+  redactSecrets,
   type RenderedProviderError,
   ScimService,
   type UserRecord,
@@ -50,6 +51,7 @@ import {
 import {
   createEntraHttpApp,
   createGraphHttpApp,
+  createOktaAuthnApi,
   createOktaDirectoryApi,
   createOktaHttpApp,
   createScimHttpApp,
@@ -439,6 +441,9 @@ const injectionPointFor = (pathname: string): string => {
   if (pathname === "/graph/v1.0" || pathname.startsWith("/graph/v1.0/")) {
     return "graph.request";
   }
+  if (pathname === "/api/v1/authn" || pathname.startsWith("/api/v1/authn/")) {
+    return "okta.authn";
+  }
   if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
     return "okta.api";
   }
@@ -462,6 +467,25 @@ const injectionPointFor = (pathname: string): string => {
   if (pathname.endsWith("/v1/revoke")) return "oauth.revoke";
   if (pathname.endsWith("/activate")) return "oauth.device.activate";
   return "http.request";
+};
+
+const isOktaAuthnPath = (pathname: string): boolean =>
+  pathname === "/api/v1/authn" || pathname.startsWith("/api/v1/authn/");
+
+const authenticationBodyForLog = (
+  pathname: string,
+  body: string | null
+): string | null => {
+  if (!isOktaAuthnPath(pathname) || body === null) return body;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return "[REDACTED authentication body]";
+    }
+    return JSON.stringify(redactSecrets(parsed));
+  } catch {
+    return "[REDACTED authentication body]";
+  }
 };
 
 const scenarioErrorResponse = (
@@ -1470,7 +1494,10 @@ export class EnvironmentDurableObject extends DurableObject {
       scimBaseUrl: `${publicBase.replace(/\/+$/, "")}/scim/v2`,
       ...(engine.providerId === "entra"
         ? { graphBaseUrl: `${publicBase.replace(/\/+$/, "")}/graph/v1.0` }
-        : { oktaApiBaseUrl: `${publicBase.replace(/\/+$/, "")}/api/v1` }),
+        : {
+            oktaApiBaseUrl: `${publicBase.replace(/\/+$/, "")}/api/v1`,
+            oktaAuthnEndpoint: `${publicBase.replace(/\/+$/, "")}/api/v1/authn`,
+          }),
       userinfoEndpoint: urls.userInfo(context),
       ...(urls.introspection
         ? { introspectionEndpoint: urls.introspection(context) }
@@ -1531,6 +1558,10 @@ export class EnvironmentDurableObject extends DurableObject {
               now: () => engine.clock.now(),
             })
           : createOktaDirectoryApi({ engine: createOktaDirectoryEngine(engine) });
+      const authnApp =
+        config.provider === "okta"
+          ? createOktaAuthnApi({ engine: engine.authn })
+          : undefined;
       const scimApp = createScimHttpApp(
         new ScimService({
           users: engine.users,
@@ -1550,7 +1581,13 @@ export class EnvironmentDurableObject extends DurableObject {
                 candidatePath.startsWith("/graph/v1.0/")
               : candidatePath === "/api/v1" || candidatePath.startsWith("/api/v1/");
           return (
-            isScimPath ? scimApp : isDirectoryPath ? directoryApp : oidcApp
+            isScimPath
+              ? scimApp
+              : authnApp && isOktaAuthnPath(candidatePath)
+                ? authnApp
+                : isDirectoryPath
+                  ? directoryApp
+                  : oidcApp
           ).fetch(candidate);
         },
       };
@@ -1617,12 +1654,13 @@ export class EnvironmentDurableObject extends DurableObject {
         path,
         requestHeaders: headersRecord(request.headers, {
           redactAuthorization:
+            isOktaAuthnPath(routedPath) ||
             request.headers.get("x-mockos-redact-authorization") === "true",
         }),
-        requestBody,
+        requestBody: authenticationBodyForLog(routedPath, requestBody),
         responseStatus: response.status,
         responseHeaders,
-        responseBody,
+        responseBody: authenticationBodyForLog(routedPath, responseBody),
         durationMs: Math.max(0, Date.now() - startedAt),
         correlationId,
       });

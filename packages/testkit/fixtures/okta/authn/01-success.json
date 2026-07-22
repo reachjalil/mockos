@@ -1,0 +1,32 @@
+{
+  "name": "okta-authn-primary-success",
+  "description": "A valid active user without an MFA requirement completes primary authentication with a one-time session token.",
+  "provider": "okta",
+  "area": "authn",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/authn",
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "username": "success.authn@example.test",
+      "password": "SyntheticPassw0rd!"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": { "cache-control": "no-store" },
+    "bodyContains": {
+      "status": "SUCCESS",
+      "_embedded": {
+        "user": {
+          "profile": { "login": "success.authn@example.test" }
+        }
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#primary-authentication-with-public-applications",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "The fixture asserts the stable response subset; core tests separately prove the session token is stored only as a hash, expires after five minutes, and is consumed once."
+}

@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3 and manually accepted M5 boundaries; guarded promotion remains unqualified
+Status: Accepted M3/M5 boundaries plus source-only M6 Authn limits; deliberately candid
 Last reviewed: 2026-07-22
 
 - The Entra OIDC fixtures are source-reviewed expectations marked `documented`.
@@ -27,12 +27,15 @@ Last reviewed: 2026-07-22
   membership, filter, projection, and pagination behavior. The Okta `/api/v1` surface
   is limited to the tested Users/Groups, direct membership, and lifecycle routes.
   Okta Group-member listing is currently unpaginated and can return up to the directory
-  membership cap. Neither surface claims broad provider API parity, and Okta Classic
-  `/api/v1/authn` is absent.
+  membership cap. Neither surface claims broad provider API parity. The M6 source
+  candidate adds bounded Okta Classic `/api/v1/authn` primary states, transaction
+  retrieval, and cancellation, but not factor verification, password change,
+  recovery/unlock execution, or Sessions API exchange.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
-  revocation covers tracked access and refresh credentials; there are no production
-  sessions, external provider sessions, downstream application cookies, or distributed
-  revocation fan-out to invalidate.
+  revocation covers tracked access/refresh credentials and removes bounded Classic
+  Authn state/session capabilities. There are no production sessions, external
+  provider sessions, downstream application cookies, or distributed revocation fan-out
+  to invalidate.
 - Okta SCIM deletion of a non-deprovisioned User applies deprovision and delete as two
   sequential lifecycle transactions. An unexpected storage failure between them can
   leave a safely deprovisioned User; retrying the same DELETE completes the tombstone.
@@ -124,8 +127,11 @@ Last reviewed: 2026-07-22
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.
-- Environment request logs are designed to retain protocol bodies, including test
-  tokens. Never put production tokens, account API keys, Cloudflare credentials, or
-  real personal data into a mock environment.
+- Environment request logs are designed to retain protocol bodies, including many
+  synthetic test tokens. The M6 Classic Authn slice is an explicit exception: it
+  recursively redacts password, state-token, and session-token fields in Authn request
+  and response bodies, including malformed-body fallback redaction. Never put
+  production tokens, account API keys, Cloudflare credentials, or real personal data
+  into a mock environment.
 - Absolute issuer URLs must never be persisted. Any violation would make host cutover
   unsafe and should block release.

@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M3 baseline and tested M5 outbound controls accepted; residual risks remain
+Status: M3 baseline and tested M5 outbound controls accepted; M6 Authn controls are source-only
 Last reviewed: 2026-07-22
 
 ## Assets and trust boundaries
@@ -12,10 +12,10 @@ attacker-controllable. MCP and `/__mockos/v1/*` control operations cross a stron
 authorization boundary.
 
 The control credential authenticates the operator, not a provider-protocol client. It
-must never be sent to an environment's OIDC, OAuth, SCIM, Graph, or Okta directory
-endpoint. The Worker fails closed with `503` when `API_KEY` is not configured and
-returns `401` for a missing or incorrect Bearer or `X-API-Key` credential. `/health`
-and provider protocol routes remain public by design.
+must never be sent to an environment's OIDC, OAuth, SCIM, Graph, Okta directory, or
+Classic Authn endpoint. The Worker fails closed with `503` when `API_KEY` is not
+configured and returns `401` for a missing or incorrect Bearer or `X-API-Key`
+credential. `/health` and provider protocol routes remain public by design.
 
 M3 directory authentication is intentionally a mock protocol boundary: SCIM and Graph
 require a non-empty Bearer value, and the Okta `/api/v1` surface requires a non-empty
@@ -26,9 +26,10 @@ credentials should be treated as test artifacts, not security boundaries.
 Primary threats are environment-ID guessing, cross-environment SQL access, OAuth
 redirect abuse, code replay, refresh-token theft, signing-key confusion, stored XSS in
 hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
-cross-environment directory access, parser or body resource exhaustion, secret leakage
-through logs, unbounded SQLite growth, denial of service, and SSRF through outbound
-provisioning targets.
+cross-environment directory access, authentication-state user enumeration, Authn
+state/session capability theft or replay, parser or body resource exhaustion, secret
+leakage through logs, unbounded SQLite growth, denial of service, and SSRF through
+outbound provisioning targets.
 
 ## Implemented controls and evidence boundaries
 
@@ -45,6 +46,11 @@ provisioning targets.
   and S256-PKCE-bound where configured.
 - Application secrets, refresh tokens, and tracked OAuth access tokens are stored as
   hashes. Signing keys remain environment-local.
+- Classic Authn verifies the password before returning account state, stores only
+  hashes of five-minute state/session capabilities, consumes session capabilities
+  once, rejects expired/cancelled replay, and redacts Authn passwords and tokens from
+  request logs. Deactivating lifecycle transitions remove outstanding Authn
+  capabilities atomically so reactivation cannot restore them.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
@@ -89,6 +95,8 @@ M5 outbound SSRF and credential controls are described in
 full repository gate, independent source review, two-process e2e, hosted CI, and
 source-paired staging/production controlled-target smoke are green. Workers cannot pin
 DNS answers, so operators must restrict
-targets and add external egress enforcement where required. UserInfo, Okta Classic
-`/api/v1/authn`, broad Graph/Okta API parity, and custom-domain routing likewise remain
-outside the accepted boundary.
+targets and add external egress enforcement where required. UserInfo, the unimplemented
+remainder of the Okta Classic transaction machine, broad Graph/Okta API parity, and
+custom-domain routing likewise remain outside the accepted boundary. The bounded
+Classic primary-authentication source is locally qualified but not accepted or
+deployed evidence.

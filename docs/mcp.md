@@ -1,6 +1,6 @@
 # MCP interface
 
-Status: M5 authenticated management MCP implemented; deployed evidence is tracked by exact revision
+Status: M5 authenticated management MCP accepted; M6 Authn URL is source-only pending milestone qualification
 Last reviewed: 2026-07-22
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -74,8 +74,9 @@ handler entry and return the SDK's generic input-validation error instead.
 ## Returned protocol URLs and mock authentication
 
 `get_wellknown_urls` returns request-derived OIDC/OAuth URLs and `scimBaseUrl`. Entra
-environments also return `graphBaseUrl`; Okta environments return `oktaApiBaseUrl`.
-Never construct or persist an absolute issuer from an old host.
+environments also return `graphBaseUrl`; Okta environments return `oktaApiBaseUrl` and
+the M6 source candidate's exact `oktaAuthnEndpoint`. Never construct or persist an
+absolute issuer from an old host.
 
 These are deliberately separate trust boundaries:
 
@@ -83,15 +84,20 @@ These are deliberately separate trust boundaries:
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
+- Okta `POST /api/v1/authn` is a public synthetic sign-in boundary and accepts only a
+  bounded JSON primary-authentication or state-token request; it does not use the
+  management `SSWS` credential.
 
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
 authorization. Never reuse or forward the MCP Access Key as a directory credential.
 The SCIM source candidate provides ServiceProviderConfig, ResourceTypes, Schemas, and
 versioned Users/Groups CRUD, filter, pagination, ETag, and PATCH behavior. Graph is a
-bounded read surface for Users, Groups, and direct memberships. The Okta API covers
-the tested Users/Groups CRUD, direct membership, and lifecycle routes; Classic
-`/api/v1/authn` is not implemented.
+bounded read surface for Users, Groups, and direct memberships. The Okta management
+API covers the tested Users/Groups CRUD, direct membership, and lifecycle routes. The
+separate M6 Classic Authn source candidate covers primary `SUCCESS`, `MFA_REQUIRED`,
+`PASSWORD_EXPIRED`, and explicit `LOCKED_OUT` responses plus state
+retrieval/cancellation; it is not the complete Classic transaction API.
 
 ## Lifecycle and refresh-token families
 
@@ -101,9 +107,11 @@ Lifecycle actions are provider- and state-specific. Entra supports `activate`,
 deprovisioned User. Invalid transitions fail closed.
 
 Disabling, suspending, deprovisioning, or deleting a User revokes effective access and
-refresh tokens in the same transaction as the state change. Refresh grants authenticate
-the client, reject scope escalation, rotate the token within its family, preserve the
-original authentication time and absolute family expiry, and detect replay. Replaying
+refresh tokens in the same transaction as the state change. The M6 source candidate
+also removes outstanding Classic Authn state and one-time session capabilities in that
+transaction. Refresh grants authenticate the client, reject scope escalation, rotate
+the token within its family, preserve the original authentication time and absolute
+family expiry, and detect replay. Replaying
 or concurrently redeeming an already consumed token invalidates its refresh family and
 associated access tokens. A known token belonging to a newly disabled User returns the
 provider-shaped disabled-account error: Entra `invalid_grant` with `AADSTS50057`, or

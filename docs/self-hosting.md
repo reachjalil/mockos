@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide with M5 source deployed; standalone authenticated acceptance and npm/custom-domain distribution remain unavailable
+Status: Source-build guide with M5 source deployed; M6 Authn is source-only and distribution limits remain
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -40,9 +40,12 @@ source-paired hosted flow also passed. Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
-`/e/<environment>/api/v1`. Entra and Okta token endpoints also have local refresh
+`/e/<environment>/api/v1`. The M6 source candidate also mounts bounded Okta Classic
+primary authentication at `/e/<environment>/api/v1/authn`. Entra and Okta token
+endpoints also have local refresh
 redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
-deployed evidence; the M5 provisioning additions do not.
+deployed evidence; M5 has a separate source-paired hosted acceptance record, while M6
+Authn does not yet have hosted or deployed evidence.
 
 Save a local CLI profile without putting the key directly in the command line:
 
@@ -81,9 +84,9 @@ The M5 CLI and runtime reject an outbound target Bearer equal to the exact activ
 self-host `API_KEY`, even when it has no `mk_` prefix. A later key rotation that
 collides with a saved target also fails before the outbound request; choose distinct,
 synthetic values rather than relying on this guard.
-UserInfo, Okta Classic `/api/v1/authn`, and broad Graph/Okta API compatibility remain
-unavailable. Outbound provisioning is locally qualified source with public-HTTPS target
-and SSRF constraints, not an accepted or deployed capability; see
+UserInfo, the rest of the Okta Classic transaction machine, and broad Graph/Okta API
+compatibility remain unavailable. Outbound provisioning has tested public-HTTPS target
+and SSRF constraints plus separate M5 hosted acceptance; see
 [known limitations](./known-limitations.md).
 
 ## Deploy your Worker

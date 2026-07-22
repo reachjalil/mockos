@@ -21,7 +21,7 @@
     "description": { "type": "string", "minLength": 1 },
     "provider": { "enum": ["entra", "okta"] },
     "area": {
-      "enum": ["oidc", "scim", "directory", "errors", "provisioning"]
+      "enum": ["authn", "oidc", "scim", "directory", "errors", "provisioning"]
     },
     "request": {
       "type": "object",

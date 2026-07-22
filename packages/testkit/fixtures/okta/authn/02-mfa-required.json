@@ -1,0 +1,39 @@
+{
+  "name": "okta-authn-mfa-required",
+  "description": "A user whose mock policy requires an enrolled factor enters MFA_REQUIRED after the password is verified.",
+  "provider": "okta",
+  "area": "authn",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/authn",
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "username": "mfa.authn@example.test",
+      "password": "SyntheticPassw0rd!"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": { "cache-control": "no-store" },
+    "bodyContains": {
+      "status": "MFA_REQUIRED",
+      "_embedded": {
+        "user": {
+          "profile": { "login": "mfa.authn@example.test" }
+        },
+        "factors": [
+          {
+            "factorType": "token:software:totp",
+            "provider": "OKTA",
+            "profile": {}
+          }
+        ]
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#response-example-for-primary-authentication-with-public-application-factor-challenge",
+  "lastVerified": "2026-07-22",
+  "status": "implemented",
+  "notes": "A state token is returned but omitted from the stable subset because it is a generated bearer capability."
+}

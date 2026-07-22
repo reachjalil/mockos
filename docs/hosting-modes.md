@@ -1,6 +1,6 @@
 # Hosting modes
 
-Status: M5 source deployed in workers.dev path mode; standalone authenticated acceptance and wildcard/subdomain mode remain open
+Status: M5 source deployed in workers.dev path mode; M6 Authn is source-only and wildcard/subdomain mode remains open
 Last reviewed: 2026-07-22
 
 ## Path mode
@@ -26,6 +26,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
   `/e/<env>/oauth2/default/v1/authorize`
 - Okta directory Users/Groups and lifecycle:
   `/e/<env>/api/v1/users`
+- Okta Classic primary authentication (M6 source candidate):
+  `/e/<env>/api/v1/authn`
 - Entra- or Okta-profile SCIM:
   `/e/<env>/scim/v2/Users`
 
@@ -49,10 +51,11 @@ and cleanup checks recorded for both live origins are in the
 [M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md).
 
 Path mode does not imply broad provider API coverage. Microsoft Graph is read-only,
-Okta Classic `/api/v1/authn` and both UserInfo routes are absent. The M5 public source
-is deployed, and the exact-pinned hosted composition passed controlled-target
-provisioning. Existing standalone public Access Keys were preserved, so no
-authenticated M5 tool flow was run against those two Workers. See
+the M6 Classic Authn slice stops after primary state retrieval/cancellation, and both
+UserInfo routes are absent. The M5 public source is deployed, and the exact-pinned
+hosted composition passed controlled-target provisioning. Existing standalone public
+Access Keys were preserved, so no authenticated M5 tool flow was run against those
+two Workers. See
 [known limitations](./known-limitations.md).
 
 ## Subdomain mode

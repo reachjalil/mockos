@@ -14,6 +14,8 @@ export type * from "./graph";
 export { renderEntraLoginPage, renderOktaLoginPage } from "./login";
 export { createOktaDirectoryApi, OktaApiError } from "./okta-api";
 export type * from "./okta-api";
+export { createOktaAuthnApi } from "./okta-authn";
+export type * from "./okta-authn";
 export { createOktaHttpApp, renderOktaDeviceActivationPage } from "./okta";
 export type * from "./okta-types";
 export { createScimHttpApp, ScimHttpError } from "./scim";

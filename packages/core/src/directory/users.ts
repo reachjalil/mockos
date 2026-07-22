@@ -115,6 +115,8 @@ export const selectUsers = `SELECT id, external_id, user_name, normalized_user_n
   password_state, mfa_state, provider_json, lifecycle_state, resource_version,
   scim_json, created_at, updated_at, soft_deleted_at FROM users`;
 
+const INVALID_PASSWORD_HASH = "0".repeat(64);
+
 export const userFromRow = (row: UserRow): UserRecord => {
   const lifecycleState = directoryUserStateSchema.parse(row.lifecycle_state);
   return {
@@ -269,19 +271,36 @@ export class UserRepository {
   }
 
   async authenticate(userName: string, password: string): Promise<UserRecord | null> {
-    const row = this.#store.get<UserRow>(
-      `${selectUsers} WHERE normalized_user_name = ? AND lifecycle_state = 'active'`,
-      normalizeName(userName)
-    );
-    if (!row) return null;
-    if (
-      row.account_enabled !== 1 ||
-      row.password_state !== "valid" ||
-      !(await verifySecret(password, row.password_hash))
-    ) {
+    const user = await this.verifyPrimaryCredentials(userName, password);
+    if (!user?.accountEnabled || user.passwordState !== "valid" || user.softDeletedAt) {
       return null;
     }
-    return userFromRow(row);
+    return user;
+  }
+
+  /**
+   * Verifies the password before returning any current account state. Callers
+   * must apply their own provider policy only after this method succeeds.
+   */
+  async verifyPrimaryCredentials(
+    userName: string,
+    password: string
+  ): Promise<UserRecord | null> {
+    const row = this.#store.get<UserRow>(
+      `${selectUsers} WHERE normalized_user_name = ?`,
+      normalizeName(userName)
+    );
+    const verified = await verifySecret(
+      password,
+      row?.password_hash ?? INVALID_PASSWORD_HASH
+    );
+    if (!row || !verified) return null;
+
+    // Re-read after WebCrypto completes so status and credential changes that
+    // interleaved with verification cannot produce a stale authentication result.
+    const current = this.#store.get<UserRow>(`${selectUsers} WHERE id = ?`, row.id);
+    if (!current || current.password_hash !== row.password_hash) return null;
+    return userFromRow(current);
   }
 
   async updateScim(

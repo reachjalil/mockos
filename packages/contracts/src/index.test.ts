@@ -31,6 +31,7 @@ describe("wire contracts", () => {
       active: true,
       mfaState: "none",
       password: "Passw0rd!",
+      passwordState: "valid",
     });
     expect(seed.groups).toEqual([]);
   });
@@ -66,7 +67,14 @@ describe("wire contracts", () => {
         users: [{ userName: "ada@example.com", displayName: "Ada Lovelace" }],
       })
     ).toMatchObject({
-      users: [{ active: true, mfaState: "none", password: "Passw0rd!" }],
+      users: [
+        {
+          active: true,
+          mfaState: "none",
+          password: "Passw0rd!",
+          passwordState: "valid",
+        },
+      ],
       groups: [],
     });
     expect(getRequestLogToolInputSchema.parse({}).limit).toBe(100);
