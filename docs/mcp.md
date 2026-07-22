@@ -1,6 +1,6 @@
 # MCP interface
 
-Status: M5 authenticated management MCP accepted; M6 Authn URL is source-only pending milestone qualification
+Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact deployed versions
 Last reviewed: 2026-07-22
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -77,7 +77,7 @@ handler entry and return the SDK's generic input-validation error instead.
 
 `get_wellknown_urls` returns request-derived OIDC/OAuth URLs and `scimBaseUrl`. Entra
 environments also return `graphBaseUrl`; Okta environments return `oktaApiBaseUrl` and
-the M6 source candidate's exact `oktaAuthnEndpoint`. Never construct or persist an
+the bounded M6 implementation's exact `oktaAuthnEndpoint`. Never construct or persist an
 absolute issuer from an old host.
 
 In Entra subdomain mode, OIDC/OAuth URLs use
@@ -104,7 +104,7 @@ The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
 ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
 PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct
 memberships. The Okta management API covers the tested Users/Groups CRUD, direct
-membership, and lifecycle routes. The separate M6 Classic Authn source candidate
+membership, and lifecycle routes. The separate bounded M6 Classic Authn implementation
 covers primary `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, and explicit
 `LOCKED_OUT` responses plus state retrieval/cancellation; it is not the complete
 Classic transaction API.
@@ -120,8 +120,10 @@ the singular `_embedded.factor` property and omit `passwordChanged`. Deactivatin
 lifecycle transitions and SCIM password changes revoke both capability kinds. Log
 capture recursively redacts secret body keys, replaces malformed/non-object Authn
 bodies wholesale, and redacts sensitive authorization, cookie, credential, key,
-password, secret, and token header families. All of these are M6 source results, not
-deployed or verified-live evidence.
+password, secret, and token header families. The M6 workers.dev smoke samples the
+public states, state retrieval, CORS, privacy, and redaction. Retention, cancellation,
+revocation, and issuance-race details not exercised there remain source evidence; no
+verified-live evidence is claimed.
 
 ## Lifecycle and refresh-token families
 
@@ -131,7 +133,7 @@ Lifecycle actions are provider- and state-specific. Entra supports `activate`,
 deprovisioned User. Invalid transitions fail closed.
 
 Disabling, suspending, deprovisioning, or deleting a User revokes effective access and
-refresh tokens in the same transaction as the state change. The M6 source candidate
+refresh tokens in the same transaction as the state change. The bounded M6 implementation
 also removes outstanding Classic Authn state and one-time session capabilities in that
 transaction, and a SCIM password change revokes both Authn capability kinds. Refresh
 grants authenticate the client, reject scope escalation, rotate the token within its
@@ -279,6 +281,11 @@ public-HTTPS target, ordered outbound assertion, terminal Workflow state,
 credential-safe evidence, and cleanup. Always verify the connected endpoint's tool
 registry; none of these tests constitute comparison with a live Entra tenant or Okta
 organization.
+
+The [M6 deployment record](./evidence/m6-workers-dev-smoke.md) separately binds exact
+public source, CI, staging/production versions, the sampled six-slice acceptance, and
+cleanup. It does not qualify every tool or fixture, the guarded Cloudflare-credential
+deployment workflow, or verified-live parity.
 
 Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
 additionally binds that revision to an exact mockOS deployment/version and recorded

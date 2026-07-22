@@ -1,6 +1,6 @@
 # Okta behavior
 
-Status: Accepted bounded M3 implementation plus a locally qualified M6 Classic Authn source candidate; live-Okta parity is not claimed
+Status: Accepted bounded M3 implementation plus sampled deployed M6 Classic Authn; live-Okta parity is not claimed
 Last reviewed: 2026-07-22
 
 The Okta profile parameterizes the shared identity engine and has a dedicated HTTP
@@ -47,7 +47,7 @@ The device flow models `authorization_pending`, `slow_down`, successful activati
 integration test exercises pending and successful activation; the remaining states are
 covered at the core or HTTP-adapter boundary.
 
-## Classic primary authentication source candidate
+## Classic primary authentication
 
 Okta environments now expose a bounded Classic Engine primary-authentication machine
 at `POST /e/<environment>/api/v1/authn`. `get_wellknown_urls` returns the exact URL as
@@ -55,7 +55,7 @@ at `POST /e/<environment>/api/v1/authn`. `get_wellknown_urls` returns the exact 
 This route is a public synthetic sign-in boundary and does not require the `SSWS`
 credential used by the adjacent management API.
 
-The M6 source candidate implements these initial transaction outcomes:
+The bounded M6 implementation exposes these initial transaction outcomes:
 
 | Seeded User condition after password verification | Result |
 | --- | --- |
@@ -145,6 +145,12 @@ SCIM discovery/PATCH, directory-read, and rate-limit sample. The broader accepte
 Okta OAuth, refresh, device, and lifecycle behavior remains qualified by local and
 hosted tests rather than that deployed sample. None is a live Okta-provider comparison
 or broad SDK compatibility claim.
+
+The separate [M6 workers.dev smoke](../evidence/m6-workers-dev-smoke.md) samples
+invalid-credential privacy, `MFA_REQUIRED`, state retrieval, `PASSWORD_EXPIRED`,
+`LOCKED_OUT`, `SUCCESS`, same-origin/cross-origin CORS, and exact body/header redaction
+on both exact Worker versions. It does not exercise every retention, cancellation,
+revocation, or race assertion remotely and is not verified-live Okta evidence.
 
 ## Deliberate limits
 

@@ -1,6 +1,6 @@
 # mockOS testing skill
 
-Status: Accepted M5 workflow plus bounded M6 source-candidate guidance
+Status: Accepted M5 workflow plus bounded M6 guidance with sampled deployed evidence
 Last reviewed: 2026-07-22
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
@@ -9,7 +9,7 @@ negotiate the authenticated MCP server, create an isolated Entra ID or Okta
 environment, seed synthetic identities, register a client, and wire request-derived
 provider metadata.
 
-The workflow covers the accepted M5 slice plus bounded M6 source-candidate recipes:
+The workflow covers the accepted M5 slice plus bounded M6 recipes:
 
 - authorization code with required S256 PKCE for Entra ID or Okta;
 - rotating refresh grants with scope narrowing, replay cautions, and provider-correct
@@ -36,7 +36,7 @@ The workflow covers the accepted M5 slice plus bounded M6 source-candidate recip
   Graph fallback capped at 1,000 returned IDs;
 - deterministic delay, semantic-error, and restricted JSON-mutation scenarios,
   including `scim.request`, `graph.request`, and `okta.api` error/delay routing;
-- the M6 SCIM source slice's injection-locked conflict, soft-delete race, and two
+- the M6 SCIM slice's injection-locked conflict, soft-delete race, and two
   explicit malformed-PATCH tolerance recipes, with strict parsing as the default; and
 - filtered request logs plus literal request/response-body matchers and complete non-
   overlapping ordered-sequence assertions before cleanup.
@@ -51,6 +51,11 @@ It never places target credentials in command arguments, never reuses a platform
 Access Key or the exact active non-prefixed self-host Access Key as a mock SCIM
 credential, and requires target Bearer redaction in captured evidence. A key-rotation
 collision with a saved target must fail before outbound execution.
+
+The [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) is the immutable
+deployed reference for the sampled six-slice acceptance. It does not turn an arbitrary
+connected server, a local recipe run, the 21-case generated source index, or either
+fixture corpus into deployed evidence, and it is never verified-live provider evidence.
 
 All management calls require the fail-closed `API_KEY`; the skill never asks an agent
 to print it. It keeps the management key out of SCIM/Graph/Okta and outbound target

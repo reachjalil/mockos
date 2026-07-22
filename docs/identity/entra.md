@@ -1,6 +1,6 @@
 # Entra ID behavior
 
-Status: Accepted bounded M3 Entra implementation and tested M5 outbound slice; M6 remains source-only
+Status: Accepted bounded M3/M5 Entra slices; bounded M6 token/key/overage sample deployed
 Last reviewed: 2026-07-22
 
 mockOS models a tenant-specific Microsoft identity platform authority. In path hosting,
@@ -30,7 +30,7 @@ attempt fails with Entra-shaped `invalid_grant` / `AADSTS50057` behavior. This h
 focused core, adapter, and Worker coverage, and the M3 deployed smoke sampled the
 rotation/lifecycle path.
 
-The M6 token/key source stream keeps schema v5 and adds a pre-published successor key.
+The M6 token/key stream keeps schema v5 and adds a pre-published successor key.
 Rotation atomically promotes that successor, creates another successor, and converts the
 previous active row into a metadata-only overlap: its private JWK is scrubbed to `{}` and
 it is encoded as legacy-visible `next` plus a non-null `retired_at`. `retiring` is only
@@ -50,7 +50,9 @@ rereads the persisted active key and verifies it remained active after signing, 
 if rotation won the race. The internal `token.before_sign` scenario can trigger one
 rollover or apply a bounded temporal-claim skew without moving storage timestamps.
 Focused core and Worker tests cover the rollover, including multi-service and forced
-sign/rotate interleavings; hosted and deployed M6 qualification remain pending.
+sign/rotate interleavings. The deployed M6 smoke samples functional rotation and stale/
+fresh JWKS verification; the concurrency, storage-scrubbing, and full time-gate cases
+remain source evidence.
 
 For applications whose group-claims mode is enabled, Entra group claims remain inline
 through exactly 200 group IDs. At 201, the token omits `groups` and emits
@@ -102,6 +104,12 @@ and source-paired manual staging/production controlled-target acceptance. Each h
 run completed its Entra-shaped four-request flow and cleanup. That is deployed mock
 acceptance for the tested M5 slice; it does not qualify guarded promotion workflows,
 the broader planner against a real Entra tenant, or verified-live provider parity.
+
+The separate [M6 workers.dev smoke](../evidence/m6-workers-dev-smoke.md) samples
+rotation/JWKS overlap, plus-300-second signed-token skew, every explicit broken-token
+variant, and the exact path-mode 200/201 group boundary on staging and production. It
+does not remotely execute every M6 fixture or source-only cap/concurrency/subdomain
+case and is not verified-live Entra ID evidence.
 
 ## SDK note
 

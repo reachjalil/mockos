@@ -1,7 +1,7 @@
 ---
 name: mockos-testing
 description: >-
-  Run the accepted M5 workflow and bounded M6 source-candidate mockOS
+  Run the accepted M5 workflow and bounded M6 mockOS
   identity-integration tests through authenticated MCP: create isolated Entra ID or
   Okta environments, seed identities, register OIDC clients, run
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
@@ -28,8 +28,10 @@ Keep evidence tiers explicit in every report:
 - `verified-live` is reserved for sanitized, independently reviewed comparison with a
   real Entra ID tenant or Okta organization.
 
-A connected server or workers.dev run is not verified-live evidence. No current M6
-slice has deployed or verified-live qualification.
+A connected server or workers.dev run is not verified-live evidence. The immutable
+[M6 workers.dev record](../../docs/evidence/m6-workers-dev-smoke.md) supplies sampled
+deployed evidence for all six bounded slices on its exact versions; it does not qualify
+an arbitrary server, every indexed case or fixture, or verified-live provider parity.
 
 ## Inventory the application
 
@@ -40,7 +42,7 @@ slice has deployed or verified-live qualification.
    behavior expected for each negative case.
 3. Separate implemented surfaces from gaps. The accepted M3/M5 source contains SCIM,
    bounded Entra Graph reads, tested Okta Users/Groups lifecycle APIs, refresh rotation,
-   and deterministic outbound SCIM provisioning. The M6 source candidate adds bounded
+   and deterministic outbound SCIM provisioning. The bounded M6 implementation adds
    Okta Classic `/api/v1/authn` primary states; injection-locked SCIM conflict, delete
    race, and narrow PATCH tolerances; signing-key rotation/JWKS overlap; claim-only
    clock skew; five broken-token variants; and Entra group claims inline through 200
@@ -338,7 +340,9 @@ through code issuance, then set a one-shot scenario at `token.before_sign` with
 `action: { "type": "rotate_signing_key" }` before redeeming the code. Require redemption
 to succeed, read JWKS again, and verify the returned token by `kid`. The former active
 key, promoted active key, and new successor must all be published during the overlap.
-Do not treat this source recipe as hosted or deployed rollover evidence.
+Do not treat a fresh execution of this recipe as deployed rollover evidence unless it
+is tied to an exact serving version and recorded acceptance. The immutable M6 smoke
+record is the deployed reference for its sampled rotation path.
 
 <a id="m6-token-clock-skew-recipe"></a>
 
@@ -397,7 +401,7 @@ the test subject. Prefer `remaining: 1` for a one-shot failure.
 
 <a id="m6-scim-edge-recipes"></a>
 
-For the M6 SCIM source slice, use only these injection-locked recipes:
+For the M6 SCIM slice, use only these injection-locked recipes:
 
 1. To prove conflict handling, set `injectionPoint: "scim.before_commit"`,
    `action: { "type": "scim_conflict" }`, and `remaining: 1`. Send one create,
@@ -468,6 +472,6 @@ source results from exact deployed evidence and verified-live provider evidence 
 report.
 
 Use only the exact-revision records linked by the implementation ledger as deployed
-evidence. Do not present an older workers.dev smoke as M5 qualification or any source
-or deployed result as verified-live comparison against an Entra ID tenant or Okta
-organization.
+evidence. Do not present an older workers.dev smoke as M5/M6 qualification, promote
+the sampled M6 run to corpus-wide parity, or present any source or deployed result as
+verified-live comparison against an Entra ID tenant or Okta organization.

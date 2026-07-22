@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M3 baseline and tested M5 outbound controls accepted; M6 Authn/token/key/Graph controls are source-only
+Status: M3/M5 controls accepted; bounded M6 controls have sampled deployed evidence
 Last reviewed: 2026-07-22
 
 ## Assets and trust boundaries
@@ -101,6 +101,13 @@ focused acceptance evidence, not a penetration test, full fixture run, live-prov
 comparison, or evidence for M5 outbound provisioning. M5 has a separate
 [deployment record](../evidence/m5-workers-dev-smoke.md).
 
+The [M6 workers.dev record](../evidence/m6-workers-dev-smoke.md) separately binds exact
+source and CI to exact staging and production versions. Its functional sample covers
+rotation/JWKS overlap, signed token edges, trusted path-mode group fallback, SCIM
+conflict/race/tolerances, same-origin Authn CORS, account-state privacy, and exact
+header/body redaction. It is not a penetration test or a remote execution of every
+storage, retention, concurrency, and denial assertion above.
+
 Those records establish deployed mock acceptance only when an exact revision is bound
 to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
 separate tier reserved for sanitized, independently reviewed comparison with a real
@@ -122,7 +129,9 @@ Operators must treat exported logs as sensitive test artifacts.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment
-platform's storage and access controls; M6 hosted/deployed security evidence is pending.
+platform's storage and access controls. The M6 deployed sample proves functional
+rotation and verification, not encryption-at-rest or broad storage-security
+qualification.
 
 M5 outbound SSRF and credential controls are described in
 [outbound provisioning](./outbound-provisioning.md). The Worker and worker-kit suites,
@@ -132,5 +141,6 @@ DNS answers, so operators must restrict
 targets and add external egress enforcement where required. UserInfo, the unimplemented
 remainder of the Okta Classic transaction machine, broad Graph/Okta API parity, and
 custom-domain routing likewise remain outside the accepted boundary. The bounded
-Classic primary-authentication source is locally qualified but not accepted or
-deployed evidence.
+Classic primary-authentication states, privacy, CORS, and redaction have sampled
+deployed evidence; deeper retention, revocation, and issuance-race results remain
+source evidence, and verified-live comparison remains open.

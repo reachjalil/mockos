@@ -13,11 +13,13 @@
 > accepted for exact public runtime revision
 > `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`: local/full gates, hosted CI, manual
 > staging-before-production rollout, and source-paired controlled-target Workflow
-> acceptance are green. M6 remains a source candidate only: its bounded Classic Authn,
-> SCIM edge, signing-key rotation, token-skew/broken-token, and 200/201 group-overage
-> slices have no M6 deployed or verified-live evidence. The guarded GitHub promotion
-> workflows remain unqualified. This is not yet a stable npm release, a live-provider
-> parity claim, or a production-SLA service. See the
+> acceptance are green. The bounded M6 slice is accepted at exact public revision
+> `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da`: the full local gate, hosted CI, manual
+> staging-before-production rollout, and exact-version smoke of Classic Authn, SCIM
+> edges, signing-key rotation, token skew/broken tokens, and 200/201 group overage are
+> green. This is sampled deployed mock evidence, not corpus-wide or verified-live
+> parity. The guarded GitHub promotion workflows remain unqualified. This is not yet a
+> stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -51,14 +53,14 @@ private control plane, licensing, billing, or a hosted mockOS account.
   documented and eight implemented M6 cases that execute through the local Worker);
   22 documented Okta OIDC fixtures; and a locally and hosted-CI green 113-case
   RFC/Entra/Okta SCIM corpus
-- A bounded M6 source candidate for deterministic signing-key rotation/JWKS overlap,
+- A bounded M6 implementation for deterministic signing-key rotation/JWKS overlap,
   plus/minus token-claim clock skew, five explicit broken-token variants, and Entra
   group claims inline through 200 with a trusted same-environment Graph fallback at
   201 and a 1,000-ID response ceiling
-- A bounded M6 source candidate for injection-locked SCIM `409` conflict and
+- A bounded M6 implementation for injection-locked SCIM `409` conflict and
   soft-delete race behavior plus two case-specific malformed-PATCH tolerances; strict
   parsing remains the default and unrelated defects are not repaired
-- A bounded M6 Okta Classic Authn source candidate for `SUCCESS`, `MFA_REQUIRED`,
+- A bounded M6 Okta Classic Authn implementation for `SUCCESS`, `MFA_REQUIRED`,
   `PASSWORD_EXPIRED`, and explicit `LOCKED_OUT`, with state retrieval/cancellation and
   one-time session capabilities. State retrieval slides the five-minute state expiry;
   session expiry stays fixed at five minutes. Each table is capped at 10,000 retained
@@ -103,8 +105,10 @@ The accepted M3 and M5 records remain distinct. M5 passed its
 [local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md)
 and [exact-pair manual deployment/hosted acceptance](./docs/evidence/m5-workers-dev-smoke.md).
 That evidence does not qualify guarded promotion, standalone public Access-Key smoke,
-npm publication, or live-provider parity. All M6 evidence remains source-candidate
-evidence only.
+npm publication, or live-provider parity. M6 has a separate
+[sampled exact-version workers.dev acceptance](./docs/evidence/m6-workers-dev-smoke.md)
+for all six bounded slices. It does not promote the generated case index or fixture
+corpora to corpus-wide deployed or verified-live parity.
 
 ## Evidence tiers
 
@@ -131,8 +135,8 @@ pnpm check
 The concrete [local curl walkthrough](./docs/quickstarts/curl.md) uses the implemented
 control and protocol routes. Read [self-hosting](./docs/self-hosting.md) before trying
 Wrangler and [known limitations](./docs/known-limitations.md) before choosing an SDK.
-The sanitized [M3 workers.dev smoke evidence](./docs/evidence/m3-workers-dev-smoke.md)
-records the exact accepted candidate, version IDs, exercised flow, and cleanup result for
+The sanitized [M6 workers.dev smoke evidence](./docs/evidence/m6-workers-dev-smoke.md)
+records the latest exact accepted candidate, version IDs, exercised flow, and cleanup result for
 [staging](https://mockos-staging.workspaceagent.workers.dev) and
 [production](https://mockos.workspaceagent.workers.dev).
 

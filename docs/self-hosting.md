@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide with M5 source deployed; M6 Authn is source-only and distribution limits remain
+Status: Source-build guide with sampled M6 workers.dev acceptance; distribution limits remain
 Last reviewed: 2026-07-22
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -40,12 +40,14 @@ source-paired hosted flow also passed. Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
-`/e/<environment>/api/v1`. The M6 source candidate also mounts bounded Okta Classic
+`/e/<environment>/api/v1`. The bounded M6 implementation also mounts Okta Classic
 primary authentication at `/e/<environment>/api/v1/authn`. Entra and Okta token
 endpoints also have local refresh
 redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
-deployed evidence; M5 has a separate source-paired hosted acceptance record, while M6
-Authn does not yet have hosted or deployed evidence.
+deployed evidence; M5 has a separate source-paired hosted acceptance record. The
+[M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) samples the six bounded M6
+slices, including Classic Authn states/privacy/CORS/redaction, on exact staging and
+production versions; it is not corpus-wide or verified-live evidence.
 
 Save a local CLI profile without putting the key directly in the command line:
 
@@ -132,12 +134,11 @@ workers.dev path mode at:
 - `https://mockos.workspaceagent.workers.dev`
 
 Its keys are deliberately not public. The sanitized production and staging results
-are recorded in the
-[M3 workers.dev smoke evidence](./evidence/m3-workers-dev-smoke.md). That record
-establishes only the bounded sampled M3 routes and does not qualify every fixture,
-live-provider parity, an authenticated M5 flow using the preserved standalone public
-Worker Access Keys,
-or a service-level commitment.
+are recorded in the latest
+[M6 workers.dev smoke evidence](./evidence/m6-workers-dev-smoke.md). That record
+establishes only the sampled M6 and accepted regression routes; it does not qualify
+every fixture, verified-live parity, the guarded Cloudflare-credential deployment
+workflow, or a service-level commitment.
 
 ## Distribution limits
 

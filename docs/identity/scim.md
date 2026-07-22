@@ -57,9 +57,9 @@ checks, primary-value normalization, membership de-duplication, and semantic no-
 detection. Entra-specific member-array removal and Okta-style pathless replacement are
 selected through provider profiles rather than engine forks.
 
-### M6 deterministic edge scenarios (source candidate)
+### M6 deterministic edge scenarios
 
-The M6 source slice adds three typed actions at two reserved internal injection points.
+The M6 slice adds three typed actions at two reserved internal injection points.
 They are synthetic application-test controls, not observed Entra or Okta behavior:
 
 | Injection point | Typed action | Bounded behavior |
@@ -157,10 +157,13 @@ Group soft-delete behavior. They are intentionally separate from the 113
 source-reviewed provider/RFC conformance fixtures and do not change that corpus's
 evidence count.
 
-The corpus is not a live capture, deployed fixture run, or live-provider conformance
-result. Focused Worker integration, the full M3 gate, and hosted CI are green; the M3
-deployed smoke sampled discovery/PATCH for both profiles rather than all 113 cases.
-Live Entra/Okta comparison remains pending. Outbound SCIM provisioning has separate
+The corpus is not a live capture, corpus-wide deployed fixture run, or live-provider
+conformance result. Focused Worker integration, the full gate, and hosted CI are green;
+the M3 deployed smoke sampled discovery/PATCH for both profiles, while the
+[M6 deployed smoke](../evidence/m6-workers-dev-smoke.md) sampled the injection-locked
+conflict, soft-delete race, strict defaults, and two narrow tolerances. Neither ran all
+113 accepted fixtures or the complete eight-case M6 edge corpus remotely. Live
+Entra/Okta comparison remains pending. Outbound SCIM provisioning has separate
 M5 local and source-paired hosted acceptance; see the
 [provisioning quickstart](../quickstarts/provisioning-cycle.md),
 [outbound security design](../security/outbound-provisioning.md), and

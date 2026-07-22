@@ -1,13 +1,13 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus all source-only M6 slice limits; deliberately candid
+Status: Accepted M3/M5 boundaries plus sampled M6 deployment and remaining limits; deliberately candid
 Last reviewed: 2026-07-22
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
 evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
 evidence; only sanitized, reviewed comparison with a real provider can be
-verified-live. Nothing in M6 is deployed or verified-live, and no current fixture has
-verified-live status.
+verified-live. The bounded M6 slice has sampled exact-version deployment evidence, but
+no M6 fixture/corpus is verified-live and no current fixture has verified-live status.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -25,12 +25,13 @@ verified-live status.
   locally and in hosted CI, with focused Worker integration tested separately. The
   deployed smoke samples discovery and Group PATCH for both profiles; it does not run
   the full corpus remotely or compare with a live provider.
-- The separate M6 SCIM edge source candidate is deliberately injection-locked. It can
+- The separate M6 SCIM edge slice is deliberately injection-locked. It can
   produce an atomic `409` conflict, a soft-delete race, or exactly one of two narrow
   malformed-PATCH repairs (`missing_schemas` or `singleton_operations`). Strict parsing
   is the default. A selected repair does not tolerate the other case, combined defects,
-  unknown fields, invalid paths, missing values, or type coercions. No M6 SCIM edge has
-  deployed or verified-live evidence.
+  unknown fields, invalid paths, missing values, or type coercions. The deployed M6
+  smoke sampled the conflict, race, strict-default, and two narrow-repair paths; it was
+  not a remote run of the complete eight-case edge corpus or verified-live evidence.
 - SCIM, Graph, and Okta directory authentication is intentionally presence-and-scheme
   validation for synthetic protocol tests. A non-empty mock Bearer or SSWS value is not
   a real access-control decision; never expose these surfaces as production identity
@@ -39,8 +40,8 @@ verified-live status.
   membership, filter, projection, and pagination behavior. The Okta `/api/v1` surface
   is limited to the tested Users/Groups, direct membership, and lifecycle routes.
   Okta Group-member listing is currently unpaginated and can return up to the directory
-  membership cap. Neither surface claims broad provider API parity. The M6 source
-  candidate adds bounded Okta Classic `/api/v1/authn` primary states, transaction
+  membership cap. Neither surface claims broad provider API parity. The bounded M6
+  implementation adds Okta Classic `/api/v1/authn` primary states, transaction
   retrieval, and cancellation, but not factor verification, password-change
   execution, recovery/unlock execution, or Sessions API exchange.
 - Classic Authn state retrieval renews its five-minute expiry from each successful
@@ -61,8 +62,9 @@ verified-live status.
   and embedded Users omit `passwordChanged`. Authn request/response bodies are
   recursively redacted by secret-like field name; malformed or primitive bodies are
   wholly replaced, and sensitive headers including authorization, proxy authorization,
-  cookies, and token/secret-like headers are redacted. This is bounded source evidence,
-  not a general log-security audit.
+  cookies, and token/secret-like headers are redacted. The deployed smoke sampled the
+  public state, CORS, privacy, and redaction behavior; deeper retention/revocation/race
+  tests remain source evidence, and neither tier is a general log-security audit.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
   Authn state/session capabilities. There are no production sessions, external
@@ -75,26 +77,30 @@ verified-live status.
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
   combination are not claimed.
-- The M6 signing-key source candidate keeps active and pre-published successor private
+- The M6 signing-key implementation keeps active and pre-published successor private
   JWKs in the environment's SQLite state; application-level encryption at rest is not
   implemented. Rotation scrubs the previous active private JWK in the same transaction
   and bounds the ring to four rows. The rollback/verification-overlap window qualified
   for built-in Worker OIDC and MCP token issuance is exactly 26 hours; a second rotation
   is blocked during it. Public core `expiresInSeconds` and `additionalClaims` are trusted
   test seams, so longer custom lifetimes or temporal overrides are outside that
-  guarantee. Deployed and verified-live M6 security qualification remain pending.
-- The M6 broken-token source slice intentionally supports only `expired`, exact wrong
+  guarantee. The deployed smoke exercised functional rotation and stale/fresh JWKS
+  verification; storage-at-rest, concurrency, and broader security qualification were
+  not remotely tested, and verified-live comparison remains pending.
+- The M6 broken-token slice intentionally supports only `expired`, exact wrong
   audience, `not_yet_valid`, `bad_signature`, and exact wrong issuer. These are
   deterministic `mint_token` mutations, not evidence that a provider HTTP grant emits
   an equivalent token. Claim-only clock skew is bounded to plus/minus 86,400 seconds
-  and does not move the environment clock or persisted grant timestamps. Both slices
-  lack deployed and verified-live evidence.
-- Entra group claims are inline through exactly 200 IDs. At 201 the source candidate
+  and does not move the environment clock or persisted grant timestamps. The deployed
+  smoke exercised every broken variant and a plus-300-second signed token; it did not
+  establish equivalent provider HTTP-grant behavior or verified-live parity.
+- Entra group claims are inline through exactly 200 IDs. At 201 the implementation
   emits claim-source metadata for a trusted same-environment Graph
   `getMemberObjects` endpoint; it never follows a caller-supplied URL. The fallback
   returns at most 1,000 IDs and rejects a 1,001-ID result with the bounded directory
-  size error. This is not broad Graph parity and has no deployed or verified-live M6
-  evidence.
+  size error. The deployed smoke exercised the exact path-mode 200/201 transition and
+  resolved 201 IDs; it did not remotely exercise the 1,001-ID ceiling, subdomain mode,
+  broad Graph parity, or verified-live comparison.
 - The accepted M3 implementation supports bounded deterministic delay, semantic error,
   and JSON-object mutation actions at known injection points, including
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
@@ -159,14 +165,13 @@ verified-live status.
   may not work before custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
-- The staging and production workers.dev targets passed the expanded manual M3
-  acceptance smoke for exact candidate
-  `8645f405d5e3b922c30d51339b8b27f9fe30d93e`, including reverse cleanup and empty
-  catalogs. They remain qualification surfaces without a custom domain, uptime
-  commitment, data-durability promise, or production-service SLA. Hosted CI is green
-  for that candidate, but the deploy-workflow run was skipped, its opt-in remains
-  false, and no Cloudflare API token is configured; automated deployment execution is
-  not qualified.
+- The staging and production workers.dev targets most recently passed the sampled M6
+  smoke for exact candidate `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da`,
+  including accepted regressions, reverse cleanup, empty catalogs, and exact
+  serving-version probes. They remain qualification surfaces without a custom domain,
+  uptime commitment, data-durability promise, or production-service SLA. The manual
+  OAuth rollout and smoke workflow do not execute or qualify the separate guarded
+  Cloudflare-credential deployment workflow.
 - The `@mockos` npm scope is an intended name only. Authentication and registration
   are external publishing prerequisites.
 - The fixture runner compares HTTP status, exact selected headers, exact bodies, and

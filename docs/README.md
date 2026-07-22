@@ -1,6 +1,6 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: M0-M3 accepted; tested M5 slice manually accepted; M6 remains source-only
+Status: M0-M3 accepted; tested M5 slice manually accepted; bounded M6 slice accepted with sampled deployed evidence
 Last reviewed: 2026-07-22
 
 mockOS is an open-core, deterministic identity-platform test double for Entra ID and
@@ -47,6 +47,15 @@ the [M5 deployment record](./evidence/m5-workers-dev-smoke.md). The guarded GitH
 promotion workflows were not executed or formally qualified. This is deployed mock
 acceptance for the tested source pair, not verified-live Entra ID or Okta evidence.
 
+The bounded M6 slice is accepted at public revision
+`a01fb6abbaf85e2cd98b42a3839bebe7451cf8da`. The full local gate and
+[CI run 29966667984](https://github.com/reachjalil/mockos/actions/runs/29966667984)
+are green; exact versions on staging and production then passed the
+[source-locked M6 workers.dev smoke](./evidence/m6-workers-dev-smoke.md). That smoke
+sampled all six M6 slices plus accepted regressions. It is deployed mock evidence, not
+a remote run of every generated case or fixture, qualification of the guarded
+Cloudflare-credential deployment workflow, or verified-live provider evidence.
+
 The public source remains independently self-hostable. The later public docs-only close
 commit `e446eeda357b5e765401b97b892128fd70ac9ab8` was consumed by the separately
 qualified private M4 composition, but that private acceptance is not M5 evidence and
@@ -69,6 +78,7 @@ fixture alone.
 - [M3 hosted CI run](https://github.com/reachjalil/mockos/actions/runs/29886610480)
 - [M5 local source qualification](./evidence/m5-local-source-qualification.md)
 - [M5 deployment and hosted provisioning acceptance](./evidence/m5-workers-dev-smoke.md)
+- [M6 staging and production workers.dev sampled acceptance](./evidence/m6-workers-dev-smoke.md)
 - Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
   [SCIM](./identity/scim.md)
 - Security: [threat model](./security/threat-model.md) and
