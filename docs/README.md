@@ -20,6 +20,7 @@ fixture alone.
 ## Reference map
 
 - [Requirements traceability](./requirements-traceability.md)
+- [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
 - [M1 Wrangler dev smoke evidence](./evidence/m1-wrangler-dev-smoke.md)
 - Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
