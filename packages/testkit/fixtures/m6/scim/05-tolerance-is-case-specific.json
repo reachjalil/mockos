@@ -2,6 +2,7 @@
   "name": "m6-scim-tolerance-is-case-specific",
   "description": "Selecting missing_schemas does not also tolerate singleton Operations.",
   "provider": "entra",
+  "status": "implemented",
   "resourceType": "User",
   "scenario": {
     "id": "missing-schema-only",

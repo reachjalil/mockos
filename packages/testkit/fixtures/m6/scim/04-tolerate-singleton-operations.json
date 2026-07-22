@@ -2,6 +2,7 @@
   "name": "m6-scim-tolerate-singleton-operations",
   "description": "An explicit singleton_operations scenario wraps exactly one operation object.",
   "provider": "okta",
+  "status": "implemented",
   "resourceType": "User",
   "scenario": {
     "id": "tolerate-singleton-once",

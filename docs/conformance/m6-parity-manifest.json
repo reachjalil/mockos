@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 1,
+  "title": "M6 executable parity evidence",
+  "status": "Generated source-evidence index; M6 acceptance remains pending",
+  "lastReviewed": "2026-07-22",
+  "rows": [
+    {
+      "id": "m6-token-signing-key-rotation",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Signing-key rotation with JWKS overlap",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/36-scenario-rotate-signing-key.json",
+        "name": "Rotate signing key before token signing"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/oidc.integration.test.ts",
+        "case": "completes hosted login and PKCE, then verifies the id_token with JWKS"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-signing-key-rotation-recipe",
+        "label": "Rotate a signing key with overlap"
+      }
+    },
+    {
+      "id": "m6-token-clock-skew",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Bounded temporal-claim clock skew",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/37-scenario-token-clock-skew.json",
+        "name": "Skew token claims before signing"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-token-clock-skew-recipe",
+        "label": "Apply bounded token clock skew"
+      }
+    },
+    {
+      "id": "m6-token-expired",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Broken token: expired",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/31-mint-token-expired.json",
+        "name": "Deterministic expired token"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-broken-token-recipes",
+        "label": "Mint focused token failures"
+      }
+    },
+    {
+      "id": "m6-token-wrong-audience",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Broken token: wrong audience",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/32-mint-token-wrong-audience.json",
+        "name": "Deterministic wrong-audience token"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-broken-token-recipes",
+        "label": "Mint focused token failures"
+      }
+    },
+    {
+      "id": "m6-token-not-yet-valid",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Broken token: not yet valid",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/33-mint-token-not-yet-valid.json",
+        "name": "Deterministic not-yet-valid token"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-broken-token-recipes",
+        "label": "Mint focused token failures"
+      }
+    },
+    {
+      "id": "m6-token-bad-signature",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Broken token: bad signature",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/34-mint-token-bad-signature.json",
+        "name": "Deterministic bad-signature token"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-broken-token-recipes",
+        "label": "Mint focused token failures"
+      }
+    },
+    {
+      "id": "m6-token-wrong-issuer",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "Broken token: wrong issuer",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/35-mint-token-wrong-issuer.json",
+        "name": "Deterministic wrong-issuer token"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-broken-token-recipes",
+        "label": "Mint focused token failures"
+      }
+    },
+    {
+      "id": "m6-token-group-overage-graph-fallback",
+      "area": "Token and keys",
+      "provider": "entra",
+      "capability": "201-group overage with same-environment Graph fallback",
+      "fixture": {
+        "file": "packages/testkit/fixtures/entra/oidc/38-group-overage-get-member-objects.json",
+        "name": "Resolve group overage with getMemberObjects"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/token-edge-cases.integration.test.ts",
+        "case": "runs clock skew, every broken-token variant, and the 200/201 fallback"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-group-overage-graph-fallback-recipe",
+        "label": "Exercise group overage and Graph fallback"
+      }
+    },
+    {
+      "id": "m6-scim-strict-missing-schemas",
+      "area": "SCIM",
+      "provider": "entra",
+      "capability": "Strict default: missing PatchOp schemas",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/01-strict-missing-schemas.json",
+        "name": "m6-scim-strict-missing-schemas"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-tolerance-missing-schemas",
+      "area": "SCIM",
+      "provider": "entra",
+      "capability": "Tolerance: missing PatchOp schemas",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/02-tolerate-missing-schemas.json",
+        "name": "m6-scim-tolerate-missing-schemas"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-strict-singleton-operations",
+      "area": "SCIM",
+      "provider": "okta",
+      "capability": "Strict default: singleton Operations object",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/03-strict-singleton-operations.json",
+        "name": "m6-scim-strict-singleton-operations"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-tolerance-singleton-operations",
+      "area": "SCIM",
+      "provider": "okta",
+      "capability": "Tolerance: singleton Operations object",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/04-tolerate-singleton-operations.json",
+        "name": "m6-scim-tolerate-singleton-operations"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-tolerance-case-isolation",
+      "area": "SCIM",
+      "provider": "entra",
+      "capability": "Tolerance remains case-specific",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/05-tolerance-is-case-specific.json",
+        "name": "m6-scim-tolerance-is-case-specific"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-conflict-409",
+      "area": "SCIM",
+      "provider": "entra",
+      "capability": "Injected 409 without partial mutation",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/06-conflict-no-partial-user.json",
+        "name": "m6-scim-conflict-no-partial-user"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-race-soft-delete",
+      "area": "SCIM",
+      "provider": "okta",
+      "capability": "Soft-delete race with atomic tombstone",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/07-soft-delete-group-race.json",
+        "name": "m6-scim-soft-delete-group-race"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-scim-tolerance-unknown-field",
+      "area": "SCIM",
+      "provider": "okta",
+      "capability": "Tolerance keeps unknown fields strict",
+      "fixture": {
+        "file": "packages/testkit/fixtures/m6/scim/08-tolerance-keeps-unknown-fields-strict.json",
+        "name": "m6-scim-tolerance-keeps-unknown-fields-strict"
+      },
+      "integrationTest": {
+        "file": "packages/engine-http/src/scim-edge-cases.test.ts",
+        "case": "executes the locked conflict, race, and narrow tolerance corpus"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-scim-edge-recipes",
+        "label": "Inject SCIM conflict, race, and tolerance edges"
+      }
+    },
+    {
+      "id": "m6-authn-success",
+      "area": "Okta Authn",
+      "provider": "okta",
+      "capability": "Primary authentication SUCCESS",
+      "fixture": {
+        "file": "packages/testkit/fixtures/okta/authn/01-success.json",
+        "name": "okta-authn-primary-success"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/okta.integration.test.ts",
+        "case": "runs bounded Classic Authn states without logging credentials or tokens"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-okta-authn-recipe",
+        "label": "Exercise bounded Okta Classic primary authentication"
+      }
+    },
+    {
+      "id": "m6-authn-mfa-required",
+      "area": "Okta Authn",
+      "provider": "okta",
+      "capability": "Primary authentication MFA_REQUIRED",
+      "fixture": {
+        "file": "packages/testkit/fixtures/okta/authn/02-mfa-required.json",
+        "name": "okta-authn-mfa-required"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/okta.integration.test.ts",
+        "case": "runs bounded Classic Authn states without logging credentials or tokens"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-okta-authn-recipe",
+        "label": "Exercise bounded Okta Classic primary authentication"
+      }
+    },
+    {
+      "id": "m6-authn-password-expired",
+      "area": "Okta Authn",
+      "provider": "okta",
+      "capability": "Primary authentication PASSWORD_EXPIRED",
+      "fixture": {
+        "file": "packages/testkit/fixtures/okta/authn/03-password-expired.json",
+        "name": "okta-authn-password-expired"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/okta.integration.test.ts",
+        "case": "runs bounded Classic Authn states without logging credentials or tokens"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-okta-authn-recipe",
+        "label": "Exercise bounded Okta Classic primary authentication"
+      }
+    },
+    {
+      "id": "m6-authn-locked-out",
+      "area": "Okta Authn",
+      "provider": "okta",
+      "capability": "Primary authentication LOCKED_OUT",
+      "fixture": {
+        "file": "packages/testkit/fixtures/okta/authn/04-locked-out.json",
+        "name": "okta-authn-locked-out"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/okta.integration.test.ts",
+        "case": "runs bounded Classic Authn states without logging credentials or tokens"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-okta-authn-recipe",
+        "label": "Exercise bounded Okta Classic primary authentication"
+      }
+    },
+    {
+      "id": "m6-authn-invalid-credentials",
+      "area": "Okta Authn",
+      "provider": "okta",
+      "capability": "Generic invalid credentials",
+      "fixture": {
+        "file": "packages/testkit/fixtures/okta/authn/05-invalid-credentials.json",
+        "name": "okta-authn-invalid-credentials"
+      },
+      "integrationTest": {
+        "file": "apps/worker/test/okta.integration.test.ts",
+        "case": "runs bounded Classic Authn states without logging credentials or tokens"
+      },
+      "recipe": {
+        "file": "skills/mockos-testing/SKILL.md",
+        "anchor": "m6-okta-authn-recipe",
+        "label": "Exercise bounded Okta Classic primary authentication"
+      }
+    }
+  ]
+}

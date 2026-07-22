@@ -2,6 +2,7 @@
   "name": "m6-scim-tolerance-keeps-unknown-fields-strict",
   "description": "Selecting missing_schemas does not discard an unrelated unknown top-level field.",
   "provider": "okta",
+  "status": "implemented",
   "resourceType": "User",
   "scenario": {
     "id": "missing-schema-not-unknown-fields",

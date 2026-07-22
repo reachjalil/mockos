@@ -2,6 +2,7 @@
   "name": "m6-scim-soft-delete-group-race",
   "description": "A Group PATCH that loses a soft-delete race returns 404 with only the tombstone committed.",
   "provider": "okta",
+  "status": "implemented",
   "resourceType": "Group",
   "scenario": {
     "id": "group-soft-delete-once",

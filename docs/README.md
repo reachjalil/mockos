@@ -52,6 +52,7 @@ fixture alone.
 - [Requirements traceability](./requirements-traceability.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
+- [Generated M6 executable-evidence matrix](./conformance/m6-generated-parity.md)
 - [M1 Wrangler dev smoke evidence](./evidence/m1-wrangler-dev-smoke.md)
 - [M2 staging and production workers.dev smoke evidence](./evidence/m2-workers-dev-smoke.md)
 - [M2 hosted CI run](https://github.com/reachjalil/mockos/actions/runs/29881568591)

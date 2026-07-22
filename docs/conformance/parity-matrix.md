@@ -21,6 +21,11 @@ All 113 are source-implemented and execute green against the HTTP composition lo
 and in hosted CI. The deployed M3 smoke samples both provider discovery/PATCH shapes;
 it is not a 113-case remote run or a live-provider conformance result.
 
+The [generated M6 executable-evidence matrix](./m6-generated-parity.md) is the
+manifest-checked index for the rotation, skew, broken-token, group-overage, SCIM edge,
+and Classic Authn source cases. It does not promote those cases to hosted, deployed, or
+live-provider acceptance.
+
 | Feature | Entra ID | Okta | Evidence / qualification |
 | --- | --- | --- | --- |
 | OIDC discovery | Implemented for the M1/M2 path-mode slice | Implemented for the M2 `default` custom authorization server | Entra [fixture](../../packages/testkit/fixtures/entra/oidc/01-discovery.json) and [Worker test](../../apps/worker/test/oidc.integration.test.ts); Okta [fixture](../../packages/testkit/fixtures/okta/oidc/01-discovery.json) and [Worker test](../../apps/worker/test/okta.integration.test.ts) |

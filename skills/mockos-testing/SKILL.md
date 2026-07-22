@@ -101,6 +101,8 @@ Do not claim the complete Okta Classic transaction machine, client-credentials
 redemption, or live-provider parity. Use the bounded primary-authentication recipe
 below and the provider-specific directory workflow for the organization API surface.
 
+<a id="m6-okta-authn-recipe"></a>
+
 ## Exercise bounded Okta Classic primary authentication
 
 Use only the returned `oktaAuthnEndpoint` and synthetic credentials. This endpoint is a
@@ -273,6 +275,8 @@ platform Workflow failure and do not expect its hosted quota unit to be released
 M5 performs this cleanup on retry rather than through a background orphan sweep; keep
 the retry bounded and preserve the returned failure evidence.
 
+<a id="m6-broken-token-recipes"></a>
+
 ## Mint focused token failures
 
 Call `mint_token` with the application `clientId` and a seeded user ID or user name in
@@ -287,6 +291,41 @@ valid token first, then choose exactly one supported `broken` variant per negati
 
 Assert the application's validation outcome. Do not treat `mint_token` as evidence that
 the same token can be obtained from a provider HTTP grant.
+
+<a id="m6-signing-key-rotation-recipe"></a>
+
+## Rotate a signing key with overlap
+
+Use a disposable Entra environment and keep all JWTs in memory. Read JWKS before the
+flow and require one active key plus its pre-published successor. Complete authorization
+through code issuance, then set a one-shot scenario at `token.before_sign` with
+`action: { "type": "rotate_signing_key" }` before redeeming the code. Require redemption
+to succeed, read JWKS again, and verify the returned token by `kid`. The former active
+key, promoted active key, and new successor must all be published during the overlap.
+Do not treat this source recipe as hosted or deployed rollover evidence.
+
+<a id="m6-token-clock-skew-recipe"></a>
+
+## Apply bounded token clock skew
+
+Set a one-shot `token.before_sign` scenario with
+`action: { "type": "token_clock_skew", "seconds": <integer> }`; the integer must remain
+within plus or minus 86,400 seconds. Mint one token and assert only its temporal claims
+move by the selected offset. The environment clock and stored authorization, device,
+and refresh-grant timestamps must remain unchanged. Clear the scenario before testing a
+different offset, and validate the token with the application's intended clock tolerance.
+
+<a id="m6-group-overage-graph-fallback-recipe"></a>
+
+## Exercise group overage and Graph fallback
+
+Create an Entra application with group claims enabled and one User in exactly 200
+Groups. Mint an in-memory token and require all 200 IDs inline with no claim-source
+metadata. Add membership in Group 201 and mint again: `groups` must be absent, while
+`_claim_names.groups` selects a same-environment `_claim_sources` endpoint ending in
+`/graph/v1.0/users/<id>/getMemberObjects`. POST the strict body
+`{ "securityEnabledOnly": true }` to that returned endpoint with the synthetic bearer
+and require the 201 Group IDs. Never follow a caller-supplied fallback URL.
 
 ## Inject deterministic scenarios
 
@@ -319,6 +358,8 @@ reproducible.
 
 Clear one scenario before enabling the next unless interaction between scenarios is
 the test subject. Prefer `remaining: 1` for a one-shot failure.
+
+<a id="m6-scim-edge-recipes"></a>
 
 For the M6 SCIM source slice, use only these injection-locked recipes:
 

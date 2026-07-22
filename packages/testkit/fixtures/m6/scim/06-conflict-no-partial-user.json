@@ -2,6 +2,7 @@
   "name": "m6-scim-conflict-no-partial-user",
   "description": "A deterministic uniqueness race returns 409 before any User field commits.",
   "provider": "entra",
+  "status": "implemented",
   "resourceType": "User",
   "scenario": {
     "id": "user-conflict-once",

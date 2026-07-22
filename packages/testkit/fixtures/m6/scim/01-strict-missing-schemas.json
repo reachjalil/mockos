@@ -2,6 +2,7 @@
   "name": "m6-scim-strict-missing-schemas",
   "description": "PATCH remains strict by default when the PatchOp schemas field is absent.",
   "provider": "entra",
+  "status": "implemented",
   "resourceType": "User",
   "request": {
     "path": "/scim/v2/Users/usr_edge",
