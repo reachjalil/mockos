@@ -259,12 +259,38 @@ describe("Okta public identity surface", () => {
       expect(urls.oktaAuthnEndpoint).toBe(
         `${publicOrigin}/e/${environment.id}/api/v1/authn`
       );
-      const authenticate = (body: Record<string, string>) =>
+      const authenticate = (
+        body: Record<string, string>,
+        headers: Record<string, string> = {}
+      ) =>
         worker.fetch(urls.oktaAuthnEndpoint, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...headers },
           body: JSON.stringify(body),
         });
+
+      const preflight = await worker.fetch(urls.oktaAuthnEndpoint, {
+        method: "OPTIONS",
+        headers: {
+          origin: publicOrigin,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(publicOrigin);
+      expect(preflight.headers.get("access-control-allow-methods")).toBe("POST");
+      expect(preflight.headers.get("access-control-allow-credentials")).toBeNull();
+      const crossOrigin = await worker.fetch(urls.oktaAuthnEndpoint, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://client.example",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+        },
+      });
+      expect(crossOrigin.status).toBe(403);
+      expect(crossOrigin.headers.get("access-control-allow-origin")).toBeNull();
 
       for (const userName of [
         "mfa.authn@example.test",
@@ -329,16 +355,32 @@ describe("Okta public identity surface", () => {
         _links: { next: { name: "unlock" } },
       });
 
-      const successResponse = await authenticate({
-        username: "success.authn@example.test",
-        password: authnPassword,
-      });
+      const cookieSecret = "AuthnCookieSecret";
+      const proxySecret = "AuthnProxySecret";
+      const headerTokenSecret = "AuthnHeaderTokenSecret";
+      const preservedPasswordChanged = "2026-07-22T10:11:12.000Z";
+      const successResponse = await authenticate(
+        {
+          username: "success.authn@example.test",
+          password: authnPassword,
+          passwordChanged: preservedPasswordChanged,
+        },
+        {
+          origin: publicOrigin,
+          cookie: `sid=${cookieSecret}`,
+          "proxy-authorization": `Bearer ${proxySecret}`,
+          "x-auth-token": headerTokenSecret,
+        }
+      );
       const successBody = await successResponse.json<{
         sessionToken: string;
         status: string;
       }>();
       expect(successBody.status).toBe("SUCCESS");
       expect(successBody.sessionToken).toMatch(/^session_[a-f0-9]{48}$/);
+      expect(successResponse.headers.get("access-control-allow-origin")).toBe(
+        publicOrigin
+      );
 
       const malformedSecret = "MalformedAuthnSecret";
       const malformed = await worker.fetch(urls.oktaAuthnEndpoint, {
@@ -357,7 +399,12 @@ describe("Okta public identity surface", () => {
       expect(primitive.status).toBe(400);
 
       const log = await callTool<{
-        entries: Array<{ requestBody: string | null; responseBody: string | null }>;
+        entries: Array<{
+          requestBody: string | null;
+          requestHeaders: Record<string, string>;
+          responseBody: string | null;
+          responseHeaders: Record<string, string>;
+        }>;
       }>(sessionId, "get_request_log", {
         environmentId: environment.id,
         source: "inbound",
@@ -373,6 +420,11 @@ describe("Okta public identity surface", () => {
       expect(captured).not.toContain(primitiveSecret);
       expect(captured).not.toContain(mfaBody.stateToken);
       expect(captured).not.toContain(successBody.sessionToken);
+      expect(captured).not.toContain(cookieSecret);
+      expect(captured).not.toContain(proxySecret);
+      expect(captured).not.toContain(headerTokenSecret);
+      expect(captured).toContain("E0000004");
+      expect(captured).toContain(preservedPasswordChanged);
       expect(captured).toContain("[REDACTED]");
     } finally {
       await callTool(sessionId, "delete_environment", {

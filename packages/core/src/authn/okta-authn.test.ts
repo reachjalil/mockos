@@ -1,9 +1,16 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
-import { Engine } from "../engine";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FixedClock, SeededRng } from "../determinism";
+import { Engine } from "../engine";
 import type { SqlRow, SqlRunResult, SqlStore, SqlValue } from "../store";
-import { OKTA_AUTHN_STATE_TOKEN_TTL_MS, OktaAuthnError } from "./okta-authn";
+import {
+  OKTA_AUTHN_EXPIRY_GC_BATCH_SIZE,
+  OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND,
+  OKTA_AUTHN_SESSION_TOKEN_TTL_MS,
+  OKTA_AUTHN_STATE_TOKEN_TTL_MS,
+  OktaAuthnError,
+  OktaAuthnService,
+} from "./okta-authn";
 
 class MemorySqlStore implements SqlStore {
   readonly database = new DatabaseSync(":memory:");
@@ -194,6 +201,43 @@ describe("Okta Classic Authn core", () => {
     ).toBe(0);
   });
 
+  it("slides a valid state transaction expiry while preserving exact-boundary expiry", async () => {
+    const { clock, engine } = await setup("authn-state-sliding-expiry");
+    await engine.users.create({
+      userName: "sliding@example.test",
+      displayName: "Sliding State User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const pending = await engine.authn.authenticate({
+      userName: "sliding@example.test",
+      password: "SyntheticPassw0rd!",
+    });
+    if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    const originalExpiry = pending.expiresAt;
+
+    clock.advance(OKTA_AUTHN_STATE_TOKEN_TTL_MS - 1_000);
+    const refreshed = await engine.authn.getTransaction(pending.stateToken);
+    if (refreshed.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    expect(Date.parse(refreshed.expiresAt)).toBe(
+      clock.now().getTime() + OKTA_AUTHN_STATE_TOKEN_TTL_MS
+    );
+    expect(Date.parse(refreshed.expiresAt)).toBeGreaterThan(Date.parse(originalExpiry));
+
+    clock.advance(2_000);
+    await expect(
+      engine.authn.getTransaction(pending.stateToken)
+    ).resolves.toMatchObject({
+      status: "MFA_REQUIRED",
+    });
+    clock.advance(OKTA_AUTHN_STATE_TOKEN_TTL_MS);
+    await expect(engine.authn.getTransaction(pending.stateToken)).rejects.toMatchObject(
+      {
+        code: "INVALID_STATE_TOKEN",
+      }
+    );
+  });
+
   it("stores session capabilities as hashes and consumes each exactly once", async () => {
     const { clock, engine, store } = await setup("authn-sessions");
     const user = await engine.users.create({
@@ -289,5 +333,414 @@ describe("Okta Classic Authn core", () => {
     await expect(
       engine.authn.consumeSessionToken(session.sessionToken)
     ).rejects.toMatchObject({ code: "INVALID_SESSION_TOKEN" });
+  });
+
+  it("prunes unpresented expired rows before issuing another capability", async () => {
+    const { clock, engine, store } = await setup("authn-expiry-gc");
+    const pendingUser = await engine.users.create({
+      userName: "pending-gc@example.test",
+      displayName: "Pending GC User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-gc@example.test",
+      displayName: "Session GC User",
+      password: "SyntheticPassw0rd!",
+    });
+    const oldPending = await engine.authn.authenticate({
+      userName: pendingUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    const oldSession = await engine.authn.authenticate({
+      userName: sessionUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (oldPending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    if (oldSession.status !== "SUCCESS") throw new Error("Expected success state.");
+
+    clock.advance(
+      Math.max(OKTA_AUTHN_STATE_TOKEN_TTL_MS, OKTA_AUTHN_SESSION_TOKEN_TTL_MS)
+    );
+    await engine.authn.authenticate({
+      userName: pendingUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(1);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(0);
+    await engine.authn.authenticate({
+      userName: sessionUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(1);
+    await expect(
+      engine.authn.getTransaction(oldPending.stateToken)
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
+    await expect(
+      engine.authn.consumeSessionToken(oldSession.sessionToken)
+    ).rejects.toMatchObject({ code: "INVALID_SESSION_TOKEN" });
+  });
+
+  it("bounds each indexed expiry collection pass", async () => {
+    const { clock, engine, store } = await setup("authn-bounded-expiry-gc");
+    const pendingUser = await engine.users.create({
+      userName: "pending-bounded-gc@example.test",
+      displayName: "Pending Bounded GC User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-bounded-gc@example.test",
+      displayName: "Session Bounded GC User",
+      password: "SyntheticPassw0rd!",
+    });
+    const createdAt = "2026-07-22T11:00:00.000Z";
+    const expiresAt = "2026-07-22T11:05:00.000Z";
+    for (let index = 0; index <= OKTA_AUTHN_EXPIRY_GC_BATCH_SIZE; index += 1) {
+      store.run(
+        `INSERT INTO authn_transactions (
+           id, state, user_id, payload_json, created_at, expires_at
+         ) VALUES (?, 'MFA_REQUIRED', ?, '{}', ?, ?)`,
+        `expired_state_${index.toString().padStart(3, "0")}`,
+        pendingUser.id,
+        createdAt,
+        expiresAt
+      );
+      store.run(
+        `INSERT INTO web_sessions (id_hash, user_id, created_at, expires_at)
+         VALUES (?, ?, ?, ?)`,
+        `expired_session_${index.toString().padStart(3, "0")}`,
+        sessionUser.id,
+        createdAt,
+        expiresAt
+      );
+    }
+
+    const pending = await engine.authn.authenticate({
+      userName: pendingUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    expect(pending.status).toBe("MFA_REQUIRED");
+    expect(
+      store.get<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM authn_transactions WHERE expires_at <= ?",
+        clock.now().toISOString()
+      )?.count
+    ).toBe(1);
+    expect(
+      store.get<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM web_sessions WHERE expires_at <= ?",
+        clock.now().toISOString()
+      )?.count
+    ).toBe(1);
+
+    const success = await engine.authn.authenticate({
+      userName: sessionUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    expect(success.status).toBe("SUCCESS");
+    expect(
+      store.get<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM authn_transactions WHERE expires_at <= ?",
+        clock.now().toISOString()
+      )?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM web_sessions WHERE expires_at <= ?",
+        clock.now().toISOString()
+      )?.count
+    ).toBe(0);
+  });
+
+  it("keeps live state and session capabilities within per-user per-kind caps", async () => {
+    const { engine, store } = await setup("authn-live-caps");
+    const pendingUser = await engine.users.create({
+      userName: "pending-cap@example.test",
+      displayName: "Pending Cap User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-cap@example.test",
+      displayName: "Session Cap User",
+      password: "SyntheticPassw0rd!",
+    });
+    const stateTokens: string[] = [];
+    const sessionTokens: string[] = [];
+    for (
+      let index = 0;
+      index < OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND + 2;
+      index += 1
+    ) {
+      const pending = await engine.authn.authenticate({
+        userName: pendingUser.userName,
+        password: "SyntheticPassw0rd!",
+      });
+      const session = await engine.authn.authenticate({
+        userName: sessionUser.userName,
+        password: "SyntheticPassw0rd!",
+      });
+      if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+      if (session.status !== "SUCCESS") throw new Error("Expected success state.");
+      stateTokens.push(pending.stateToken);
+      sessionTokens.push(session.sessionToken);
+    }
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND);
+    const stateResults = await Promise.allSettled(
+      stateTokens.map((token) => engine.authn.getTransaction(token))
+    );
+    const sessionResults = await Promise.allSettled(
+      sessionTokens.map((token) => engine.authn.consumeSessionToken(token))
+    );
+    expect(stateResults.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND
+    );
+    expect(sessionResults.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND
+    );
+    expect(stateResults.filter(({ status }) => status === "rejected")).toHaveLength(2);
+    expect(sessionResults.filter(({ status }) => status === "rejected")).toHaveLength(
+      2
+    );
+  });
+
+  it("keeps each Authn capability table within its environment cap", async () => {
+    const { clock, engine, store } = await setup("authn-environment-caps");
+    const pendingUser = await engine.users.create({
+      userName: "pending-environment-cap@example.test",
+      displayName: "Pending Environment Cap User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-environment-cap@example.test",
+      displayName: "Session Environment Cap User",
+      password: "SyntheticPassw0rd!",
+    });
+    const authn = new OktaAuthnService({
+      clock,
+      rng: new SeededRng("authn-environment-cap-service"),
+      store,
+      users: engine.users,
+      maxCapabilitiesPerUserPerKind: 10,
+      maxStateTransactions: 3,
+      maxSessionTokens: 3,
+    });
+    const stateTokens: string[] = [];
+    const sessionTokens: string[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const pending = await authn.authenticate({
+        userName: pendingUser.userName,
+        password: "SyntheticPassw0rd!",
+      });
+      const success = await authn.authenticate({
+        userName: sessionUser.userName,
+        password: "SyntheticPassw0rd!",
+      });
+      if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+      if (success.status !== "SUCCESS") throw new Error("Expected success state.");
+      stateTokens.push(pending.stateToken);
+      sessionTokens.push(success.sessionToken);
+    }
+
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(3);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(3);
+    const stateResults = await Promise.allSettled(
+      stateTokens.map((token) => authn.getTransaction(token))
+    );
+    const sessionResults = await Promise.allSettled(
+      sessionTokens.map((token) => authn.consumeSessionToken(token))
+    );
+    expect(stateResults.filter(({ status }) => status === "fulfilled")).toHaveLength(3);
+    expect(sessionResults.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      3
+    );
+  });
+
+  it("keeps expiry indexes version-neutral for schema-v5 rollback", async () => {
+    const { store } = await setup("authn-version-neutral-indexes");
+    expect(
+      store.get<{ user_version: number }>("PRAGMA user_version")?.user_version
+    ).toBe(5);
+    expect(
+      store
+        .all<{ name: string }>(
+          `SELECT name FROM sqlite_master
+           WHERE type = 'index'
+             AND name IN (
+               'authn_transactions_expiry_idx',
+               'authn_transactions_user_expiry_idx',
+               'web_sessions_expiry_idx',
+               'web_sessions_user_expiry_idx'
+             )
+           ORDER BY name`
+        )
+        .map(({ name }) => name)
+    ).toEqual([
+      "authn_transactions_expiry_idx",
+      "authn_transactions_user_expiry_idx",
+      "web_sessions_expiry_idx",
+      "web_sessions_user_expiry_idx",
+    ]);
+  });
+
+  it("revokes capabilities through exported lifecycle convenience mutators", async () => {
+    const { engine, store } = await setup("authn-exported-lifecycle-revocation");
+    const pendingUser = await engine.users.create({
+      userName: "pending-export@example.test",
+      displayName: "Pending Export User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-export@example.test",
+      displayName: "Session Export User",
+      password: "SyntheticPassw0rd!",
+    });
+    const pending = await engine.authn.authenticate({
+      userName: pendingUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    const session = await engine.authn.authenticate({
+      userName: sessionUser.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    if (session.status !== "SUCCESS") throw new Error("Expected success state.");
+
+    engine.users.setAccountEnabled(pendingUser.id, false);
+    engine.users.setAccountEnabled(sessionUser.id, false);
+    engine.users.setAccountEnabled(pendingUser.id, true);
+    engine.users.setAccountEnabled(sessionUser.id, true);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(0);
+    await expect(engine.authn.getTransaction(pending.stateToken)).rejects.toMatchObject(
+      {
+        code: "INVALID_STATE_TOKEN",
+      }
+    );
+    await expect(
+      engine.authn.consumeSessionToken(session.sessionToken)
+    ).rejects.toMatchObject({ code: "INVALID_SESSION_TOKEN" });
+  });
+
+  it("revokes active capabilities when SCIM changes the password", async () => {
+    const { engine, store } = await setup("authn-password-change-revocation");
+    const pendingUser = await engine.users.create({
+      userName: "pending-password@example.test",
+      displayName: "Pending Password User",
+      password: "OldSyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const sessionUser = await engine.users.create({
+      userName: "session-password@example.test",
+      displayName: "Session Password User",
+      password: "OldSyntheticPassw0rd!",
+    });
+    const pending = await engine.authn.authenticate({
+      userName: pendingUser.userName,
+      password: "OldSyntheticPassw0rd!",
+    });
+    const session = await engine.authn.authenticate({
+      userName: sessionUser.userName,
+      password: "OldSyntheticPassw0rd!",
+    });
+    if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    if (session.status !== "SUCCESS") throw new Error("Expected success state.");
+
+    await engine.users.updateScim(pendingUser.id, {
+      password: "NewSyntheticPassw0rd!",
+    });
+    await engine.users.updateScim(sessionUser.id, {
+      password: "NewSyntheticPassw0rd!",
+    });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(0);
+    await expect(engine.authn.getTransaction(pending.stateToken)).rejects.toMatchObject(
+      {
+        code: "INVALID_STATE_TOKEN",
+      }
+    );
+    await expect(
+      engine.authn.consumeSessionToken(session.sessionToken)
+    ).rejects.toMatchObject({ code: "INVALID_SESSION_TOKEN" });
+  });
+
+  it("refuses issuance from a stale post-verification User snapshot", async () => {
+    const { engine, store } = await setup("authn-verification-race");
+    const lifecycleUser = await engine.users.create({
+      userName: "lifecycle-race@example.test",
+      displayName: "Lifecycle Race User",
+      password: "SyntheticPassw0rd!",
+    });
+    const passwordUser = await engine.users.create({
+      userName: "password-race@example.test",
+      displayName: "Password Race User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const verify = engine.users.verifyPrimaryCredentials.bind(engine.users);
+    const spy = vi.spyOn(engine.users, "verifyPrimaryCredentials");
+    spy.mockImplementationOnce(async (userName, password) => {
+      const snapshot = await verify(userName, password);
+      engine.users.setAccountEnabled(lifecycleUser.id, false);
+      return snapshot;
+    });
+    await expect(
+      engine.authn.authenticate({
+        userName: lifecycleUser.userName,
+        password: "SyntheticPassw0rd!",
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+
+    spy.mockImplementationOnce(async (userName, password) => {
+      const snapshot = await verify(userName, password);
+      await engine.users.updateScim(passwordUser.id, {
+        password: "RotatedSyntheticPassw0rd!",
+      });
+      return snapshot;
+    });
+    await expect(
+      engine.authn.authenticate({
+        userName: passwordUser.userName,
+        password: "SyntheticPassw0rd!",
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(0);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(0);
   });
 });

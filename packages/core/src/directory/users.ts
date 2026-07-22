@@ -340,6 +340,8 @@ export class UserRepository {
       const scimJson = canonicalJson(input.scim ?? current.scim);
       const normalizedUserName = normalizeName(userName);
       this.#assertUserNameUnique(normalizedUserName, id);
+      const passwordChanged =
+        passwordHash !== undefined && passwordHash !== row.password_hash;
       const changed =
         userName !== current.userName ||
         displayName !== current.displayName ||
@@ -348,7 +350,14 @@ export class UserRepository {
         familyName !== (current.familyName ?? null) ||
         lifecycleState !== current.lifecycleState ||
         scimJson !== canonicalJson(current.scim) ||
-        (passwordHash !== undefined && passwordHash !== row.password_hash);
+        passwordChanged;
+      if (
+        passwordChanged ||
+        current.lifecycleState !== "active" ||
+        lifecycleState !== "active"
+      ) {
+        this.#revokeAuthnCapabilities(id);
+      }
       onLifecycleTransition?.(current, lifecycleState);
       if (!changed) return { record: current, changed: false };
 
@@ -393,6 +402,7 @@ export class UserRepository {
       const current = userFromRow(row);
       assertVersionPrecondition(current.resourceVersion, precondition);
       if (current.lifecycleState === nextState) {
+        if (nextState !== "active") this.#revokeAuthnCapabilities(id);
         onTransition?.();
         return { record: current, changed: false };
       }
@@ -420,6 +430,9 @@ export class UserRepository {
         throw new Error("Concurrent lifecycle update was not serialized.");
       }
       if (nextState === "deleted") this.#removeMembershipsAndBumpGroups(id, now);
+      if (current.lifecycleState !== "active" || nextState !== "active") {
+        this.#revokeAuthnCapabilities(id);
+      }
       onTransition?.();
       return { record: this.requireById(id), changed: true };
     });
@@ -441,6 +454,11 @@ export class UserRepository {
 
   softDelete(id: string): UserRecord {
     return this.deleteScim(id).record;
+  }
+
+  #revokeAuthnCapabilities(userId: string): void {
+    this.#store.run("DELETE FROM authn_transactions WHERE user_id = ?", userId);
+    this.#store.run("DELETE FROM web_sessions WHERE user_id = ?", userId);
   }
 
   #requireMutableRow(id: string): UserRow {

@@ -1,5 +1,5 @@
 import { OktaAuthnError, type OktaAuthnResult, type UserRecord } from "@mockos/core";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 
 const MAX_AUTHN_BODY_BYTES = 64 * 1_024;
 const MAX_AUTHN_USERNAME_BYTES = 320;
@@ -11,6 +11,10 @@ const noStoreHeaders = {
   "cache-control": "no-store",
   pragma: "no-cache",
 };
+const AUTHN_ROOT = "/api/v1/authn";
+const CORS_REQUEST_HEADERS = new Set(["accept", "content-type"]);
+const MAX_CORS_ORIGIN_CHARACTERS = 2_048;
+const MAX_CORS_REQUEST_HEADERS_CHARACTERS = 256;
 
 export type OktaAuthnEngine = {
   authenticate(input: {
@@ -195,13 +199,13 @@ const publicAuthnBase = (request: Request): string => {
       );
     }
     const parsed = new URL(routedPath, requestUrl.origin);
-    const marker = "/api/v1/authn";
-    const markerIndex = parsed.pathname.indexOf(marker);
+    const internalPath = requestUrl.pathname;
     if (
       parsed.origin !== requestUrl.origin ||
       parsed.search ||
       parsed.hash ||
-      markerIndex < 0
+      (internalPath !== AUTHN_ROOT && !internalPath.startsWith(`${AUTHN_ROOT}/`)) ||
+      !parsed.pathname.endsWith(internalPath)
     ) {
       throw new OktaAuthnHttpError(
         "E0000003",
@@ -209,9 +213,17 @@ const publicAuthnBase = (request: Request): string => {
         400
       );
     }
-    requestUrl.pathname = parsed.pathname.slice(0, markerIndex + marker.length);
+    const publicPrefix = parsed.pathname.slice(0, -internalPath.length);
+    if (publicPrefix.endsWith("/")) {
+      throw new OktaAuthnHttpError(
+        "E0000003",
+        "The routed Okta public path is malformed.",
+        400
+      );
+    }
+    requestUrl.pathname = `${publicPrefix}${AUTHN_ROOT}`;
   } else {
-    requestUrl.pathname = "/api/v1/authn";
+    requestUrl.pathname = AUTHN_ROOT;
   }
   requestUrl.search = "";
   requestUrl.hash = "";
@@ -226,7 +238,6 @@ const postLink = (href: string, name?: string) => ({
 
 const embeddedUser = (user: UserRecord) => ({
   id: user.id,
-  passwordChanged: user.updatedAt,
   profile: {
     login: user.userName,
     firstName: user.givenName ?? null,
@@ -235,6 +246,95 @@ const embeddedUser = (user: UserRecord) => ({
     timeZone: "America/Los_Angeles",
   },
 });
+
+const corsError = () =>
+  new OktaAuthnHttpError(
+    "E0000006",
+    "You do not have permission to perform the requested action.",
+    403
+  );
+
+const appendVary = (headers: Headers, value: string) => {
+  const current = headers.get("vary");
+  const values = new Set(
+    current
+      ?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean) ?? []
+  );
+  values.add(value);
+  headers.set("vary", [...values].join(", "));
+};
+
+const sameOriginCors: MiddlewareHandler = async (context, next) => {
+  const request = context.req.raw;
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    await next();
+    return;
+  }
+  if (origin.length > MAX_CORS_ORIGIN_CHARACTERS) throw corsError();
+
+  let normalizedOrigin: string;
+  try {
+    const parsed = new URL(origin);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.origin !== origin ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw corsError();
+    }
+    normalizedOrigin = parsed.origin;
+  } catch (error) {
+    if (error instanceof OktaAuthnHttpError) throw error;
+    throw corsError();
+  }
+  if (normalizedOrigin !== new URL(request.url).origin) throw corsError();
+
+  const corsHeaders = new Headers({
+    "access-control-allow-origin": normalizedOrigin,
+  });
+  appendVary(corsHeaders, "Origin");
+  if (request.method === "OPTIONS") {
+    if (request.headers.get("access-control-request-method") !== "POST") {
+      throw corsError();
+    }
+    const requestedHeadersValue = request.headers.get("access-control-request-headers");
+    if (
+      requestedHeadersValue &&
+      requestedHeadersValue.length > MAX_CORS_REQUEST_HEADERS_CHARACTERS
+    ) {
+      throw corsError();
+    }
+    const requestedHeaders = [
+      ...new Set(
+        requestedHeadersValue
+          ?.split(",")
+          .map((header) => header.trim().toLowerCase())
+          .filter(Boolean) ?? []
+      ),
+    ];
+    if (requestedHeaders.some((header) => !CORS_REQUEST_HEADERS.has(header))) {
+      throw corsError();
+    }
+    corsHeaders.set("access-control-allow-methods", "POST");
+    if (requestedHeaders.length > 0) {
+      corsHeaders.set("access-control-allow-headers", requestedHeaders.join(", "));
+      appendVary(corsHeaders, "Access-Control-Request-Headers");
+    }
+    corsHeaders.set("access-control-max-age", "600");
+    context.res = new Response(null, { status: 204, headers: corsHeaders });
+    return;
+  }
+
+  await next();
+  for (const [name, value] of corsHeaders) context.res.headers.set(name, value);
+};
 
 const renderResult = (result: OktaAuthnResult, request: Request) => {
   const base = publicAuthnBase(request);
@@ -262,7 +362,7 @@ const renderResult = (result: OktaAuthnResult, request: Request) => {
       status: result.status,
       _embedded: {
         user: embeddedUser(result.user),
-        factors: [
+        factor: [
           {
             id: factorId,
             factorType: "token:software:totp",
@@ -312,6 +412,8 @@ export const createOktaAuthnApi = ({
   const app = new Hono();
 
   app.onError((error) => errorResponse(error, requestId));
+  app.use(AUTHN_ROOT, sameOriginCors);
+  app.use(`${AUTHN_ROOT}/*`, sameOriginCors);
 
   app.post("/api/v1/authn", async (context) => {
     const body = await boundedJsonObject(context.req.raw);

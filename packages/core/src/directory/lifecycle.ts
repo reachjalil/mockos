@@ -282,11 +282,9 @@ export class LifecycleService {
       now,
       userId
     );
-    // Classic Authn state and session tokens are short-lived bearer
-    // capabilities. Remove them in the same lifecycle transaction so an old
-    // capability cannot become valid again after a later reactivation.
-    this.#store.run("DELETE FROM authn_transactions WHERE user_id = ?", userId);
-    this.#store.run("DELETE FROM web_sessions WHERE user_id = ?", userId);
+    // UserRepository owns Authn capability invalidation for every lifecycle
+    // mutation path, including exported convenience mutators that bypass this
+    // service. This callback remains responsible for tracked OAuth credentials.
     return { accessTokens, refreshTokens };
   }
 }

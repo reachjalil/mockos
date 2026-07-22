@@ -176,6 +176,7 @@ export class Engine {
 
   async #initialize(): Promise<void> {
     applyMigrations(this.#store);
+    this.authn.initializeStorage();
     this.#bindMetadata("provider", this.providerId);
     this.#bindMetadata("tenant_id", this.tenantId);
     this.#bindMetadata("seed", this.config.seed);

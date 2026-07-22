@@ -91,6 +91,9 @@ describe("Okta Classic Authn HTTP adapter", () => {
       },
     });
     expect(JSON.stringify(body)).not.toContain("SyntheticPassw0rd!");
+    expect(
+      (body._embedded as { user: Record<string, unknown> }).user
+    ).not.toHaveProperty("passwordChanged");
     expect(engine.authenticate).toHaveBeenCalledWith({
       userName: "ada@example.test",
       password: "SyntheticPassw0rd!",
@@ -117,7 +120,7 @@ describe("Okta Classic Authn HTTP adapter", () => {
       status: "MFA_REQUIRED",
       stateToken: "state_fixture_value",
       _embedded: {
-        factors: [
+        factor: [
           {
             factorType: "token:software:totp",
             profile: {},
@@ -180,6 +183,97 @@ describe("Okta Classic Authn HTTP adapter", () => {
     expect(cancelled.status).toBe(200);
     expect(await cancelled.text()).toBe("");
     expect(engine.cancel).toHaveBeenCalledWith("state_fixture_value");
+  });
+
+  it("derives links from the exact routed suffix when the prefix contains authn", async () => {
+    const app = createOktaAuthnApi({ engine });
+    vi.mocked(engine.authenticate).mockResolvedValue(mfa);
+    const mfaResponse = await app.request(
+      "https://do.internal/api/v1/authn",
+      jsonRequest(
+        { username: user.userName, password: "SyntheticPassw0rd!" },
+        {
+          "x-mockos-public-path": "/api/v1/authn-prefix/e/env_authn/api/v1/authn",
+        }
+      )
+    );
+    const mfaBody = (await mfaResponse.json()) as {
+      _embedded: { factor: Array<{ _links: { verify: { href: string } } }> };
+      _links: { cancel: { href: string } };
+    };
+    expect(mfaBody._links.cancel.href).toBe(
+      "https://do.internal/api/v1/authn-prefix/e/env_authn/api/v1/authn/cancel"
+    );
+    expect(mfaBody._embedded.factor[0]?._links.verify.href).toBe(
+      `https://do.internal/api/v1/authn-prefix/e/env_authn/api/v1/authn/factors/mfa_${user.id}/verify`
+    );
+  });
+
+  it("permits bounded same-origin preflight and rejects cross-origin requests", async () => {
+    const app = createOktaAuthnApi({ engine });
+    const preflight = await app.request("https://do.internal/api/v1/authn", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://do.internal",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type, accept",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe(
+      "https://do.internal"
+    );
+    expect(preflight.headers.get("access-control-allow-methods")).toBe("POST");
+    expect(preflight.headers.get("access-control-allow-headers")).toBe(
+      "content-type, accept"
+    );
+    expect(preflight.headers.get("access-control-allow-credentials")).toBeNull();
+    expect(preflight.headers.get("vary")).toContain("Origin");
+
+    const unsupportedPreflight = await app.request("https://do.internal/api/v1/authn", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://do.internal",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "x-auth-token",
+      },
+    });
+    expect(unsupportedPreflight.status).toBe(403);
+    expect(unsupportedPreflight.headers.get("access-control-allow-origin")).toBeNull();
+
+    const oversizedPreflight = await app.request("https://do.internal/api/v1/authn", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://do.internal",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": `content-type,${"x".repeat(257)}`,
+      },
+    });
+    expect(oversizedPreflight.status).toBe(403);
+
+    const sameOrigin = await app.request(
+      "https://do.internal/api/v1/authn",
+      jsonRequest(
+        { username: user.userName, password: "SyntheticPassw0rd!" },
+        { origin: "https://do.internal" }
+      )
+    );
+    expect(sameOrigin.status).toBe(200);
+    expect(sameOrigin.headers.get("access-control-allow-origin")).toBe(
+      "https://do.internal"
+    );
+    vi.mocked(engine.authenticate).mockClear();
+
+    const rejected = await app.request(
+      "https://do.internal/api/v1/authn",
+      jsonRequest(
+        { username: user.userName, password: "SyntheticPassw0rd!" },
+        { origin: "https://client.example" }
+      )
+    );
+    expect(rejected.status).toBe(403);
+    expect(rejected.headers.get("access-control-allow-origin")).toBeNull();
+    expect(engine.authenticate).not.toHaveBeenCalled();
   });
 
   it("uses indistinguishable authentication errors for unknown or stateful users", async () => {

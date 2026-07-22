@@ -21,7 +21,7 @@
         "user": {
           "profile": { "login": "mfa.authn@example.test" }
         },
-        "factors": [
+        "factor": [
           {
             "factorType": "token:software:totp",
             "provider": "OKTA",

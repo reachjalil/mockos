@@ -43,7 +43,6 @@ import {
   Engine,
   MAX_REQUEST_LOG_BODY_BYTES,
   OAuthError,
-  redactSecrets,
   type RenderedProviderError,
   ScimService,
   type UserRecord,
@@ -346,15 +345,24 @@ const createOktaHttpEngine = (engine: Engine): OktaHttpEngine => {
 
 const headersRecord = (
   headers: Headers,
-  options: { redactAuthorization?: boolean } = {}
+  options: { redactAuthorization?: boolean; redactSecrets?: boolean } = {}
 ): Record<string, string> => {
   const captured: Record<string, string> = {};
   for (const [name, rawValue] of headers.entries()) {
     const normalizedName = name.toLowerCase();
     if (normalizedName.startsWith("x-mockos-")) continue;
+    const sensitiveHeader =
+      normalizedName === "authorization" ||
+      normalizedName === "proxy-authorization" ||
+      normalizedName === "cookie" ||
+      normalizedName === "set-cookie" ||
+      /(?:^|[-_])(?:api[-_]?key|credential|password|private[-_]?key|secret|token)(?:$|[-_])/i.test(
+        normalizedName
+      );
     const value =
       normalizedName === "x-api-key" ||
-      (normalizedName === "authorization" && options.redactAuthorization)
+      (normalizedName === "authorization" && options.redactAuthorization) ||
+      (options.redactSecrets && sensitiveHeader)
         ? "[REDACTED]"
         : rawValue;
     const candidate = { ...captured, [normalizedName]: value };
@@ -472,6 +480,35 @@ const injectionPointFor = (pathname: string): string => {
 const isOktaAuthnPath = (pathname: string): boolean =>
   pathname === "/api/v1/authn" || pathname.startsWith("/api/v1/authn/");
 
+const authenticationSecretKey = (key: string): boolean => {
+  const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
+  if (normalized === "errorcode" || normalized === "passwordchanged") return false;
+  return (
+    normalized === "authorization" ||
+    normalized === "cookie" ||
+    normalized === "credential" ||
+    normalized === "credentials" ||
+    normalized === "code" ||
+    normalized === "apikey" ||
+    normalized === "privatekey" ||
+    normalized.startsWith("password") ||
+    normalized.endsWith("passcode") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("token")
+  );
+};
+
+const redactAuthenticationSecrets = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(redactAuthenticationSecrets);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+      key,
+      authenticationSecretKey(key) ? "[REDACTED]" : redactAuthenticationSecrets(entry),
+    ])
+  );
+};
+
 const authenticationBodyForLog = (
   pathname: string,
   body: string | null
@@ -482,7 +519,7 @@ const authenticationBodyForLog = (
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return "[REDACTED authentication body]";
     }
-    return JSON.stringify(redactSecrets(parsed));
+    return JSON.stringify(redactAuthenticationSecrets(parsed));
   } catch {
     return "[REDACTED authentication body]";
   }
@@ -1624,7 +1661,10 @@ export class EnvironmentDurableObject extends DurableObject {
       requestBodyPromise,
       readBoundedBody(response.clone().body),
     ]);
-    const responseHeaders = headersRecord(response.headers);
+    const authnPath = isOktaAuthnPath(routedPath);
+    const responseHeaders = headersRecord(response.headers, {
+      redactSecrets: authnPath,
+    });
     const responseJson = (() => {
       if (!responseBody) return undefined;
       try {
@@ -1655,8 +1695,9 @@ export class EnvironmentDurableObject extends DurableObject {
         path,
         requestHeaders: headersRecord(request.headers, {
           redactAuthorization:
-            isOktaAuthnPath(routedPath) ||
+            authnPath ||
             request.headers.get("x-mockos-redact-authorization") === "true",
+          redactSecrets: authnPath,
         }),
         requestBody: authenticationBodyForLog(routedPath, requestBody),
         responseStatus: response.status,
