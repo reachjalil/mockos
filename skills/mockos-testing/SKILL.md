@@ -1,14 +1,16 @@
 ---
 name: mockos-testing
 description: >-
-  Run locally qualified M5 source-candidate mockOS identity-integration tests through authenticated MCP:
-  create isolated Entra ID or Okta environments, seed identities, register OIDC
-  clients, run PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider
-  directory APIs, run outbound SCIM provisioning, mint broken tokens, inject
-  deterministic scenarios, assert ordered request/response shapes, and clean up. Use
-  when wiring or testing an application's enterprise identity integration or
-  reproducing provider-shaped failures; do not claim unrecorded hosted qualification,
-  the complete Okta Classic Authn transaction machine, or broad provider parity.
+  Run the accepted M5 workflow and bounded M6 source-candidate mockOS
+  identity-integration tests through authenticated MCP: create isolated Entra ID or
+  Okta environments, seed identities, register OIDC clients, run
+  PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
+  outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
+  skew, test group overage, inject deterministic scenarios, assert ordered
+  request/response shapes, and clean up. Use when wiring or testing an application's
+  enterprise identity integration or reproducing provider-shaped failures; do not
+  claim unrecorded deployment qualification, the complete Okta Classic Authn
+  transaction machine, or broad provider parity.
 ---
 
 # Test with mockOS
@@ -18,6 +20,17 @@ Use synthetic identities, passwords, client secrets, and tokens only. Read
 running a repository checkout. Treat a returned URL, fixture, contract, or provider
 profile as metadata unless the status ledger names its runtime evidence.
 
+Keep evidence tiers explicit in every report:
+
+- `source` means exact-revision automated local or hosted-CI execution;
+- `deployed` additionally requires an exact mockOS deployment/version and recorded
+  acceptance; and
+- `verified-live` is reserved for sanitized, independently reviewed comparison with a
+  real Entra ID tenant or Okta organization.
+
+A connected server or workers.dev run is not verified-live evidence. No current M6
+slice has deployed or verified-live qualification.
+
 ## Inventory the application
 
 1. Record the application's issuer or authority, discovery behavior, callback URIs,
@@ -25,11 +38,13 @@ profile as metadata unless the status ledger names its runtime evidence.
    validation rules.
 2. Choose `entra` or `okta`. Define one happy-path result and the exact application
    behavior expected for each negative case.
-3. Separate implemented surfaces from gaps. SCIM, bounded Entra Graph reads, tested
-   Okta Users/Groups lifecycle APIs, refresh rotation, and deterministic outbound SCIM
-   provisioning are available in the locally qualified M5 source candidate. The M6
-   source candidate adds bounded Okta Classic `/api/v1/authn` primary states,
-   transaction retrieval, and cancellation. Broad Graph/Okta parity, the remaining
+3. Separate implemented surfaces from gaps. The accepted M3/M5 source contains SCIM,
+   bounded Entra Graph reads, tested Okta Users/Groups lifecycle APIs, refresh rotation,
+   and deterministic outbound SCIM provisioning. The M6 source candidate adds bounded
+   Okta Classic `/api/v1/authn` primary states; injection-locked SCIM conflict, delete
+   race, and narrow PATCH tolerances; signing-key rotation/JWKS overlap; claim-only
+   clock skew; five broken-token variants; and Entra group claims inline through 200
+   with same-environment Graph fallback at 201. Broad Graph/Okta parity, the remaining
    Classic transitions, Entra UserInfo/client credentials/device flow, and SAML remain
    unavailable; never invent routes for them.
 
@@ -44,7 +59,7 @@ Treat `GET /mcp` returning 405 as the expected POST-only Streamable HTTP fallbac
 the issued session ID on later requests and close the client when finished so it sends
 the authenticated session-termination DELETE.
 
-Call `tools/list` before creating anything. The M5 source candidate defines these 15
+Call `tools/list` before creating anything. The accepted M5 runtime defines these 15
 tools:
 
 `create_environment`, `list_environments`, `delete_environment`,
@@ -57,8 +72,8 @@ Require only the tools needed by the planned workflow and tolerate additional to
 from a newer compatible server. Report a capability mismatch before any mutation; in
 particular, do not attempt the lifecycle cascade unless `simulate_lifecycle` is
 advertised or provisioning unless `run_provisioning_cycle` is advertised.
-Capability discovery is evidence about the connected server, not proof that a local
-source candidate is deployed there.
+Capability discovery is evidence about the connected server, not proof that the
+checkout under test is the source deployed there.
 
 ## Create and wire an environment
 
@@ -119,18 +134,39 @@ credential.
 3. Send the valid synthetic password. Require `MFA_REQUIRED` to win when both MFA and
    expiry are configured, `PASSWORD_EXPIRED` only without required MFA, and
    `LOCKED_OUT` only for the suspended User. The bounded lockout case models Okta's
-   explicit show-lockout-failures policy.
+   explicit show-lockout-failures policy. For MFA require the singular
+   `_embedded.factor` key containing an array, not `_embedded.factors`. Embedded User
+   profiles must omit `passwordChanged`.
 4. Keep a returned `stateToken` in memory, post it to `oktaAuthnEndpoint` to retrieve
    the same current state, then post it to `<oktaAuthnEndpoint>/cancel`. Reusing it must
    return HTTP 401 `E0000011`. In a separate disposable state transaction, suspend the
    User and then unsuspend it; the pre-suspension token must still return `E0000011`
-   after reactivation. Never print or persist the token.
+   after reactivation. Each successful state retrieval renews expiry to five minutes
+   from that read; inactivity still expires the state. Never print or persist the token.
 5. A valid active User without required MFA returns `SUCCESS` and a five-minute
-   one-time `sessionToken`. The source has an atomic consume-once core seam, but no
-   Sessions API exchange route; do not invent one or claim an application cookie.
-6. Query the inbound request log for the exact Authn path. Password, `stateToken`, and
-   `sessionToken` fields must appear as `[REDACTED]`; do not quote raw protocol bodies in
-   the report.
+   one-time `sessionToken`. Unlike state retrieval, its expiry remains fixed from
+   issuance. The source has an atomic consume-once core seam, but no Sessions API
+   exchange route; do not invent one or claim an application cookie.
+6. Prove revocation in disposable transactions. Suspend/deprovision/delete a User, or
+   change its password through SCIM, then require both pending state and session
+   capabilities issued before the mutation to fail after reactivation. A lifecycle or
+   password change racing after credential verification must not issue a capability.
+7. For browser use, preflight only from the exact Authn origin. Require `POST`, only
+   `accept` and/or `content-type`, no `Access-Control-Allow-Credentials`, and `403`
+   without an allow-origin header for a different origin. Do not treat Authn as a
+   cross-origin credential endpoint.
+8. Query the inbound request log for the exact Authn path. Recursively nested
+   password/passcode/secret/token/credential-like fields and sensitive headers such as
+   Authorization, Proxy-Authorization, Cookie, and token-like headers must appear as
+   `[REDACTED]`; malformed or primitive Authn bodies must be wholly replaced. Require a
+   benign `passwordChanged` value to remain visible so over-redaction is detectable,
+   but do not quote raw protocol bodies in the report.
+
+The default source limits each Authn table to 10,000 retained rows and each User to 32
+retained rows per capability kind. Issuance evicts oldest-expiring rows, prunes no more than 256
+expired rows from each table per pass, and uses schema-v5-compatible operational
+indexes. Treat an evicted capability exactly like any other invalid state/session token;
+do not design a load test that assumes unlimited retention.
 
 Factor verification, password change, unlock/recovery execution, warnings, enrollment,
 and other Classic states are deliberately unavailable even when a response includes a
@@ -428,8 +464,10 @@ Report every case as passed, failed, or unavailable. Redact the management key,
 Authorization headers, cookies, client secrets, full tokens, and synthetic passwords.
 Request-log bodies can contain test credentials and tokens, so quote only the minimum
 safe evidence. Confirm that outbound target Bearer values remain redacted. Separate
-local M5 source-candidate results from hosted or deployed evidence in the report.
+source results from exact deployed evidence and verified-live provider evidence in the
+report.
 
 Use only the exact-revision records linked by the implementation ledger as deployed
 evidence. Do not present an older workers.dev smoke as M5 qualification or any source
-or deployed result as comparison against a live Entra ID tenant or Okta organization.
+or deployed result as verified-live comparison against an Entra ID tenant or Okta
+organization.

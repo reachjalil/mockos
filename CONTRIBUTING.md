@@ -13,6 +13,9 @@ Thank you for helping make identity integration tests faster and more reproducib
   evidence unless an automated engine test passes it.
 - Prefer official Microsoft, Okta, OpenID, OAuth, and SCIM sources. Record source URL,
   review date, and an honest `documented`, `implemented`, or `verified-live` status.
+  Reserve `verified-live` for sanitized evidence collected from a real provider tenant
+  or organization and independently reviewed; a local test, hosted-CI run, or deployed
+  mockOS Worker is never `verified-live` evidence.
 - Never commit real tenants, credentials, identities, access tokens, client secrets,
   Cloudflare secrets, or unsanitized traffic captures.
 - Preserve determinism by using injected clock and RNG seams.
@@ -28,8 +31,17 @@ pnpm check
 ```
 
 Add focused tests for behavior changes. For provider fidelity changes, add or update a
-fixture and link the official source. A live-capture status requires a sanitized capture
-process and reviewer confirmation; it must never contain personal data.
+fixture and link the official source. Keep the evidence tiers explicit:
+
+- **Source evidence** is tied to an exact source revision and automated local or
+  hosted-CI execution.
+- **Deployed evidence** additionally ties that source revision to an exact mockOS
+  deployment/version and a recorded smoke or acceptance run.
+- **Verified-live evidence** requires a sanitized comparison with a real Entra ID
+  tenant or Okta organization plus reviewer confirmation. It must never contain
+  personal data or credentials.
+
+Advancing one tier does not imply either later tier.
 
 Run formatting before submitting:
 
@@ -49,4 +61,3 @@ and known gaps. Keep unrelated refactors separate. New dependencies need a reaso
 must pass dependency review.
 
 By contributing, you agree that your contribution is licensed under Apache-2.0.
-

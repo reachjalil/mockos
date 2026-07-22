@@ -71,11 +71,35 @@ precedence over password expiry, matching the documented Classic Engine order.
 
 Raw passwords, state tokens, and session tokens are never persisted. The two bearer
 capabilities are stored only as SHA-256 hashes. `POST /api/v1/authn` can read the exact
-current transaction by `stateToken`, and `POST /api/v1/authn/cancel` deletes it;
-cancel replay and tokens at their exact expiry return HTTP 401 `E0000011`. Session
-tokens have a tested atomic consume-once core seam, although a Sessions API exchange
-route is not part of this bounded slice. Authn request/response log bodies redact all
-password and token fields.
+current transaction by `stateToken`; every valid read slides that transaction's expiry
+to five minutes from the read. `POST /api/v1/authn/cancel` deletes it, while cancel
+replay and tokens at their exact expiry return HTTP 401 `E0000011`. A successful
+primary authentication instead issues a session capability with a fixed five-minute
+expiry from issuance. Session tokens have a tested atomic consume-once core seam,
+although a Sessions API exchange route is not part of this bounded slice.
+
+Retention is bounded independently for state and session capabilities. Each User can
+retain at most 32 retained rows of each kind, and each table can retain at most 10,000 retained
+rows. Issuance evicts the oldest-expiring rows first when either cap would be exceeded
+and prunes at most 256 expired rows from each table per issuance. Version-neutral
+operational indexes make those expiry and eviction queries index-backed without
+advancing schema v5, preserving rollback compatibility for already-provisioned
+environments.
+
+Browser CORS is same-origin only. A preflight must request `POST` and may request only
+`accept` and `content-type`; responses never opt into credentialed CORS, and
+cross-origin or unsupported preflights fail with HTTP 403. `MFA_REQUIRED` uses the
+singular `_embedded.factor` property (containing the factor array), and embedded User
+responses deliberately omit `passwordChanged`. Deactivating lifecycle transitions and
+SCIM password changes atomically revoke outstanding state and session capabilities;
+reactivation does not restore them.
+
+Authn request and response logs recursively redact sensitive JSON keys. Malformed,
+primitive, or otherwise non-object bodies are replaced wholesale rather than retained.
+Sensitive request/response headers—including authorization, proxy authorization,
+cookies, API-key, credential, password, private-key, secret, and token header
+families—are redacted while non-secret fields such as `passwordChanged` remain
+available for assertions.
 
 ## Directory surface
 
@@ -133,8 +157,9 @@ or broad SDK compatibility claim.
   Sessions API exchange, password warnings, enrollment, and the rest of the Classic
   transaction machine are not implemented. Provider-shaped links identify the next
   operation but do not claim those linked transitions are mounted.
-  Deactivating lifecycle transitions atomically remove outstanding Classic state and
-  one-time session capabilities; later reactivation does not restore them.
+  Deactivating lifecycle transitions and SCIM password changes atomically remove
+  outstanding Classic state and one-time session capabilities; later reactivation
+  does not restore them.
 - `/api/v1` uses Okta API-shaped errors and request IDs for the tested cases, including
   deterministic rate limiting; exact catalog parity is not claimed.
 - Exact error descriptions, cookies, hosted-login HTML, uncommon parameters, key

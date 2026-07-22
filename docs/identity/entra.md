@@ -1,6 +1,6 @@
 # Entra ID behavior
 
-Status: Accepted bounded M3 Entra implementation with hosted-CI and deployed samples; live-provider parity is not claimed
+Status: Accepted bounded M3 Entra implementation and tested M5 outbound slice; M6 remains source-only
 Last reviewed: 2026-07-22
 
 mockOS models a tenant-specific Microsoft identity platform authority. In path hosting,
@@ -95,10 +95,13 @@ the implemented boundary.
 
 The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) verifies a bounded
 hosted authorization-code/JWKS, refresh/lifecycle, SCIM, and Graph sample. It does not
-run the entire fixture corpus or compare with a live Entra tenant. M5 adds an outbound
-Entra provisioning source candidate whose Worker/full local gates and two-process
-Entra-shaped target flow are green; immutable-revision, hosted, deployed, and
-live-provider gates remain pending.
+run the entire fixture corpus or compare with a live Entra tenant. M5 adds deterministic
+outbound Entra-shaped SCIM planning and delivery. Exact public revision
+`ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` passed its full local gate, hosted CI,
+and source-paired manual staging/production controlled-target acceptance. Each hosted
+run completed its Entra-shaped four-request flow and cleanup. That is deployed mock
+acceptance for the tested M5 slice; it does not qualify guarded promotion workflows,
+the broader planner against a real Entra tenant, or verified-live provider parity.
 
 ## SDK note
 

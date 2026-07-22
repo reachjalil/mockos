@@ -7,9 +7,11 @@ mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
 MCP TypeScript client. Automated integration tests cover `initialize`, `tools/list`,
 authenticated `tools/call`, session-local environment selection, lifecycle cascades,
-outbound provisioning startup, and cleanup. The 15-tool M5 registry is a source-
-candidate claim until the exact-revision CI and deployment records accept it. Its
-Worker suite, full repository gate, and two-process target-app e2e are green locally.
+outbound provisioning startup, and cleanup. The 15-tool M5 registry is accepted for
+the exact tested slice: public revision
+`ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` passed the full local gate, hosted CI,
+and source-paired manual controlled-target acceptance. That remote acceptance started
+the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
 
 ## Authentication fails closed
 
@@ -98,13 +100,28 @@ These are deliberately separate trust boundaries:
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
 authorization. Never reuse or forward the MCP Access Key as a directory credential.
-The SCIM source candidate provides ServiceProviderConfig, ResourceTypes, Schemas, and
-versioned Users/Groups CRUD, filter, pagination, ETag, and PATCH behavior. Graph is a
-bounded read surface for Users, Groups, and direct memberships. The Okta management
-API covers the tested Users/Groups CRUD, direct membership, and lifecycle routes. The
-separate M6 Classic Authn source candidate covers primary `SUCCESS`, `MFA_REQUIRED`,
-`PASSWORD_EXPIRED`, and explicit `LOCKED_OUT` responses plus state
-retrieval/cancellation; it is not the complete Classic transaction API.
+The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
+ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
+PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct
+memberships. The Okta management API covers the tested Users/Groups CRUD, direct
+membership, and lifecycle routes. The separate M6 Classic Authn source candidate
+covers primary `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, and explicit
+`LOCKED_OUT` responses plus state retrieval/cancellation; it is not the complete
+Classic transaction API.
+
+Classic Authn state reads slide the state capability's expiry to five minutes from
+each valid read; a one-time session capability retains its fixed five-minute issuance
+expiry. Each User is capped at 32 retained rows per kind and each state/session table
+at 10,000 retained rows, with oldest-expiring eviction and an issuance-time GC pass bounded
+to 256 expired rows per table. Version-neutral operational indexes preserve schema-v5
+rollback compatibility. Browser CORS admits same-origin `POST` with only `accept` and
+`content-type`, never enables credentials, and returns 403 cross-origin. Responses use
+the singular `_embedded.factor` property and omit `passwordChanged`. Deactivating
+lifecycle transitions and SCIM password changes revoke both capability kinds. Log
+capture recursively redacts secret body keys, replaces malformed/non-object Authn
+bodies wholesale, and redacts sensitive authorization, cookie, credential, key,
+password, secret, and token header families. All of these are M6 source results, not
+deployed or verified-live evidence.
 
 ## Lifecycle and refresh-token families
 
@@ -116,9 +133,10 @@ deprovisioned User. Invalid transitions fail closed.
 Disabling, suspending, deprovisioning, or deleting a User revokes effective access and
 refresh tokens in the same transaction as the state change. The M6 source candidate
 also removes outstanding Classic Authn state and one-time session capabilities in that
-transaction. Refresh grants authenticate the client, reject scope escalation, rotate
-the token within its family, preserve the original authentication time and absolute
-family expiry, and detect replay. Replaying
+transaction, and a SCIM password change revokes both Authn capability kinds. Refresh
+grants authenticate the client, reject scope escalation, rotate the token within its
+family, preserve the original authentication time and absolute family expiry, and
+detect replay. Replaying
 or concurrently redeeming an already consumed token invalidates its refresh family and
 associated access tokens. A known token belonging to a newly disabled User returns the
 provider-shaped disabled-account error: Entra `invalid_grant` with `AADSTS50057`, or
@@ -261,3 +279,9 @@ public-HTTPS target, ordered outbound assertion, terminal Workflow state,
 credential-safe evidence, and cleanup. Always verify the connected endpoint's tool
 registry; none of these tests constitute comparison with a live Entra tenant or Okta
 organization.
+
+Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
+additionally binds that revision to an exact mockOS deployment/version and recorded
+acceptance run. Verified-live is reserved for sanitized, independently reviewed
+comparison with a real provider; neither workers.dev smoke nor hosted mockOS acceptance
+can satisfy that tier.

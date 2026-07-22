@@ -1,20 +1,28 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: M0-M3 accepted; M5 source-paired manual deployment and hosted acceptance recorded
+Status: M0-M3 accepted; tested M5 slice manually accepted; M6 remains source-only
 Last reviewed: 2026-07-22
 
 mockOS is an open-core, deterministic identity-platform test double for Entra ID and
 Okta integrations. The public repository is intended to contain the provider engine,
 self-hostable Cloudflare Worker, conformance fixtures, MCP tools, and test skill.
 
-The documentation distinguishes four evidence levels:
+The documentation distinguishes implementation state from three independent evidence
+tiers:
 
-- **Implemented** means linked code and automated tests exist.
-- **Source candidate** means source evidence exists, but a working tree may not yet
-  have an immutable revision and its local, hosted-CI, or deployment gates may still
-  be open.
-- **Documented target** means a sourced fixture or design exists but the runtime may not.
-- **Live verified** means a sanitized capture or deployed smoke test exists.
+- **Documented target** means a sourced fixture or design exists but the runtime may
+  not.
+- **Implemented / source candidate** means linked code and automated tests exist, but
+  the source may not yet have an immutable accepted revision and its local or hosted-CI
+  gates may still be open.
+- **Source evidence** means exact-revision local or hosted-CI execution.
+- **Deployed acceptance** additionally binds that exact revision to an exact mockOS
+  deployment/version and a recorded acceptance run.
+- **Verified-live** is reserved for sanitized, independently reviewed comparison with
+  a real Entra ID tenant or Okta organization.
+
+A workers.dev or hosted mockOS run can supply deployed mock evidence; it is never
+verified-live provider evidence. No current fixture or milestone is verified-live.
 
 M0-M3 have accepted evidence. M3 adds path-mode inbound SCIM for Entra and Okta
 environments, bounded Microsoft Graph reads, bounded Okta Users/Groups and lifecycle
@@ -36,7 +44,8 @@ fresh two-process `wrangler dev` provisioning e2e are green; see the
 revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` also passed hosted CI, manual
 staging-before-production rollout, and source-paired hosted Workflow acceptance; see
 the [M5 deployment record](./evidence/m5-workers-dev-smoke.md). The guarded GitHub
-promotion workflows were not executed or formally qualified.
+promotion workflows were not executed or formally qualified. This is deployed mock
+acceptance for the tested source pair, not verified-live Entra ID or Okta evidence.
 
 The public source remains independently self-hostable. The later public docs-only close
 commit `e446eeda357b5e765401b97b892128fd70ac9ab8` was consumed by the separately

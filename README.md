@@ -13,9 +13,11 @@
 > accepted for exact public runtime revision
 > `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`: local/full gates, hosted CI, manual
 > staging-before-production rollout, and source-paired controlled-target Workflow
-> acceptance are green. The guarded GitHub promotion workflows remain unqualified.
-> This is not yet a stable npm
-> release, a live-provider parity claim, or a production-SLA service. See the
+> acceptance are green. M6 remains a source candidate only: its bounded Classic Authn,
+> SCIM edge, signing-key rotation, token-skew/broken-token, and 200/201 group-overage
+> slices have no M6 deployed or verified-live evidence. The guarded GitHub promotion
+> workflows remain unqualified. This is not yet a stable npm release, a live-provider
+> parity claim, or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -49,6 +51,26 @@ private control plane, licensing, billing, or a hosted mockOS account.
   documented and eight implemented M6 cases that execute through the local Worker);
   22 documented Okta OIDC fixtures; and a locally and hosted-CI green 113-case
   RFC/Entra/Okta SCIM corpus
+- A bounded M6 source candidate for deterministic signing-key rotation/JWKS overlap,
+  plus/minus token-claim clock skew, five explicit broken-token variants, and Entra
+  group claims inline through 200 with a trusted same-environment Graph fallback at
+  201 and a 1,000-ID response ceiling
+- A bounded M6 source candidate for injection-locked SCIM `409` conflict and
+  soft-delete race behavior plus two case-specific malformed-PATCH tolerances; strict
+  parsing remains the default and unrelated defects are not repaired
+- A bounded M6 Okta Classic Authn source candidate for `SUCCESS`, `MFA_REQUIRED`,
+  `PASSWORD_EXPIRED`, and explicit `LOCKED_OUT`, with state retrieval/cancellation and
+  one-time session capabilities. State retrieval slides the five-minute state expiry;
+  session expiry stays fixed at five minutes. Each table is capped at 10,000 retained
+  rows, each User at 32 rows per capability kind, oldest-expiring rows are evicted, and each
+  issuance prunes at most 256 expired rows per table through schema-v5-compatible
+  operational indexes
+- Same-origin Classic Authn CORS that allows only `POST` with `accept` and/or
+  `content-type`, never enables credentialed CORS, and rejects cross-origin requests
+  with `403`; provider-shaped responses use the singular `_embedded.factor` array and
+  omit `passwordChanged`. Lifecycle and SCIM password changes revoke pending state and
+  session capabilities, while Authn body fields and sensitive headers are recursively
+  redacted from request logs
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
@@ -74,14 +96,28 @@ key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
-Worker fixture runner. No OIDC fixture is `verified-live`. The 113 SCIM fixtures
-separately record source-implemented behavior.
+Worker fixture runner. No OIDC fixture is `verified-live`. The 113 accepted SCIM
+fixtures and the separate M6 SCIM-edge corpus record source-implemented behavior; none
+is `verified-live`.
 The accepted M3 and M5 records remain distinct. M5 passed its
 [local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md)
 and [exact-pair manual deployment/hosted acceptance](./docs/evidence/m5-workers-dev-smoke.md).
 That evidence does not qualify guarded promotion, standalone public Access-Key smoke,
-npm publication, or live-provider parity. The M6 token/key/overage evidence remains
-local source evidence only.
+npm publication, or live-provider parity. All M6 evidence remains source-candidate
+evidence only.
+
+## Evidence tiers
+
+- **Source** means an exact revision has linked automated local and/or hosted-CI
+  evidence. Hosted CI is still source evidence.
+- **Deployed** means an exact source revision and exact mockOS deployment/version have
+  a recorded smoke or acceptance run.
+- **Verified-live** is reserved for sanitized, independently reviewed comparison with
+  a real Entra ID tenant or Okta organization. No current fixture or milestone has
+  `verified-live` status.
+
+Source, deployed, and verified-live are independent claims; evidence at one tier never
+silently promotes another.
 
 ## Local verification
 

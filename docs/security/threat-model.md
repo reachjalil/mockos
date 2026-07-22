@@ -52,11 +52,24 @@ outbound provisioning targets.
   built-in Worker/MCP issuance with a fixed one-hour lifetime and bounded skew. Trusted
   public-core test seams can create longer or overridden temporal claims and are outside
   that guarantee.
-- Classic Authn verifies the password before returning account state, stores only
-  hashes of five-minute state/session capabilities, consumes session capabilities
-  once, rejects expired/cancelled replay, and redacts Authn passwords and tokens from
-  request logs. Deactivating lifecycle transitions remove outstanding Authn
-  capabilities atomically so reactivation cannot restore them.
+- Classic Authn verifies the password before returning account state and stores only
+  hashes of bearer capabilities. Valid state reads slide expiry to five minutes from
+  the read; one-time session capabilities retain a fixed five-minute issuance expiry.
+  Each User is capped at 32 retained rows per capability kind and each table at 10,000,
+  with oldest-expiring eviction. Each issuance prunes no more than 256 expired rows per
+  table through version-neutral operational indexes that preserve schema-v5 rollback
+  compatibility. Expired, cancelled, consumed, or evicted capabilities fail closed.
+- Authn browser CORS permits same-origin `POST` with only `accept` and `content-type`,
+  does not enable credentialed CORS, and rejects cross-origin requests with HTTP 403.
+  Responses use singular `_embedded.factor` and omit `passwordChanged`, limiting
+  provider-shaped data disclosure. Deactivating lifecycle transitions and SCIM
+  password changes remove outstanding Authn capabilities atomically so reactivation
+  cannot restore them.
+- Authn log capture recursively redacts password, passcode, secret, token, credential,
+  code, API-key, private-key, and authorization body keys; malformed or non-object
+  bodies are replaced wholesale. Sensitive authorization, proxy-authorization,
+  cookie/set-cookie, API-key, credential, password, private-key, secret, and token
+  header families are redacted on requests and responses.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
@@ -87,6 +100,11 @@ scenario, logging, assertion, and cleanup sample in staging and production. It i
 focused acceptance evidence, not a penetration test, full fixture run, live-provider
 comparison, or evidence for M5 outbound provisioning. M5 has a separate
 [deployment record](../evidence/m5-workers-dev-smoke.md).
+
+Those records establish deployed mock acceptance only when an exact revision is bound
+to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
+separate tier reserved for sanitized, independently reviewed comparison with a real
+Entra ID tenant or Okta organization; no current fixture or milestone has it.
 
 ## Residual and future work
 

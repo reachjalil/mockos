@@ -1,7 +1,13 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus source-only M6 Authn/token/key/Graph limits; deliberately candid
+Status: Accepted M3/M5 boundaries plus all source-only M6 slice limits; deliberately candid
 Last reviewed: 2026-07-22
+
+Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
+evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
+evidence; only sanitized, reviewed comparison with a real provider can be
+verified-live. Nothing in M6 is deployed or verified-live, and no current fixture has
+verified-live status.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -19,6 +25,12 @@ Last reviewed: 2026-07-22
   locally and in hosted CI, with focused Worker integration tested separately. The
   deployed smoke samples discovery and Group PATCH for both profiles; it does not run
   the full corpus remotely or compare with a live provider.
+- The separate M6 SCIM edge source candidate is deliberately injection-locked. It can
+  produce an atomic `409` conflict, a soft-delete race, or exactly one of two narrow
+  malformed-PATCH repairs (`missing_schemas` or `singleton_operations`). Strict parsing
+  is the default. A selected repair does not tolerate the other case, combined defects,
+  unknown fields, invalid paths, missing values, or type coercions. No M6 SCIM edge has
+  deployed or verified-live evidence.
 - SCIM, Graph, and Okta directory authentication is intentionally presence-and-scheme
   validation for synthetic protocol tests. A non-empty mock Bearer or SSWS value is not
   a real access-control decision; never expose these surfaces as production identity
@@ -29,8 +41,28 @@ Last reviewed: 2026-07-22
   Okta Group-member listing is currently unpaginated and can return up to the directory
   membership cap. Neither surface claims broad provider API parity. The M6 source
   candidate adds bounded Okta Classic `/api/v1/authn` primary states, transaction
-  retrieval, and cancellation, but not factor verification, password change,
-  recovery/unlock execution, or Sessions API exchange.
+  retrieval, and cancellation, but not factor verification, password-change
+  execution, recovery/unlock execution, or Sessions API exchange.
+- Classic Authn state retrieval renews its five-minute expiry from each successful
+  read; this is sliding state, not an unlimited transaction, because idle state still
+  expires. The one-time session capability keeps its original fixed five-minute
+  expiry. Both are stored only as hashes. Lifecycle changes and SCIM password changes
+  revoke both kinds, and a stale post-verification User snapshot cannot issue one.
+- Classic Authn retention is bounded independently per table: 10,000 retained state
+  rows and 10,000 retained session rows per environment, plus 32 retained rows per
+  User per kind.
+  Issuance evicts the oldest-expiring rows deterministically and deletes at most 256
+  expired rows from each table per pass. The supporting expiry indexes are
+  version-neutral operational indexes so schema remains v5 for rollback compatibility.
+- Classic Authn browser access is same-origin only. Preflight permits only `POST` and
+  the `accept`/`content-type` request headers, never emits
+  `Access-Control-Allow-Credentials`, and returns `403` for cross-origin requests.
+  Provider-shaped MFA uses the singular `_embedded.factor` key containing an array,
+  and embedded Users omit `passwordChanged`. Authn request/response bodies are
+  recursively redacted by secret-like field name; malformed or primitive bodies are
+  wholly replaced, and sensitive headers including authorization, proxy authorization,
+  cookies, and token/secret-like headers are redacted. This is bounded source evidence,
+  not a general log-security audit.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
   Authn state/session capabilities. There are no production sessions, external
@@ -50,7 +82,19 @@ Last reviewed: 2026-07-22
   for built-in Worker OIDC and MCP token issuance is exactly 26 hours; a second rotation
   is blocked during it. Public core `expiresInSeconds` and `additionalClaims` are trusted
   test seams, so longer custom lifetimes or temporal overrides are outside that
-  guarantee. Hosted and deployed M6 security qualification remain pending.
+  guarantee. Deployed and verified-live M6 security qualification remain pending.
+- The M6 broken-token source slice intentionally supports only `expired`, exact wrong
+  audience, `not_yet_valid`, `bad_signature`, and exact wrong issuer. These are
+  deterministic `mint_token` mutations, not evidence that a provider HTTP grant emits
+  an equivalent token. Claim-only clock skew is bounded to plus/minus 86,400 seconds
+  and does not move the environment clock or persisted grant timestamps. Both slices
+  lack deployed and verified-live evidence.
+- Entra group claims are inline through exactly 200 IDs. At 201 the source candidate
+  emits claim-source metadata for a trusted same-environment Graph
+  `getMemberObjects` endpoint; it never follows a caller-supplied URL. The fallback
+  returns at most 1,000 IDs and rejects a 1,001-ID result with the bounded directory
+  size error. This is not broad Graph parity and has no deployed or verified-live M6
+  evidence.
 - The accepted M3 implementation supports bounded deterministic delay, semantic error,
   and JSON-object mutation actions at known injection points, including
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
