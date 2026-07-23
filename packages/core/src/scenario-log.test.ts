@@ -123,8 +123,8 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(5);
-    expect(getSchemaVersion(store)).toBe(5);
+    expect(applyMigrations(store)).toBe(6);
+    expect(getSchemaVersion(store)).toBe(6);
     const service = new ScenarioService({
       store,
       seed: "upgrade",
@@ -424,6 +424,85 @@ const logEntry = (input: {
 });
 
 describe("request log service", () => {
+  it("stores, filters, and exactly asserts canonical mock-MCP metadata", async () => {
+    const store = memoryStore();
+    const engine = Engine.create(
+      { provider: "okta", seed: "mcp-request-log", requestLogLimit: 10 },
+      { store, clock: new FixedClock("2026-07-22T12:00:00.000Z") }
+    );
+    await engine.initialize();
+    engine.requestLog.append({
+      id: "mcp-call-1",
+      timestamp: "2026-07-22T12:00:00.000Z",
+      source: "inbound",
+      provider: "mcp",
+      protocol: "mcp",
+      method: "POST",
+      path: "/mcp-mock/support",
+      requestHeaders: {
+        authorization: "[REDACTED]",
+        "content-type": "application/json",
+      },
+      requestBody:
+        '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"lookup_ticket"}}',
+      responseStatus: 200,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"jsonrpc":"2.0","result":{"isError":true},"id":1}',
+      durationMs: 3,
+      correlationId: "correlation-mcp-1",
+      mcpMethod: "tools/call",
+      mcpTool: "lookup_ticket",
+      mcpArguments: { priority: "high", id: 42 },
+      mcpToolIsError: true,
+    });
+
+    expect(
+      engine.getRequestLog({
+        provider: "mcp",
+        protocol: "mcp",
+        mcpMethod: "tools/call",
+        mcpTool: "lookup_ticket",
+        limit: 10,
+      }).entries
+    ).toMatchObject([
+      {
+        id: "mcp-call-1",
+        provider: "mcp",
+        protocol: "mcp",
+        mcpMethod: "tools/call",
+        mcpTool: "lookup_ticket",
+        mcpArguments: { id: 42, priority: "high" },
+        mcpToolIsError: true,
+      },
+    ]);
+    expect(
+      store.get<{ mcp_arguments_json: string }>(
+        "SELECT mcp_arguments_json FROM request_log WHERE id = ?",
+        "mcp-call-1"
+      )?.mcp_arguments_json
+    ).toBe('{"id":42,"priority":"high"}');
+    expect(
+      engine.assertRequests({
+        mcpMethod: "tools/call",
+        mcpTool: "lookup_ticket",
+        mcpArguments: { id: 42, priority: "high" },
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({
+      pass: true,
+      matched: 1,
+      requestIds: ["mcp-call-1"],
+    });
+    expect(
+      engine.assertRequests({
+        mcpMethod: "tools/call",
+        mcpTool: "lookup_ticket",
+        mcpArguments: { id: 43, priority: "high" },
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({ pass: false, matched: 0 });
+  });
+
   it("trims transactionally and paginates newest-first with bound opaque cursors", async () => {
     const store = memoryStore();
     const engine = Engine.create(

@@ -273,12 +273,55 @@ const migrationV5 = [
   ) WITHOUT ROWID`,
 ] as const;
 
+const migrationV6 = [
+  `CREATE TABLE IF NOT EXISTS mock_mcp_servers (
+    slug TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    spec_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS mock_mcp_servers_updated_idx
+    ON mock_mcp_servers(updated_at DESC, slug)`,
+  `CREATE TABLE IF NOT EXISTS mock_state (
+    server_slug TEXT NOT NULL
+      REFERENCES mock_mcp_servers(slug) ON DELETE CASCADE,
+    server_revision INTEGER NOT NULL CHECK (server_revision >= 1),
+    state_key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (server_slug, server_revision, state_key)
+  ) WITHOUT ROWID`,
+  `CREATE TABLE IF NOT EXISTS mock_mcp_sessions (
+    session_hash TEXT PRIMARY KEY,
+    server_slug TEXT NOT NULL
+      REFERENCES mock_mcp_servers(slug) ON DELETE CASCADE,
+    server_revision INTEGER NOT NULL CHECK (server_revision >= 1),
+    protocol_version TEXT NOT NULL,
+    initialized INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    terminated_at TEXT
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS mock_mcp_sessions_server_idx
+    ON mock_mcp_sessions(server_slug, server_revision, expires_at)`,
+  `CREATE INDEX IF NOT EXISTS mock_mcp_sessions_expiry_idx
+    ON mock_mcp_sessions(expires_at)`,
+  `ALTER TABLE request_log ADD COLUMN protocol TEXT`,
+  `ALTER TABLE request_log ADD COLUMN mcp_method TEXT`,
+  `ALTER TABLE request_log ADD COLUMN mcp_tool TEXT`,
+  `ALTER TABLE request_log ADD COLUMN mcp_arguments_json TEXT`,
+  `ALTER TABLE request_log ADD COLUMN mcp_error_code INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN mcp_tool_is_error INTEGER`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
   { version: 2, statements: migrationV2 },
   { version: 3, statements: migrationV3 },
   { version: 4, statements: migrationV4 },
   { version: 5, statements: migrationV5 },
+  { version: 6, statements: migrationV6 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };

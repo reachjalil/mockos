@@ -8,6 +8,116 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+export const BEHAVIOR_SPEC_MAX_BYTES = 512 * 1024;
+export const BEHAVIOR_SPEC_MAX_DEPTH = 32;
+export const BEHAVIOR_SPEC_MAX_NODES = 20_000;
+const PROHIBITED_JSON_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+export type BehaviorSpecBounds = {
+  readonly maximumBytes?: number;
+  readonly maximumDepth?: number;
+  readonly maximumNodes?: number;
+};
+
+export class BehaviorSpecBoundsError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "BehaviorSpecBoundsError";
+  }
+}
+
+/**
+ * Bounds an untrusted JSON-like tree before Zod's recursive behavior schema sees it.
+ * The iterative walk prevents attacker-controlled nesting from overflowing the stack.
+ */
+export const assertBehaviorSpecBounds = (
+  input: unknown,
+  bounds: BehaviorSpecBounds = {}
+): void => {
+  const maximumBytes = bounds.maximumBytes ?? BEHAVIOR_SPEC_MAX_BYTES;
+  const maximumDepth = bounds.maximumDepth ?? BEHAVIOR_SPEC_MAX_DEPTH;
+  const maximumNodes = bounds.maximumNodes ?? BEHAVIOR_SPEC_MAX_NODES;
+  const pending: Array<{
+    readonly value: unknown;
+    readonly depth: number;
+    readonly exiting: boolean;
+  }> = [{ value: input, depth: 0, exiting: false }];
+  const activeAncestors = new WeakSet<object>();
+  let nodes = 0;
+
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (!entry) continue;
+    if (entry.exiting) {
+      if (entry.value && typeof entry.value === "object") {
+        activeAncestors.delete(entry.value);
+      }
+      continue;
+    }
+    nodes += 1;
+    if (nodes > maximumNodes) {
+      throw new BehaviorSpecBoundsError(
+        `Behavior document exceeds the ${maximumNodes} node limit.`
+      );
+    }
+    if (entry.depth > maximumDepth) {
+      throw new BehaviorSpecBoundsError(
+        `Behavior document exceeds the ${maximumDepth} level depth limit.`
+      );
+    }
+    if (!entry.value || typeof entry.value !== "object") continue;
+    if (activeAncestors.has(entry.value)) {
+      throw new BehaviorSpecBoundsError(
+        "Behavior document must be an acyclic JSON tree."
+      );
+    }
+    activeAncestors.add(entry.value);
+    pending.push({
+      value: entry.value,
+      depth: entry.depth,
+      exiting: true,
+    });
+    let children: unknown[];
+    if (Array.isArray(entry.value)) {
+      children = entry.value;
+    } else {
+      const fields = Object.entries(entry.value as Record<string, unknown>);
+      const unsafe = fields.find(([key]) => PROHIBITED_JSON_KEYS.has(key));
+      if (unsafe) {
+        throw new BehaviorSpecBoundsError(
+          `JSON key ${unsafe[0]} is not permitted at a trust boundary.`
+        );
+      }
+      children = fields.map(([, value]) => value);
+    }
+    for (const child of children) {
+      pending.push({
+        value: child,
+        depth: entry.depth + 1,
+        exiting: false,
+      });
+    }
+  }
+
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(input);
+  } catch (cause) {
+    throw new BehaviorSpecBoundsError("Behavior document must be valid JSON.", {
+      cause,
+    });
+  }
+  if (serialized === undefined) {
+    throw new BehaviorSpecBoundsError("Behavior document must be valid JSON.");
+  }
+  const bytes = new TextEncoder().encode(serialized).byteLength;
+  if (bytes > maximumBytes) {
+    throw new BehaviorSpecBoundsError(
+      `Behavior document exceeds the ${maximumBytes} byte limit.`
+    );
+  }
+};
+
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.null(),
@@ -202,3 +312,12 @@ export const behaviorSpecSchema: z.ZodType<BehaviorSpec> = z.lazy(() =>
       }
     })
 );
+
+/** The required entry point for parsing behavior documents at trust boundaries. */
+export const parseBehaviorSpec = (
+  input: unknown,
+  bounds?: BehaviorSpecBounds
+): BehaviorSpec => {
+  assertBehaviorSpecBounds(input, bounds);
+  return behaviorSpecSchema.parse(input);
+};

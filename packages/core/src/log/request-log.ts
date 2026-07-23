@@ -32,16 +32,32 @@ type RequestLogRow = SqlRow & {
   response_body: string | null;
   duration_ms: number;
   correlation_id: string;
+  protocol: string | null;
+  mcp_method: string | null;
+  mcp_tool: string | null;
+  mcp_arguments_json: string | null;
+  mcp_error_code: number | null;
+  mcp_tool_is_error: number | null;
 };
 
 type AssertionMatch = Pick<
   AssertionSpec,
-  "source" | "method" | "path" | "status" | "bodyIncludes" | "responseBodyIncludes"
+  | "source"
+  | "method"
+  | "path"
+  | "status"
+  | "bodyIncludes"
+  | "responseBodyIncludes"
+  | "mcpMethod"
+  | "mcpTool"
+  | "mcpArguments"
 >;
 
 const selectRequestLog = `SELECT sequence, id, timestamp, source, provider,
   method, path, request_headers, request_body, response_status,
-  response_headers, response_body, duration_ms, correlation_id FROM request_log`;
+  response_headers, response_body, duration_ms, correlation_id, protocol,
+  mcp_method, mcp_tool, mcp_arguments_json, mcp_error_code,
+  mcp_tool_is_error FROM request_log`;
 
 /** Capture adapters should truncate or reject each serialized header map above this. */
 export const MAX_REQUEST_LOG_HEADER_BYTES = 64 * 1_024;
@@ -59,6 +75,10 @@ const storedEntryBytesSql = `(length(CAST(id AS BLOB))
   + COALESCE(length(CAST(request_body AS BLOB)), 0)
   + length(CAST(response_headers AS BLOB))
   + COALESCE(length(CAST(response_body AS BLOB)), 0)
+  + COALESCE(length(CAST(protocol AS BLOB)), 0)
+  + COALESCE(length(CAST(mcp_method AS BLOB)), 0)
+  + COALESCE(length(CAST(mcp_tool AS BLOB)), 0)
+  + COALESCE(length(CAST(mcp_arguments_json AS BLOB)), 0)
   + length(CAST(correlation_id AS BLOB)) + 512)`;
 
 export class RequestLogEntryTooLargeError extends Error {
@@ -133,6 +153,18 @@ const toEntry = (row: RequestLogRow): RequestLogEntry =>
     responseBody: row.response_body,
     durationMs: Number(row.duration_ms),
     correlationId: row.correlation_id,
+    ...(row.protocol === null ? {} : { protocol: row.protocol }),
+    ...(row.mcp_method === null ? {} : { mcpMethod: row.mcp_method }),
+    ...(row.mcp_tool === null ? {} : { mcpTool: row.mcp_tool }),
+    ...(row.mcp_arguments_json === null
+      ? {}
+      : { mcpArguments: JSON.parse(row.mcp_arguments_json) }),
+    ...(row.mcp_error_code === null
+      ? {}
+      : { mcpErrorCode: Number(row.mcp_error_code) }),
+    ...(row.mcp_tool_is_error === null
+      ? {}
+      : { mcpToolIsError: Number(row.mcp_tool_is_error) === 1 }),
   });
 
 const hashText = (value: string, seed: number): string => {
@@ -250,6 +282,18 @@ const assertionWhere = (
     where.push("response_body IS NOT NULL AND instr(response_body, ?) > 0");
     bindings.push(match.responseBodyIncludes);
   }
+  if (match.mcpMethod !== undefined) {
+    where.push("mcp_method = ?");
+    bindings.push(match.mcpMethod);
+  }
+  if (match.mcpTool !== undefined) {
+    where.push("mcp_tool = ?");
+    bindings.push(match.mcpTool);
+  }
+  if (match.mcpArguments !== undefined) {
+    where.push("mcp_arguments_json = ?");
+    bindings.push(canonicalJson(match.mcpArguments));
+  }
 };
 
 /**
@@ -316,8 +360,9 @@ export class RequestLogService {
         `INSERT INTO request_log (
           id, timestamp, source, provider, method, path, request_headers,
           request_body, response_status, response_headers, response_body,
-          duration_ms, correlation_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          duration_ms, correlation_id, protocol, mcp_method, mcp_tool,
+          mcp_arguments_json, mcp_error_code, mcp_tool_is_error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         normalized.id,
         normalized.timestamp,
         normalized.source,
@@ -330,7 +375,19 @@ export class RequestLogService {
         responseHeaders,
         normalized.responseBody,
         normalized.durationMs,
-        normalized.correlationId
+        normalized.correlationId,
+        normalized.protocol ?? null,
+        normalized.mcpMethod ?? null,
+        normalized.mcpTool ?? null,
+        normalized.mcpArguments === undefined
+          ? null
+          : canonicalJson(normalized.mcpArguments),
+        normalized.mcpErrorCode ?? null,
+        normalized.mcpToolIsError === undefined
+          ? null
+          : normalized.mcpToolIsError
+            ? 1
+            : 0
       );
     });
     return normalized;
@@ -342,9 +399,12 @@ export class RequestLogService {
     const filter = fingerprint({
       source: parsed.source ?? null,
       provider: parsed.provider ?? null,
+      protocol: parsed.protocol ?? null,
       method: method ?? null,
       path: parsed.path ?? null,
       status: parsed.status ?? null,
+      mcpMethod: parsed.mcpMethod ?? null,
+      mcpTool: parsed.mcpTool ?? null,
     });
     const cursor = parsed.cursor ? decodeCursor(parsed.cursor, filter) : undefined;
     const where: string[] = [];
@@ -357,6 +417,10 @@ export class RequestLogService {
       where.push("provider = ?");
       bindings.push(parsed.provider);
     }
+    if (parsed.protocol) {
+      where.push("protocol = ?");
+      bindings.push(parsed.protocol);
+    }
     if (method) {
       where.push("method = ?");
       bindings.push(method);
@@ -368,6 +432,14 @@ export class RequestLogService {
     if (parsed.status !== undefined) {
       where.push("response_status = ?");
       bindings.push(parsed.status);
+    }
+    if (parsed.mcpMethod) {
+      where.push("mcp_method = ?");
+      bindings.push(parsed.mcpMethod);
+    }
+    if (parsed.mcpTool) {
+      where.push("mcp_tool = ?");
+      bindings.push(parsed.mcpTool);
     }
     if (cursor) {
       where.push("sequence < ?");
