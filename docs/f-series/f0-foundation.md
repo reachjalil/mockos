@@ -19,7 +19,8 @@ management operation registry
 ├── @mockos/mcp registration metadata
 ├── Worker paths and HTTP request schemas (five live routes only)
 ├── OpenAPI 3.0 document
-└── @mockos/client generated authorization map and typed requests
+├── @mockos/client generated authorization map and typed requests
+└── human and machine management-reference artifacts
 ```
 
 MCP session conveniences stay inside the MCP adapter. In particular,
@@ -33,7 +34,12 @@ authorization boundary exist.
 The generated products are:
 
 - [`packages/openapi/openapi/mockos-management.v1.json`](../../packages/openapi/openapi/mockos-management.v1.json);
-- [`packages/client/src/generated.ts`](../../packages/client/src/generated.ts).
+- [`packages/client/src/generated.ts`](../../packages/client/src/generated.ts);
+- [`docs/reference/management-operations.v1.json`](../reference/management-operations.v1.json);
+- [`docs/reference/management-tools.md`](../reference/management-tools.md);
+- [`docs/reference/self-hosted-http.md`](../reference/self-hosted-http.md); and
+- the compact [`llms.txt`](../../llms.txt) plus curated
+  [`llms-full.txt`](../../llms-full.txt) agent indexes.
 
 Run `pnpm f0:generate` after an intentional registry change. `pnpm f0:drift:check`
 performs a byte-for-byte comparison and is part of local and hosted CI gates.
@@ -44,7 +50,7 @@ performs a byte-for-byte comparison and is part of local and hosted CI gates.
 | --- | --- | --- |
 | `@mockos/contracts/behavior` | Version-one `static`, `template`, `sequence`, `match`, `error`, and `script` schemas with seeded latency | Evaluator, template semantics, sequence storage, proxy, or script execution |
 | `@mockos/contracts/operations` | Exhaustive metadata for all 15 existing MCP operations and HTTP metadata for five live routes | HTTP availability for MCP-only operations or enforced scoped Access Keys |
-| `@mockos/openapi` | Deterministic OpenAPI and client-manifest generation | A deployed public API catalog |
+| `@mockos/openapi` | Deterministic OpenAPI, client-manifest, and management-documentation catalog generation | A deployed public API catalog |
 | `@mockos/client` | Fetch injection, relative known paths, constructor-owned auth, Zod validation, abort/timeout handling, and typed problems | CLI migration, automatic retries, npm publication, or unsupported HTTP operations |
 | `@mockos/codemode` | Explicit-enable wrapper around the exact experimental package | Worker wiring, `LOADER`, executor qualification, audit, or quotas |
 | `@mockos/sandbox` | Provider contract and fail-closed `NoSandbox` | Worker Loader or Node VM implementation |
@@ -79,7 +85,9 @@ When adding a management operation:
 2. Add one operation registry entry and preserve explicit environment semantics.
 3. Add HTTP metadata only when a real route exists.
 4. Run `pnpm f0:generate`.
-5. Add focused contract, adapter, client, and security-boundary tests.
-6. Run `pnpm f0:drift:check`, `pnpm f0:guards:check`, then the full `pnpm check`.
-7. Update the evidence ledger without inheriting hosted, deployed, verified-live, or
+5. Review the generated human and machine references for accurate secret, retry,
+   effect, and HTTP-availability labels.
+6. Add focused contract, adapter, client, documentation, and security-boundary tests.
+7. Run `pnpm f0:drift:check`, `pnpm f0:guards:check`, then the full `pnpm check`.
+8. Update the evidence ledger without inheriting hosted, deployed, verified-live, or
    publication evidence.

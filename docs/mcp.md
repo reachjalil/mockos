@@ -1,7 +1,7 @@
-# MCP interface
+# Management MCP interface
 
 Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact deployed versions
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-23
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
@@ -12,6 +12,11 @@ the exact tested slice: public revision
 `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` passed the full local gate, hosted CI,
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
+
+Management MCP controls mockOS; it is not a simulated MCP workload. Environment-hosted
+mock MCP servers for testing an agent are an unavailable F1 target. See the
+[interface model](./concepts/interface-model.md) and begin new workflows with the
+[MCP-first quickstart](./getting-started/mcp-first.md).
 
 ## Authentication fails closed
 
@@ -48,25 +53,12 @@ cursor does not cross sessions.
 
 ## Exact M5 tool registry
 
-The M5 source exposes these 15 tools:
-
-| Tool | Implemented behavior |
-| --- | --- |
-| `create_environment` | Create an isolated Entra ID or Okta environment and select it for this session |
-| `list_environments` | List account environments and the session's selected ID |
-| `delete_environment` | Purge one named or selected environment and clear the cursor when applicable |
-| `configure_environment` | Update name, idle TTL, or request-log row limit |
-| `seed_identities` | Create synthetic users and groups, including named group membership |
-| `create_application` | Register an OIDC/OAuth client and return its synthetic client credentials |
-| `run_provisioning_cycle` | Queue a deterministic outbound SCIM cycle against a saved or inline validated test target |
-| `mint_token` | Mint an ID-token-shaped bearer JWT for a seeded subject, optionally broken |
-| `set_scenario` | Create or completely replace a deterministic injected behavior by scenario ID |
-| `clear_scenario` | Clear one scenario or all scenarios in an environment |
-| `get_request_log` | Return a filtered, newest-first page of captured request entries |
-| `assert_requests` | Count exact request matches and return matching request IDs |
-| `simulate_lifecycle` | Apply a provider- and state-valid User lifecycle action and report state/version/ETag plus effective token revocations |
-| `get_wellknown_urls` | Derive provider URLs from the active public origin and environment |
-| `set_current_environment` | Set or clear the transport session's environment cursor |
+The M5 source exposes 15 tools. Their IDs, descriptions, input/output JSON Schemas,
+MCP annotations, effects, retry policies, secret policies, and exact HTTP availability
+are generated from the canonical registry in the
+[management-tool reference](./reference/management-tools.md). The corresponding
+[JSON catalog](./reference/management-operations.v1.json) is intended for machine
+readers.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP

@@ -4,9 +4,9 @@
 
 <h1 align="center"><span aria-hidden="true">🥸</span> mockOS</h1>
 
-<p align="center"><strong>Mock identity infrastructure for integration tests.</strong></p>
+<p align="center"><strong>MCP-first mock identity infrastructure for integration tests.</strong></p>
 
-<p align="center">Deterministic Entra ID and Okta protocol surfaces for testing real integrations.</p>
+<p align="center">Let agents build deterministic Entra ID and Okta test environments, then run real integrations against their protocol surfaces.</p>
 
 > **Project status:** M0 through M3 are accepted at exact revision
 > `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
@@ -28,6 +28,27 @@ mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
 directory lifecycle, RBAC, and failure handling without depending on a real enterprise
 tenant. Provider expectations live as source-attributed fixtures; deterministic clock,
 randomness, and SQLite seams make failures reproducible.
+
+## MCP first
+
+The management MCP server at `/mcp` is the primary control interface for agents and
+automation. Its current 15 tools create and configure environments, seed synthetic
+identities, register applications, drive lifecycle and provisioning, inject
+deterministic scenarios, inspect captured traffic, and clean up. Start with the
+[MCP-first quickstart](./docs/getting-started/mcp-first.md) and use the
+[generated tool reference](./docs/reference/management-tools.md) for the exact
+registry in this source.
+
+Applications under test do not call management MCP. They connect to the OIDC, OAuth,
+SCIM, Graph-shaped, or Okta-shaped endpoints returned for an environment. The
+[interface model](./docs/concepts/interface-model.md) separates those provider
+surfaces from management MCP, the CLI, the operated console, and the narrower
+five-route self-hosted HTTP API.
+
+Future mock MCP servers are a different product role: they will simulate tools,
+resources, and prompts for an agent under test. That F1 runtime, mock LLM APIs, script
+execution, enforced scoped keys, and Code Mode are unavailable today. The current F0
+source adds contracts and checked projections without activating those runtimes.
 
 The target deployment is Cloudflare-forward: Workers, SQLite Durable Objects,
 Workflows, Queues, KV, and an Agents SDK MCP server. This public repository contains
@@ -82,10 +103,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
   `run_provisioning_cycle` as tool 15
 - A source-complete local F0 foundation: one 15-operation metadata registry consumed
   by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
-  control routes, a fetch-based `@mockos/client` workspace skeleton, all six locked
-  version-one behavior contracts, and fail-closed Code Mode/`NoSandbox` wrapper
-  packages. Experimental runtimes remain disabled and the new packages are not yet
-  distribution-qualified
+  control routes, generated human/machine management references and agent indexes, a
+  fetch-based `@mockos/client` workspace skeleton, all six locked version-one behavior
+  contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. Experimental
+  runtimes remain disabled and the new packages are not yet distribution-qualified
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -164,11 +185,14 @@ and never persisted.
 
 ## Documentation
 
-Start at the [documentation index](./docs/README.md), then use
+Start at the [documentation index](./docs/README.md). It routes agents and humans by
+task, distinguishes the 15-tool MCP interface from the five-route HTTP subset, and
+links support claims to their evidence. Use
 [requirements traceability](./docs/requirements-traceability.md) and the
 [parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from
-evidence. The [brand guide](./docs/brand.md) defines the restrained use of 🥸 and the
-original vector assets.
+evidence. Machine readers can begin with [`llms.txt`](./llms.txt) or the curated
+[`llms-full.txt`](./llms-full.txt). The [brand guide](./docs/brand.md) defines the
+restrained use of 🥸 and the original vector assets.
 
 ## Contributing and security
 

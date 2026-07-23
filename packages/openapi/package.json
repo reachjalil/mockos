@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@mockos/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

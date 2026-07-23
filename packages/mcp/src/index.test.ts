@@ -21,6 +21,7 @@ import {
   type SeedIdentitiesResult,
   type WellKnownUrls,
 } from "@mockos/contracts";
+import { generateMockosManagementDocumentationCatalog } from "@mockos/openapi";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -332,6 +333,24 @@ afterEach(async () => {
 });
 
 describe("registerMockosTools", () => {
+  it("keeps the generated documentation schemas identical to tools/list", async () => {
+    const { client } = await createHarness();
+    const listed = await client.listTools();
+    const catalog = generateMockosManagementDocumentationCatalog();
+
+    expect(listed.tools.map(({ name }) => name)).toEqual(
+      catalog.managementMcp.tools.map(({ operationId }) => operationId)
+    );
+    for (const documented of catalog.managementMcp.tools) {
+      const advertised = listed.tools.find(
+        ({ name }) => name === documented.operationId
+      );
+      expect(advertised, documented.operationId).toBeDefined();
+      expect(advertised?.inputSchema).toEqual(documented.mcp.inputSchema);
+      expect(advertised?.outputSchema).toEqual(documented.mcp.outputSchema);
+    }
+  });
+
   it("registers and drives the complete management surface", async () => {
     const { client, dependencies } = await createHarness();
     const listed = await client.listTools();
