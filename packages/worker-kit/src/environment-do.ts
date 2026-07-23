@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+  type ApplicationListPage,
+  applicationListPageSchema,
   type ApplicationRegistration,
   type AssertionResult,
   type AssertionSpec,
@@ -13,6 +15,8 @@ import {
   identitySeedSchema,
   type LifecycleAction,
   type LifecycleResult,
+  type ManagementListQuery,
+  managementListQuerySchema,
   type MintedToken,
   type MintTokenRequest,
   mintTokenRequestSchema,
@@ -33,6 +37,8 @@ import {
   type RunProvisioningCycleToolInput,
   runProvisioningCycleToolInputSchema,
   type ScenarioSpec,
+  type ScenarioListPage,
+  scenarioListPageSchema,
   type WellKnownUrls,
   wellKnownUrlsSchema,
 } from "@mockos/contracts";
@@ -934,6 +940,14 @@ export class EnvironmentDurableObject extends DurableObject {
     return applicationRegistration(created);
   }
 
+  async listApplications(input: ManagementListQuery): Promise<ApplicationListPage> {
+    const query = managementListQuerySchema.parse(input);
+    const engine = await this.#engine();
+    const result = applicationListPageSchema.parse(engine.applications.listPage(query));
+    await this.#touch();
+    return result;
+  }
+
   async queueProvisioningRun(
     rawParams: ProvisioningWorkflowParams,
     rawTarget: RunProvisioningCycleToolInput["target"]
@@ -1484,6 +1498,14 @@ export class EnvironmentDurableObject extends DurableObject {
     const scenario = engine.setScenario(input);
     await this.#touch();
     return scenario;
+  }
+
+  async listScenarios(input: ManagementListQuery): Promise<ScenarioListPage> {
+    const query = managementListQuerySchema.parse(input);
+    const engine = await this.#engine();
+    const result = scenarioListPageSchema.parse(engine.scenarios.listPage(query));
+    await this.#touch();
+    return result;
   }
 
   async clearScenario(scenarioId?: string): Promise<ClearScenarioResult> {

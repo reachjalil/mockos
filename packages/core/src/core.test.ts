@@ -5,6 +5,7 @@ import {
   CORE_MIGRATIONS,
   createTenantId,
   decodeJwt,
+  encodeManagementListCursor,
   Engine,
   type EngineConfig,
   FixedClock,
@@ -211,6 +212,53 @@ describe("core substrate", () => {
     expect([left.uuid(), left.uuid()]).toEqual([right.uuid(), right.uuid()]);
     expect(createTenantId("environment-a")).toBe(createTenantId("environment-a"));
     expect(createTenantId("environment-a")).not.toBe(createTenantId("environment-b"));
+  });
+
+  it("paginates secret-free application summaries with stable keyset cursors", async () => {
+    const store = memoryStore();
+    const clock = new FixedClock("2026-07-22T12:00:00.000Z");
+    const engine = Engine.create(
+      { provider: "entra", seed: "application-pages" },
+      { store, clock, rng: new SeededRng("application-pages") }
+    );
+    await engine.initialize();
+    for (const suffix of ["c", "a", "b"]) {
+      await engine.applications.create({
+        id: `app_${suffix}`,
+        name: `Application ${suffix.toUpperCase()}`,
+        clientId: `client_${suffix}`,
+        clientSecret: `client-secret-${suffix}`,
+        redirectUris: [`https://client.example/${suffix}/callback`],
+      });
+    }
+
+    const first = engine.applications.listPage({ limit: 2 });
+    expect(first.applications.map(({ id }) => id)).toEqual(["app_a", "app_b"]);
+    expect(first.nextCursor).toBeTypeOf("string");
+    expect(JSON.stringify(first)).not.toContain("clientSecret");
+    expect(JSON.stringify(first)).not.toContain("secret_hash");
+    for (const suffix of ["a", "b", "c"]) {
+      expect(JSON.stringify(first)).not.toContain(`client-secret-${suffix}`);
+    }
+
+    const second = engine.applications.listPage({
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+    expect(second.applications.map(({ id }) => id)).toEqual(["app_c"]);
+    expect(second.nextCursor).toBeUndefined();
+    expect(() =>
+      engine.applications.listPage({ limit: 1, cursor: "not-base64url!" })
+    ).toThrow(/cursor/i);
+    expect(() =>
+      engine.applications.listPage({
+        limit: 1,
+        cursor: encodeManagementListCursor("scenarios", {
+          createdAt: "2026-07-22T12:00:00.000Z",
+          id: "scenario-a",
+        }),
+      })
+    ).toThrow(/cursor/i);
   });
 
   it("signs and verifies portable RS256 JWTs and JWKS", async () => {

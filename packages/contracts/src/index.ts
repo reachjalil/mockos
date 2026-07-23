@@ -122,6 +122,12 @@ export const applicationRegistrationSchema = createApplicationInputSchema
   .strict();
 export type ApplicationRegistration = z.infer<typeof applicationRegistrationSchema>;
 
+/** Persisted application metadata. Client secrets are creation-only. */
+export const applicationSummarySchema = applicationRegistrationSchema
+  .omit({ clientSecret: true })
+  .strict();
+export type ApplicationSummary = z.infer<typeof applicationSummarySchema>;
+
 export const semanticErrorCodeSchema = z.enum([
   "BAD_CLIENT_SECRET",
   "BAD_REDIRECT_URI",
@@ -244,6 +250,37 @@ export const scenarioSpecSchema = scenarioSpecObjectSchema.superRefine(
   enforceScenarioInjectionLock
 );
 export type ScenarioSpec = z.infer<typeof scenarioSpecSchema>;
+
+export const MAX_MANAGEMENT_LIST_PAGE_SIZE = 25;
+
+export const managementListQuerySchema = z
+  .object({
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_MANAGEMENT_LIST_PAGE_SIZE)
+      .default(MAX_MANAGEMENT_LIST_PAGE_SIZE),
+    cursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type ManagementListQuery = z.infer<typeof managementListQuerySchema>;
+
+export const applicationListPageSchema = z
+  .object({
+    applications: z.array(applicationSummarySchema).max(MAX_MANAGEMENT_LIST_PAGE_SIZE),
+    nextCursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type ApplicationListPage = z.infer<typeof applicationListPageSchema>;
+
+export const scenarioListPageSchema = z
+  .object({
+    scenarios: z.array(scenarioSpecSchema).max(MAX_MANAGEMENT_LIST_PAGE_SIZE),
+    nextCursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type ScenarioListPage = z.infer<typeof scenarioListPageSchema>;
 
 export const requestLogSourceSchema = z.enum(["inbound", "outbound", "control"]);
 export const requestLogEntrySchema = z

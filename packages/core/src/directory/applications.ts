@@ -1,5 +1,17 @@
+import {
+  type ApplicationListPage,
+  applicationListPageSchema,
+  type ApplicationSummary,
+  applicationSummarySchema,
+  type ManagementListQuery,
+  managementListQuerySchema,
+} from "@mockos/contracts";
 import { type Clock, type Rng, uuidFromRng } from "../determinism";
 import { hashSecret, randomId, verifySecret } from "../security";
+import {
+  decodeManagementListCursor,
+  encodeManagementListCursor,
+} from "../store/management-list-cursor";
 import type { SqlRow, SqlStore } from "../store";
 import { idFromUuid, parseJson } from "./shared";
 
@@ -67,6 +79,20 @@ const toApplication = (row: ApplicationRow): ApplicationRecord => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const toApplicationSummary = (row: ApplicationRow): ApplicationSummary => {
+  const application = toApplication(row);
+  return applicationSummarySchema.parse({
+    id: application.id,
+    name: application.name,
+    clientId: application.clientId,
+    redirectUris: [...application.redirectUris],
+    grantTypes: [...application.grantTypes],
+    appRoles: [...application.appRoles],
+    groupClaimsMode: application.groupClaimsMode,
+    createdAt: application.createdAt,
+  });
+};
 
 const validateRedirectUris = (redirectUris: readonly string[]): string[] => {
   if (redirectUris.length === 0)
@@ -152,6 +178,41 @@ export class ApplicationRepository {
     return this.#store
       .all<ApplicationRow>(`${selectApplications} ORDER BY created_at, id`)
       .map(toApplication);
+  }
+
+  listPage(input: ManagementListQuery): ApplicationListPage {
+    const query = managementListQuerySchema.parse(input);
+    const cursor = query.cursor
+      ? decodeManagementListCursor("applications", query.cursor)
+      : undefined;
+    const rows = cursor
+      ? this.#store.all<ApplicationRow>(
+          `${selectApplications}
+           WHERE created_at > ? OR (created_at = ? AND id > ?)
+           ORDER BY created_at, id
+           LIMIT ?`,
+          cursor.createdAt,
+          cursor.createdAt,
+          cursor.id,
+          query.limit + 1
+        )
+      : this.#store.all<ApplicationRow>(
+          `${selectApplications} ORDER BY created_at, id LIMIT ?`,
+          query.limit + 1
+        );
+    const pageRows = rows.slice(0, query.limit);
+    const last = pageRows.at(-1);
+    return applicationListPageSchema.parse({
+      applications: pageRows.map(toApplicationSummary),
+      ...(rows.length > query.limit && last
+        ? {
+            nextCursor: encodeManagementListCursor("applications", {
+              createdAt: last.created_at,
+              id: last.id,
+            }),
+          }
+        : {}),
+    });
   }
 
   async verifyClientSecret(clientId: string, clientSecret: string): Promise<boolean> {

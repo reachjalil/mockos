@@ -1,11 +1,19 @@
 import {
+  type ManagementListQuery,
+  managementListQuerySchema,
   type ScimPatchToleranceCase,
+  type ScenarioListPage,
+  scenarioListPageSchema,
   type ScenarioSpec,
   scenarioSpecSchema,
   type SemanticErrorCode,
 } from "@mockos/contracts";
 import { type Clock, SeededRng } from "../determinism";
 import { utf8Encode } from "../security";
+import {
+  decodeManagementListCursor,
+  encodeManagementListCursor,
+} from "../store/management-list-cursor";
 import type { SqlRow, SqlStore } from "../store";
 
 export type ScenarioDecision =
@@ -182,6 +190,41 @@ export class ScenarioService {
     return this.#store
       .all<ScenarioRow>(`${selectScenarios} ORDER BY created_at, id`)
       .map(currentSpec);
+  }
+
+  listPage(input: ManagementListQuery): ScenarioListPage {
+    const query = managementListQuerySchema.parse(input);
+    const cursor = query.cursor
+      ? decodeManagementListCursor("scenarios", query.cursor)
+      : undefined;
+    const rows = cursor
+      ? this.#store.all<ScenarioRow>(
+          `${selectScenarios}
+           WHERE created_at > ? OR (created_at = ? AND id > ?)
+           ORDER BY created_at, id
+           LIMIT ?`,
+          cursor.createdAt,
+          cursor.createdAt,
+          cursor.id,
+          query.limit + 1
+        )
+      : this.#store.all<ScenarioRow>(
+          `${selectScenarios} ORDER BY created_at, id LIMIT ?`,
+          query.limit + 1
+        );
+    const pageRows = rows.slice(0, query.limit);
+    const last = pageRows.at(-1);
+    return scenarioListPageSchema.parse({
+      scenarios: pageRows.map(currentSpec),
+      ...(rows.length > query.limit && last
+        ? {
+            nextCursor: encodeManagementListCursor("scenarios", {
+              createdAt: last.created_at,
+              id: last.id,
+            }),
+          }
+        : {}),
+    });
   }
 
   /** Clears one scenario by ID, or every scenario when the ID is omitted. */

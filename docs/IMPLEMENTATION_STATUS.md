@@ -1,7 +1,7 @@
 # Implementation status
 
-Status: M0-M3 and tested M5 slice accepted; bounded M6 slice accepted with sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: M0-M3 and tested M5 slice accepted; bounded M6 slice accepted with sampled deployed evidence; M7 management-read substrate source-complete pending hosted deployment
+Last reviewed: 2026-07-23
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
 types, fixtures, or a narrow slice exist while the complete behavior does not. The
@@ -11,7 +11,9 @@ runtime revision, hosted CI run, manual Worker rollout, and controlled-target
 acceptance record; it does not inherit M3 evidence or qualify the guarded deployment
 workflow. M6 has its own exact-source, CI, version, and sampled workers.dev acceptance
 record; it does not inherit M3/M5 evidence or qualify the guarded Cloudflare-credential
-deployment workflow.
+deployment workflow. The additive M7 application/scenario management-read substrate is
+source-complete in the repository revision carrying this document, but has no hosted CI,
+deployed-version, or console acceptance evidence yet.
 
 Evidence tiers are intentionally separate. **Source** means exact-revision local or
 hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
@@ -31,6 +33,7 @@ organization. No current fixture or milestone is verified-live.
 | Entra OIDC runtime | Accepted M3 slice; bounded M6 token/key/Graph slice sampled in deployment | [Core](../packages/core/src/core.test.ts), [Worker OIDC](../apps/worker/test/oidc.integration.test.ts), and [lifecycle cascade](../apps/worker/test/lifecycle-cascade.integration.test.ts) tests cover the accepted M3 hosted-login, authorization-code, refresh/lifecycle, Entra-claim, and RS256/JWKS slice; the [M3 deployed smoke](./evidence/m3-workers-dev-smoke.md) exercised those principal paths. M6 source tests add deterministic broken tokens, skew, one-key rollover overlap, and group overage with trusted same-environment Graph fallback capped at 1,000 returned IDs. The [M6 deployed sample](./evidence/m6-workers-dev-smoke.md) exercises rotation/stale-JWKS verification, plus-300-second skew, all five broken variants, and the exact path-mode 200/201 boundary. The 1,001-ID ceiling, concurrency, private-key scrubbing, and subdomain routing remain source evidence; broader error fidelity and verified-live comparison remain open. |
 | Okta runtime | Accepted M3 implementation plus bounded M6 Classic Authn deployed sample | Existing [core](../packages/core/src/okta.test.ts), [HTTP adapter](../packages/engine-http/src/okta.test.ts), and [Worker integration](../apps/worker/test/okta.integration.test.ts) cover the M3 OAuth/device/directory slice. M6 adds core/HTTP/Worker coverage for `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, explicit `LOCKED_OUT`, state retrieval/cancellation, hash-only capabilities, replay denial, lifecycle and SCIM-password-change revocation, and issuance-race denial. Successful retrieval slides state expiry; session expiry remains fixed. The HTTP shape uses singular `_embedded.factor` (an array), omits `passwordChanged`, permits same-origin CORS only for `POST` with `accept`/`content-type`, emits no credentialed-CORS allowance, and returns `403` cross-origin. Request/response bodies are recursively secret-redacted, malformed bodies are wholly redacted, and sensitive Authn headers are redacted. The [M6 smoke](./evidence/m6-workers-dev-smoke.md) samples initial states, state retrieval, CORS, privacy, and redaction; factor verification, cancellation/replay and revocation details not sampled there, verified-live comparison, and the rest of the Classic machine remain open or source-only as stated. |
 | Scenario injection and request log | Accepted through the tested M5 assertion slice; M6 actions sampled in deployment | Accepted M3 [scenario/log tests](../packages/core/src/scenario-log.test.ts) cover deterministic scenarios, filtering, retention, and assertions. M5 response-body predicates, repeated non-overlapping ordered counts, Worker capture/redaction, local process e2e, and both hosted four-request assertions passed. M6 key rotation and clock skew are restricted to exact internal `token.before_sign` evaluation rather than the generic catch-all; both were sampled by the exact-version M6 deployed smoke. |
+| M7 application/scenario management reads | Source-complete; hosted CI, rollout, and console acceptance pending | Strict [contracts](../packages/contracts/src/index.ts) cap management pages at 25 records and bind cursors to the application or scenario resource kind. [Core](../packages/core/src/directory/applications.ts) and [scenario](../packages/core/src/scenario/scenario-service.ts) keyset pagination is covered by focused tests, and the [Durable Object integration](../apps/worker/test/management-rpc.integration.test.ts) exercises the additive `listApplications`/`listScenarios` RPCs. Application summaries are constructed field-by-field and exclude both the creation-only plaintext `clientSecret` and the persisted hash. No MCP tool, public HTTP route, CLI command, schema migration, hosted deployment, or private-console result is claimed by this source slice. |
 | MCP runtime | Accepted 15-tool M5 runtime for the tested hosted slice | The handler-agnostic [registry and tests](../packages/mcp/src/index.test.ts) exercise `run_provisioning_cycle` as tool 15. Authenticated mounted Worker tests, the built-CLI process e2e, and staging/production hosted starts passed. This is not a claim that every tool was re-exercised remotely or that npm distribution exists. |
 | CLI Stage A | Accepted M5 source command; unpublished | The unpublished `@mockos/cli` 0.1.0 source includes secret-safe `provision run` and capability negotiation for `run_provisioning_cycle`; all 19 CLI tests and the built-CLI process e2e are green. Package publication and a complete deployed CLI command matrix remain open. |
 | Cloudflare Worker / Durable Object | Bounded M6 exact-version deployment sample accepted | Exact M6 public revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed the full local gate and [CI run 29966667984](https://github.com/reachjalil/mockos/actions/runs/29966667984). Its staging version `9ea22805-e38e-4a1b-807f-f80646cbe298` and production version `0695adab-d162-4f01-a3cf-da9c1640acdc` were manually deployed with the existing Access Keys preserved, confirmed 100% active, and passed source-locked exact-serving-version smoke. See the [M6 deployment record](./evidence/m6-workers-dev-smoke.md). The guarded Cloudflare-credential promotion workflow and verified-live parity remain unqualified. |
@@ -92,3 +95,15 @@ are green. The smoke sampled every slice plus accepted regressions, but did not 
 every fixture or source-only denial/concurrency/cap assertion remotely. This acceptance
 does not qualify the guarded Cloudflare-credential deploy workflow, corpus-wide parity,
 or verified-live provider comparison.
+
+The M7 application/scenario management-read substrate is source-complete but not
+deployed. Its strict query contract defaults to and caps pages at 25 records with a
+512-character cursor ceiling. Core reads use stable `(created_at, id)` keysets and
+resource-kind-bound cursors. `ApplicationSummary` is deliberately distinct from the
+creation response: `createApplication` still returns the generated plaintext secret
+once, while every later list result excludes it and the stored hash. The two new
+Durable Object RPCs are additive and schema-v5 compatible. The full local `pnpm check`
+gate, including the focused contract/core coverage and real Durable Object integration,
+is green; hosted CI, exact-version staging/production rollout, private Edge/Control
+integration, and console/browser acceptance remain pending and must not inherit the M6
+evidence.

@@ -1,7 +1,7 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus sampled M6 deployment and remaining limits; deliberately candid
-Last reviewed: 2026-07-22
+Status: Accepted M3/M5 boundaries plus sampled M6 deployment, source-only M7 management reads, and remaining limits; deliberately candid
+Last reviewed: 2026-07-23
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
 evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
@@ -116,6 +116,16 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   The registry does not yet host
   user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
   OIDC-federated CI access.
+- The additive M7 management-read substrate is source-only. Application and scenario
+  pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
+  exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,
+  public HTTP route, or CLI command was added. Application creation still returns its
+  plaintext client secret exactly once; later application pages are a distinct strict
+  summary shape that contains neither the secret nor its stored hash. There is no
+  secret recovery endpoint, and an ambiguous failed create response must not be retried
+  automatically. Hosted CI, exact-version deployment, private control-plane ownership
+  enforcement, no-store response handling, and console one-time-display behavior remain
+  pending evidence rather than inherited claims.
 - M5 outbound provisioning is manually accepted for the exact tested source pair.
   Public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`, CI run
   `29957994237`, the six active Worker versions, both terminal-success Workflow runs,

@@ -11,6 +11,7 @@ import {
   applyMigrations,
   CORE_MIGRATIONS,
   Engine,
+  encodeManagementListCursor,
   FixedClock,
   getSchemaVersion,
   MAX_ASSERTION_REQUEST_IDS,
@@ -239,6 +240,65 @@ describe("scenario service", () => {
       decisions("different-seed").values
     );
     expect(decisions("same-seed").evaluations).toBe(12);
+  });
+
+  it("paginates scenario snapshots without evaluating or consuming them", () => {
+    const { store, service } = scenarioService("scenario-pages");
+    for (const suffix of ["c", "a", "b"]) {
+      service.set(
+        scenarioSpecSchema.parse({
+          id: `scenario-${suffix}`,
+          injectionPoint: "oauth.token",
+          action: { type: "error", code: "INVALID_GRANT" },
+          remaining: 1,
+        })
+      );
+    }
+
+    const first = service.listPage({ limit: 2 });
+    expect(first.scenarios.map(({ id }) => id)).toEqual(["scenario-a", "scenario-b"]);
+    expect(first.nextCursor).toBeTypeOf("string");
+    const second = service.listPage({ limit: 2, cursor: first.nextCursor });
+    expect(second.scenarios.map(({ id }) => id)).toEqual(["scenario-c"]);
+    expect(second.nextCursor).toBeUndefined();
+    expect(
+      store.all<{ id: string; evaluations: number }>(
+        "SELECT id, evaluations FROM scenarios ORDER BY id"
+      )
+    ).toEqual([
+      { id: "scenario-a", evaluations: 0 },
+      { id: "scenario-b", evaluations: 0 },
+      { id: "scenario-c", evaluations: 0 },
+    ]);
+
+    expect(service.decide("oauth.token")).toMatchObject({
+      scenarioId: "scenario-a",
+    });
+    const evaluations = store.get<{ evaluations: number }>(
+      "SELECT evaluations FROM scenarios WHERE id = 'scenario-a'"
+    );
+    expect(service.listPage({ limit: 2 }).scenarios[0]).toMatchObject({
+      id: "scenario-a",
+      enabled: false,
+    });
+    expect(
+      store.get<{ evaluations: number }>(
+        "SELECT evaluations FROM scenarios WHERE id = 'scenario-a'"
+      )
+    ).toEqual(evaluations);
+
+    expect(() => service.listPage({ limit: 1, cursor: "not-base64url!" })).toThrow(
+      /cursor/i
+    );
+    expect(() =>
+      service.listPage({
+        limit: 1,
+        cursor: encodeManagementListCursor("applications", {
+          createdAt: "2026-07-22T12:00:00.000Z",
+          id: "app-a",
+        }),
+      })
+    ).toThrow(/cursor/i);
   });
 
   it("rolls back the probability counter and remaining consumption together", () => {

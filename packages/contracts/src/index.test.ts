@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicationListPageSchema,
+  applicationRegistrationSchema,
+  applicationSummarySchema,
   assertionSpecSchema,
   assertRequestsToolInputSchema,
   brokenTokenVariantSchema,
@@ -8,6 +11,8 @@ import {
   getRequestLogToolInputSchema,
   identitySeedSchema,
   lifecycleResultSchema,
+  managementListQuerySchema,
+  MAX_MANAGEMENT_LIST_PAGE_SIZE,
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
@@ -15,6 +20,7 @@ import {
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
   scenarioSpecSchema,
+  scenarioListPageSchema,
   scimUserInputSchema,
   scimWeakEtag,
   seedIdentitiesToolInputSchema,
@@ -82,6 +88,65 @@ describe("wire contracts", () => {
     });
     expect(getRequestLogToolInputSchema.parse({}).limit).toBe(100);
     expect(assertRequestsToolInputSchema.parse({}).count).toEqual({ atLeast: 1 });
+  });
+
+  it("bounds management pages and keeps application listings secret-free", () => {
+    expect(managementListQuerySchema.parse({})).toEqual({
+      limit: MAX_MANAGEMENT_LIST_PAGE_SIZE,
+    });
+    expect(() =>
+      managementListQuerySchema.parse({ limit: MAX_MANAGEMENT_LIST_PAGE_SIZE + 1 })
+    ).toThrow();
+    expect(() =>
+      managementListQuerySchema.parse({ cursor: "x".repeat(513) })
+    ).toThrow();
+    expect(() => managementListQuerySchema.parse({ unexpected: true })).toThrow();
+
+    const summary = {
+      id: "app_12345678",
+      name: "Console client",
+      clientId: "client_123",
+      redirectUris: ["https://client.example/callback"],
+      grantTypes: ["authorization_code" as const],
+      appRoles: [],
+      groupClaimsMode: "none" as const,
+      createdAt: "2026-07-22T12:00:00.000Z",
+    };
+    expect(applicationSummarySchema.parse(summary)).toEqual(summary);
+    expect(() =>
+      applicationSummarySchema.parse({
+        ...summary,
+        clientSecret: "display-once-secret",
+      })
+    ).toThrow();
+    expect(
+      applicationRegistrationSchema.parse({
+        ...summary,
+        clientSecret: "display-once-secret",
+      })
+    ).toMatchObject({ clientSecret: "display-once-secret" });
+    expect(() =>
+      applicationListPageSchema.parse({
+        applications: Array.from(
+          { length: MAX_MANAGEMENT_LIST_PAGE_SIZE + 1 },
+          () => summary
+        ),
+      })
+    ).toThrow();
+
+    const scenario = scenarioSpecSchema.parse({
+      id: "bounded-page",
+      injectionPoint: "oauth.token",
+      action: { type: "error", code: "INVALID_GRANT" },
+    });
+    expect(() =>
+      scenarioListPageSchema.parse({
+        scenarios: Array.from(
+          { length: MAX_MANAGEMENT_LIST_PAGE_SIZE + 1 },
+          () => scenario
+        ),
+      })
+    ).toThrow();
   });
 
   it("rejects ambiguous or empty assertion count contracts", () => {
