@@ -18,8 +18,10 @@
 > staging-before-production rollout, and exact-version smoke of Classic Authn, SCIM
 > edges, signing-key rotation, token skew/broken tokens, and 200/201 group overage are
 > green. This is sampled deployed mock evidence, not corpus-wide or verified-live
-> parity. The guarded GitHub promotion workflows remain unqualified. This is not yet a
-> stable npm release or a production-SLA service. See the
+> parity. The F0 contract/client/OpenAPI foundation passes the complete local source
+> gate, while hosted CI/merge, F1-F9 runtimes, and all experimental activation remain
+> pending. The guarded GitHub promotion workflows remain unqualified. This is not yet
+> a stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -78,6 +80,12 @@ private control plane, licensing, billing, or a hosted mockOS account.
   claims, and JWKS signature verification in focused local suites
 - An accepted authenticated Agents SDK MCP server whose M5 registry adds
   `run_provisioning_cycle` as tool 15
+- A source-complete local F0 foundation: one 15-operation metadata registry consumed
+  by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
+  control routes, a fetch-based `@mockos/client` workspace skeleton, all six locked
+  version-one behavior contracts, and fail-closed Code Mode/`NoSandbox` wrapper
+  packages. Experimental runtimes remain disabled and the new packages are not yet
+  distribution-qualified
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation

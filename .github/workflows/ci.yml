@@ -38,6 +38,10 @@ jobs:
         run: node scripts/check-doc-status.mjs
       - name: Verify generated M6 parity evidence
         run: pnpm m6:parity:check
+      - name: Verify generated F0 API and client artifacts
+        run: pnpm f0:drift:check
+      - name: Verify F0 pins and disabled runtime boundaries
+        run: pnpm f0:guards:check
       - name: Verify brand asset manifest
         run: pnpm brand:check
       - name: Enforce public dependency direction

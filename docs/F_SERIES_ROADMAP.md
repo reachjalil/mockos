@@ -1,14 +1,15 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; M2 gate satisfied, F0 may begin
+Status: Approved target design; F0 foundation source-complete locally, hosted CI/merge pending
 Last reviewed: 2026-07-22
 
 This document turns the approved F-series product direction into an executable
-roadmap. It is a target design, not implementation evidence. The current evidence
-ledger remains [Implementation status](./IMPLEMENTATION_STATUS.md): M0 through M2 pass
-locally and in hosted CI, and the exact M2 candidate passed staging and production
-workers.dev smoke. The M2 prerequisite is satisfied; every F-series runtime phase
-remains unimplemented and begins with F0.
+roadmap. Target sections are not implementation evidence; the current evidence ledger
+remains [Implementation status](./IMPLEMENTATION_STATUS.md). The exact M2 candidate
+passed local/hosted gates and staging/production workers.dev smoke, satisfying the F0
+entry gate. The revision carrying this document contains a locally green F0
+contract/client/OpenAPI foundation. Hosted CI/merge evidence and every F1-F9 runtime
+phase remain open.
 
 ## Outcome
 
@@ -381,6 +382,14 @@ F1, F2, and F3 may run in parallel after F0. F4 may run in the private cloud lan
 after M4. Per-area contract files, append-only migration ownership, and table-driven
 route registration remain the merge choke-point rules.
 
+The F0 source candidate now covers the six-variant `BehaviorSpec`, an exhaustive
+15-operation management registry consumed by MCP, deterministic OpenAPI and client
+artifacts for the five HTTP routes that actually exist, a validated fetch client, and
+default-off Code Mode/sandbox wrappers with exact dependency guards. The full local
+repository gate is green. This is not hosted CI or merge evidence, does not advertise
+MCP-only operations as HTTP, and does not activate Code Mode, scripts, mock MCP, or
+mock LLM runtimes.
+
 ### July 28 MCP checkpoint
 
 This checkpoint is not permission to replace the stable adapter. Its deliverables are:
@@ -419,9 +428,10 @@ held back for hosted governance.
 
 ### Merge and compatibility
 
-- The M2 prerequisite review proves no F-series package, migration, catalog pin,
-  route, or runtime flag landed. Design documents identify themselves as target
-  design. The linked hosted CI and deployed-smoke evidence satisfy the F0 entry gate.
+- The M2 prerequisite review proved that no F-series package, migration, catalog pin,
+  route, or runtime flag had landed at the entry point. The linked hosted CI and
+  deployed-smoke evidence satisfied the F0 entry gate. F0 subsequently remains
+  additive: no migration or experimental runtime flag/binding is introduced.
 - Every phase starts with an additive contract freeze and ends with existing M tests,
   format, types, tests, builds, Wrangler dry-run, and documentation honesty gates
   green.

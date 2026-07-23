@@ -1,11 +1,9 @@
 import {
-  createApplicationInputSchema,
-  environmentConfigSchema,
   environmentIdSchema,
-  identitySeedSchema,
   type Problem,
   type ProvisioningWorkflowParams,
 } from "@mockos/contracts";
+import { mockosHttpOperations, mockosRouterPath } from "@mockos/contracts/operations";
 import {
   type EnvironmentCatalogDurableObject,
   type EnvironmentDurableObject,
@@ -16,6 +14,18 @@ import {
 } from "@mockos/worker-kit";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+
+const MANAGEMENT_API_PREFIX = "/__mockos/v1";
+
+const managementRoute = (path: `/${string}`): string =>
+  `${MANAGEMENT_API_PREFIX}${mockosRouterPath(path)}`;
+
+const configureEnvironmentOperation = mockosHttpOperations.configure_environment.http;
+const seedIdentitiesOperation = mockosHttpOperations.seed_identities.http;
+const createApplicationOperation = mockosHttpOperations.create_application.http;
+const getEnvironmentDiscoveryOperation =
+  mockosHttpOperations.get_environment_discovery.http;
+const deleteEnvironmentOperation = mockosHttpOperations.delete_environment.http;
 
 export type CloudflareEnv = {
   ENVIRONMENT_CATALOG: DurableObjectNamespace<EnvironmentCatalogDurableObject>;
@@ -318,15 +328,19 @@ export const createWorkerApp = () => {
     }
   );
 
-  app.use("/__mockos/v1/*", async (context, next) => {
+  app.use(`${MANAGEMENT_API_PREFIX}/*`, async (context, next) => {
     const failure = apiKeyFailure(context.req.raw, context.env);
     if (failure) return failure;
     await next();
   });
 
-  app.put("/__mockos/v1/environments/:environmentId", async (context) => {
-    const environmentId = environmentIdSchema.parse(context.req.param("environmentId"));
-    const config = environmentConfigSchema.parse(await context.req.json());
+  app.put(managementRoute(configureEnvironmentOperation.path), async (context) => {
+    const { environmentId } = configureEnvironmentOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const config = configureEnvironmentOperation.bodySchema.parse(
+      await context.req.json()
+    );
     if (config.id !== environmentId) {
       throw new Error("Environment id in the URL and body must match.");
     }
@@ -343,48 +357,52 @@ export const createWorkerApp = () => {
     });
   });
 
-  app.post(
-    "/__mockos/v1/environments/:environmentId/identities:seed",
-    async (context) => {
-      const seed = identitySeedSchema.parse(await context.req.json());
-      const result = await environmentStub(
-        context.env,
-        context.req.param("environmentId")
-      ).seed(seed);
-      return context.json({
-        data: result,
-        meta: { requestId: crypto.randomUUID() },
-      });
-    }
-  );
-
-  app.post("/__mockos/v1/environments/:environmentId/applications", async (context) => {
-    const input = createApplicationInputSchema.parse(await context.req.json());
-    const result = await environmentStub(
-      context.env,
-      context.req.param("environmentId")
-    ).createApplication(input);
-    return context.json(
-      { data: result, meta: { requestId: crypto.randomUUID() } },
-      201
-    );
-  });
-
-  app.get("/__mockos/v1/environments/:environmentId/well-known", async (context) => {
-    const issuerBase = context.req.query("issuer_base");
-    if (!issuerBase) throw new Error("issuer_base query parameter is required.");
-    const result = await environmentStub(
-      context.env,
-      context.req.param("environmentId")
-    ).getWellKnown(issuerBase);
+  app.post(managementRoute(seedIdentitiesOperation.path), async (context) => {
+    const { environmentId } = seedIdentitiesOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const seed = seedIdentitiesOperation.bodySchema.parse(await context.req.json());
+    const result = await environmentStub(context.env, environmentId).seed(seed);
     return context.json({
       data: result,
       meta: { requestId: crypto.randomUUID() },
     });
   });
 
-  app.delete("/__mockos/v1/environments/:environmentId", async (context) => {
-    const environmentId = environmentIdSchema.parse(context.req.param("environmentId"));
+  app.post(managementRoute(createApplicationOperation.path), async (context) => {
+    const { environmentId } = createApplicationOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const input = createApplicationOperation.bodySchema.parse(await context.req.json());
+    const result = await environmentStub(context.env, environmentId).createApplication(
+      input
+    );
+    return context.json(
+      { data: result, meta: { requestId: crypto.randomUUID() } },
+      createApplicationOperation.successStatus
+    );
+  });
+
+  app.get(managementRoute(getEnvironmentDiscoveryOperation.path), async (context) => {
+    const { environmentId } = getEnvironmentDiscoveryOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const query = getEnvironmentDiscoveryOperation.querySchema.parse({
+      issuer_base: context.req.query("issuer_base"),
+    });
+    const result = await environmentStub(context.env, environmentId).getWellKnown(
+      query.issuer_base
+    );
+    return context.json({
+      data: result,
+      meta: { requestId: crypto.randomUUID() },
+    });
+  });
+
+  app.delete(managementRoute(deleteEnvironmentOperation.path), async (context) => {
+    const { environmentId } = deleteEnvironmentOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
     const stub = environmentStub(context.env, environmentId);
     const catalog = environmentCatalog(context.env);
     let config = await catalog.beginDeleteEnvironment(environmentId);

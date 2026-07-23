@@ -1,14 +1,12 @@
 {
-  "name": "@mockos/contracts",
+  "name": "@mockos/openapi",
   "version": "0.0.0",
-  "description": "Wire contracts shared by mockOS engines and control planes.",
+  "description": "Deterministic OpenAPI generation for the mockOS management contract.",
+  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts",
-    "./behavior": "./src/behavior.ts",
-    "./features": "./src/features.ts",
-    "./operations": "./src/operations/index.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -16,6 +14,7 @@
     "types": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@mockos/contracts": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

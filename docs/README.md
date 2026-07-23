@@ -80,6 +80,7 @@ fixture alone.
 
 - [Requirements traceability](./requirements-traceability.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
+- [F0 contract, client, and wrapper foundation](./f-series/f0-foundation.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
 - [Generated M6 executable-evidence matrix](./conformance/m6-generated-parity.md)
 - [M1 Wrangler dev smoke evidence](./evidence/m1-wrangler-dev-smoke.md)

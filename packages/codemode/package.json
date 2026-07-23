@@ -1,0 +1,53 @@
+{
+  "name": "@mockos/codemode",
+  "version": "0.0.0",
+  "description": "Fail-closed mockOS wrapper around Cloudflare's experimental Code Mode integration.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Jalil Laaraichi",
+  "homepage": "https://github.com/reachjalil/mockos#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reachjalil/mockos.git",
+    "directory": "packages/codemode"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js",
+      "default": "./dist/cloudflare.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "test": "vitest run",
+    "types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/codemode": "catalog:",
+    "@mockos/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
