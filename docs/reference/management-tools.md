@@ -2016,6 +2016,17 @@ invented HTTP path.
       "minimum": 1,
       "type": "integer"
     },
+    "mcpMethod": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "mcpTool": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
     "method": {
       "maxLength": 32,
       "minLength": 1,
@@ -2026,12 +2037,27 @@ invented HTTP path.
       "minLength": 1,
       "type": "string"
     },
-    "provider": {
+    "protocol": {
       "enum": [
-        "entra",
-        "okta"
+        "http",
+        "mcp"
       ],
       "type": "string"
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "enum": [
+            "entra",
+            "okta"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "mcp",
+          "type": "string"
+        }
+      ]
     },
     "source": {
       "enum": [
@@ -2060,6 +2086,39 @@ invented HTTP path.
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
   "properties": {
     "data": {
       "additionalProperties": false,
@@ -2081,6 +2140,36 @@ invented HTTP path.
                 "minLength": 1,
                 "type": "string"
               },
+              "mcpArguments": {
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "propertyNames": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "mcpErrorCode": {
+                "maximum": 32767,
+                "minimum": -32768,
+                "type": "integer"
+              },
+              "mcpMethod": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "mcpTool": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "mcpToolIsError": {
+                "type": "boolean"
+              },
               "method": {
                 "minLength": 1,
                 "type": "string"
@@ -2089,12 +2178,27 @@ invented HTTP path.
                 "minLength": 1,
                 "type": "string"
               },
-              "provider": {
+              "protocol": {
                 "enum": [
-                  "entra",
-                  "okta"
+                  "http",
+                  "mcp"
                 ],
                 "type": "string"
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "entra",
+                      "okta"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "const": "mcp",
+                    "type": "string"
+                  }
+                ]
               },
               "requestBody": {
                 "anyOf": [
@@ -2226,6 +2330,39 @@ invented HTTP path.
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
   "properties": {
     "bodyIncludes": {
       "maxLength": 8192,
@@ -2262,6 +2399,28 @@ invented HTTP path.
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
       "type": "string"
     },
+    "mcpArguments": {
+      "additionalProperties": {
+        "$ref": "#/definitions/__schema0"
+      },
+      "propertyNames": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "mcpMethod": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "mcpTool": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
     "method": {
       "maxLength": 32,
       "minLength": 1,
@@ -2284,6 +2443,28 @@ invented HTTP path.
           "bodyIncludes": {
             "maxLength": 8192,
             "minLength": 1,
+            "type": "string"
+          },
+          "mcpArguments": {
+            "additionalProperties": {
+              "$ref": "#/definitions/__schema0"
+            },
+            "propertyNames": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "mcpMethod": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mcpTool": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
             "type": "string"
           },
           "method": {
