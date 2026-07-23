@@ -1,9 +1,11 @@
-import { problemSchema } from "@mockos/contracts";
+import { mockosMcpToolNames, problemSchema } from "@mockos/contracts";
 import {
   type MockosHttpOperation,
   mockosHttpOperationIds,
   mockosHttpOperations,
+  mockosManagementOperations,
 } from "@mockos/contracts/operations";
+import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { z } from "zod";
 
 type JsonObject = Record<string, unknown>;
@@ -22,7 +24,84 @@ export type MockosHttpOperationManifest = Record<
   MockosHttpOperationManifestEntry
 >;
 
-const jsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
+export type MockosManagementDocumentationTool = {
+  operationId: string;
+  title: string;
+  description: string;
+  requiredScopes: readonly string[];
+  effect: "read" | "mutation" | "destructive" | "outbound";
+  retry: "safe" | "idempotent" | "never";
+  secrets: {
+    request: "none" | "redact" | "display-once";
+    response: "none" | "redact" | "display-once";
+  };
+  mcp: {
+    status: "implemented";
+    annotations: {
+      readOnlyHint: boolean;
+      destructiveHint: boolean;
+      idempotentHint: boolean;
+      openWorldHint: boolean;
+    };
+    inputSchema: JsonObject;
+    outputSchema: JsonObject;
+  };
+  http: {
+    status: "implemented";
+    operationId: string;
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    path: `/${string}`;
+    successStatus: number;
+  } | null;
+};
+
+export type MockosManagementDocumentationCatalog = {
+  schemaVersion: 1;
+  generatedFrom: "packages/contracts/src/operations/management.ts";
+  placeholders: {
+    managementAccessKey: "$MOCKOS_API_KEY";
+    mcpEndpoint: "$MOCKOS_MCP_ENDPOINT";
+    protocolMockCredential: "$MOCKOS_SYNTHETIC_CREDENTIAL";
+  };
+  managementMcp: {
+    status: "implemented";
+    path: "/mcp";
+    transport: "Streamable HTTP";
+    testedProtocolVersion: "2025-11-25";
+    standaloneGet: "unsupported";
+    scopeEnforcement: "metadata-only";
+    toolCount: number;
+    tools: MockosManagementDocumentationTool[];
+  };
+  selfHostedHttp: {
+    status: "implemented";
+    basePath: "/__mockos/v1";
+    routeCount: number;
+    operations: Array<{
+      managementOperationId: string;
+      operationId: string;
+      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+      path: `/${string}`;
+      successStatus: number;
+    }>;
+  };
+  future: {
+    mockMcpServers: {
+      status: "unavailable";
+      phase: "F1";
+    };
+    mockLlmApis: {
+      status: "unavailable";
+      phase: "F2";
+    };
+    codeMode: {
+      status: "unavailable";
+      phase: "F6";
+    };
+  };
+};
+
+const openApiJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
   JSON.parse(
     JSON.stringify(
       z.toJSONSchema(schema, {
@@ -35,12 +114,22 @@ const jsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
     )
   ) as JsonObject;
 
+const mcpJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
+  JSON.parse(
+    JSON.stringify(
+      toJsonSchemaCompat(schema, {
+        strictUnions: true,
+        pipeStrategy: io,
+      })
+    )
+  ) as JsonObject;
+
 const schemaParameters = (
   schema: z.ZodType | undefined,
   location: "path" | "query"
 ): JsonObject[] => {
   if (!schema) return [];
-  const converted = jsonSchema(schema, "input");
+  const converted = openApiJsonSchema(schema, "input");
   const properties =
     converted.properties &&
     typeof converted.properties === "object" &&
@@ -78,6 +167,91 @@ export const generateMockosHttpOperationManifest = (): MockosHttpOperationManife
   return manifest;
 };
 
+export const generateMockosManagementDocumentationCatalog =
+  (): MockosManagementDocumentationCatalog => {
+    const tools = mockosMcpToolNames.map((operationId) => {
+      const operation = mockosManagementOperations[operationId];
+      const http =
+        "http" in operation
+          ? {
+              status: "implemented" as const,
+              operationId: operation.http.operationId,
+              method: operation.http.method,
+              path: operation.http.path,
+              successStatus: operation.http.successStatus,
+            }
+          : null;
+
+      return {
+        operationId,
+        title: operation.title,
+        description: operation.description,
+        requiredScopes: [...operation.requiredScopes],
+        effect: operation.effect,
+        retry: operation.retry,
+        secrets: {
+          request: operation.requestSecrets,
+          response: operation.responseSecrets,
+        },
+        mcp: {
+          status: "implemented" as const,
+          annotations: { ...operation.mcp.annotations },
+          inputSchema: mcpJsonSchema(operation.mcp.inputSchema, "input"),
+          outputSchema: mcpJsonSchema(operation.mcp.outputSchema, "output"),
+        },
+        http,
+      } satisfies MockosManagementDocumentationTool;
+    });
+
+    const httpOperations = tools
+      .flatMap((tool) => {
+        const http = tool.http;
+        return http
+          ? [
+              {
+                managementOperationId: tool.operationId,
+                operationId: http.operationId,
+                method: http.method,
+                path: http.path,
+                successStatus: http.successStatus,
+              },
+            ]
+          : [];
+      })
+      .sort((left, right) => left.operationId.localeCompare(right.operationId));
+
+    return {
+      schemaVersion: 1,
+      generatedFrom: "packages/contracts/src/operations/management.ts",
+      placeholders: {
+        managementAccessKey: "$MOCKOS_API_KEY",
+        mcpEndpoint: "$MOCKOS_MCP_ENDPOINT",
+        protocolMockCredential: "$MOCKOS_SYNTHETIC_CREDENTIAL",
+      },
+      managementMcp: {
+        status: "implemented",
+        path: "/mcp",
+        transport: "Streamable HTTP",
+        testedProtocolVersion: "2025-11-25",
+        standaloneGet: "unsupported",
+        scopeEnforcement: "metadata-only",
+        toolCount: tools.length,
+        tools,
+      },
+      selfHostedHttp: {
+        status: "implemented",
+        basePath: "/__mockos/v1",
+        routeCount: httpOperations.length,
+        operations: httpOperations,
+      },
+      future: {
+        mockMcpServers: { status: "unavailable", phase: "F1" },
+        mockLlmApis: { status: "unavailable", phase: "F2" },
+        codeMode: { status: "unavailable", phase: "F6" },
+      },
+    };
+  };
+
 export const generateMockosManagementOpenApi = (): JsonObject => {
   const paths: Record<string, Record<string, JsonObject>> = {};
 
@@ -96,7 +270,7 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
               description: "The operation completed successfully.",
               content: {
                 "application/json": {
-                  schema: jsonSchema(http.responseSchema, "output"),
+                  schema: openApiJsonSchema(http.responseSchema, "output"),
                 },
               },
             },
@@ -129,7 +303,7 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
               required: true,
               content: {
                 "application/json": {
-                  schema: jsonSchema(http.bodySchema, "input"),
+                  schema: openApiJsonSchema(http.bodySchema, "input"),
                 },
               },
             },
@@ -163,7 +337,7 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
         },
       },
       schemas: {
-        Problem: jsonSchema(problemSchema, "output"),
+        Problem: openApiJsonSchema(problemSchema, "output"),
       },
     },
   };

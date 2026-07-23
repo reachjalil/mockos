@@ -15,7 +15,7 @@
     "build": "turbo run build",
     "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm m6:parity:check && pnpm f0:drift:check && pnpm f0:guards:check && pnpm brand:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
     "dev": "pnpm --filter @mockos/worker dev",
-    "docs:check": "node scripts/check-doc-status.mjs",
+    "docs:check": "node scripts/check-doc-status.mjs && node scripts/check-doc-links.mjs && node scripts/check-mcp-docs.mjs",
     "e2e:entra-msal": "node scripts/e2e-entra-msal.mjs",
     "e2e:entra-msal-cleanup": "node scripts/e2e-entra-msal-cleanup.mjs",
     "e2e:provisioning": "node scripts/e2e-provisioning.mjs",
