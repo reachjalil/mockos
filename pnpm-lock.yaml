@@ -254,6 +254,9 @@ importers:
         specifier: 'catalog:'
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
     devDependencies:
+      '@mockos/openapi':
+        specifier: workspace:*
+        version: link:../openapi
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -266,6 +269,9 @@ importers:
       '@mockos/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       zod:
         specifier: 'catalog:'
         version: 4.4.3

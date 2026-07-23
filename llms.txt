@@ -1,0 +1,51 @@
+# mockOS
+
+> MCP-first deterministic Entra ID and Okta test infrastructure. Agents and
+> automation control synthetic environments through management MCP; applications
+> under test call the returned provider-shaped endpoints.
+
+## Start
+
+- [Documentation index](docs/README.md): task-oriented map for humans and agents.
+- [MCP-first quickstart](docs/getting-started/mcp-first.md): connect, discover,
+  create, test, assert, and clean up.
+- [Interface model](docs/concepts/interface-model.md): management MCP versus
+  provider endpoints, HTTP, CLI, console, and future mock MCP.
+- [Management tool reference](docs/reference/management-tools.md): generated
+  reference for all 15 current MCP tools.
+- [Machine operation catalog](docs/reference/management-operations.v1.json):
+  generated schemas and capability metadata.
+- [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated
+  reference for the 5 implemented HTTP routes.
+
+## Current capability boundary
+
+- Management MCP: implemented at `/mcp` with
+  15 tools over Streamable HTTP.
+- Tested MCP revision: `2025-11-25`;
+  standalone GET streaming is unsupported.
+- Self-hosted management HTTP: 5 implemented
+  routes under `/__mockos/v1`.
+- `env:ro` and `env:rw`: metadata only, not enforced scoped-key permissions.
+- F1 mock MCP servers: unavailable.
+- F2 mock LLM APIs: unavailable.
+- F3 script execution: unavailable; `NoSandbox` fails closed.
+- F6 Code Mode `search` and `execute`: unavailable and disabled.
+- CLI and typed client: unpublished.
+
+## Safety and evidence
+
+- [Known limitations](docs/known-limitations.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Threat model](docs/security/threat-model.md)
+- [Requirements traceability](docs/requirements-traceability.md)
+- Never put management keys, real identities, real provider tokens, or customer
+  data in fixtures, logs, examples, or reports.
+- Source, deployed mock acceptance, and verified-live provider evidence are
+  independent claims. No current fixture is verified-live.
+
+## More context
+
+- [Curated full agent context](llms-full.txt)
+- [Public repository README](README.md)
+- [Testing skill](skills/mockos-testing/SKILL.md)
