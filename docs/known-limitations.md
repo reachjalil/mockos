@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus sampled M6 deployment, source-only M7 management reads, and remaining limits; deliberately candid
+Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7/F0 foundations, and remaining limits; deliberately candid
 Last reviewed: 2026-07-23
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -106,7 +106,7 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
   routing. The M5 runtime interprets outbound HTTP and rate-limit responses,
   but it does not add a scheduler, recurring provisioning cycles, scheduled lifecycle
-  events, or the F-series behavior system.
+  events, or the F-series behavior runtime.
 - The authenticated M3 MCP registry contains 14 management tools, including
   `simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15. Its authenticated
   mount, local gates, hosted CI, and exact-pair controlled-target acceptance are green.
@@ -116,6 +116,16 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   The registry does not yet host
   user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
   OIDC-federated CI access.
+- F0 adds contracts and checked integration boundaries, not an enabled product
+  runtime. `BehaviorSpec` is a version-one schema only: there is no behavior evaluator,
+  MCP-mock transport, LLM planner/renderer, sequence state, template engine, or script
+  executor yet. The OpenAPI document contains exactly five already-implemented
+  self-hosted HTTP control routes; the other ten MCP operations are deliberately absent
+  from the HTTP client. `env:ro`/`env:rw` are contract metadata until F4 implements
+  scoped-key/role/ACL enforcement. Code Mode has no Worker import, flag, `LOADER`, or
+  `worker_loaders` binding, and `NoSandbox` always rejects JavaScript. The client,
+  Code Mode, and sandbox packages remain private workspaces; npm distribution is not
+  qualified by their local builds.
 - The additive M7 management-read substrate is source-only. Application and scenario
   pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
   exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,

@@ -2,37 +2,18 @@ import {
   type ApplicationRegistration,
   type AssertionResult,
   type AssertionSpec,
-  applicationRegistrationSchema,
-  assertionResultSchema,
-  assertRequestsToolInputSchema,
   type ClearScenarioResult,
   type CreateApplicationInput,
   type CreateEnvironmentToolInput,
-  clearScenarioResultSchema,
-  clearScenarioToolInputSchema,
-  configureEnvironmentToolInputSchema,
-  createApplicationToolInputSchema,
-  createEnvironmentToolInputSchema,
-  currentEnvironmentCursorSchema,
   type DeleteEnvironmentResult,
-  deleteEnvironmentResultSchema,
   type EnvironmentConfig,
   type EnvironmentPatch,
-  emptyToolInputSchema,
-  envelopeSchema,
-  environmentConfigSchema,
-  environmentListSchema,
-  environmentRefToolInputSchema,
-  getRequestLogToolInputSchema,
   type IdentitySeed,
   type LifecycleAction,
   type LifecycleResult,
-  lifecycleResultSchema,
   type MintedToken,
   type MintTokenRequest,
   type MockosMcpToolName,
-  mintedTokenSchema,
-  mintTokenToolInputSchema,
   type Problem,
   type ProvisioningRun,
   problemSchema,
@@ -40,27 +21,16 @@ import {
   type RequestLogPage,
   type RequestLogQuery,
   type RunProvisioningCycleToolInput,
-  requestLogPageSchema,
-  runProvisioningCycleToolInputSchema,
   type ScenarioSpec,
   type SeedIdentitiesResult,
-  scenarioSpecSchema,
-  seedIdentitiesResultSchema,
-  seedIdentitiesToolInputSchema,
-  setCurrentEnvironmentToolInputSchema,
-  setScenarioToolInputSchema,
-  simulateLifecycleToolInputSchema,
   type WellKnownUrls,
-  wellKnownUrlsSchema,
 } from "@mockos/contracts";
+import { mockosManagementOperations } from "@mockos/contracts/operations";
 import type {
   McpServer,
   RegisteredTool,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  CallToolResult,
-  ToolAnnotations,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export type MockosToolRequestContext = {
   accountId: string;
@@ -161,36 +131,6 @@ export class MockosToolError extends Error {
     this.problem = problem;
   }
 }
-
-const readOnlyAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} satisfies ToolAnnotations;
-
-const mutationAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: false,
-} satisfies ToolAnnotations;
-
-const outboundMutationAnnotations = {
-  ...mutationAnnotations,
-  destructiveHint: true,
-  openWorldHint: true,
-} satisfies ToolAnnotations;
-
-const idempotentMutationAnnotations = {
-  ...mutationAnnotations,
-  idempotentHint: true,
-} satisfies ToolAnnotations;
-
-const destructiveAnnotations = {
-  ...mutationAnnotations,
-  destructiveHint: true,
-} satisfies ToolAnnotations;
 
 type ToolHandlerExtra = {
   requestId: string | number;
@@ -304,12 +244,9 @@ export const registerMockosTools = (
   const createEnvironment = server.registerTool(
     "create_environment",
     {
-      title: "Create mock identity environment",
-      description:
-        "Creates an Entra ID or Okta environment and selects it as this session's current environment.",
-      inputSchema: createEnvironmentToolInputSchema,
-      outputSchema: envelopeSchema(environmentConfigSchema),
-      annotations: mutationAnnotations,
+      title: mockosManagementOperations.create_environment.title,
+      description: mockosManagementOperations.create_environment.description,
+      ...mockosManagementOperations.create_environment.mcp,
     },
     async (input, extra) => {
       const context = requestContext(dependencies, extra);
@@ -324,12 +261,9 @@ export const registerMockosTools = (
   const listEnvironments = server.registerTool(
     "list_environments",
     {
-      title: "List mock identity environments",
-      description:
-        "Lists environments available to the account and identifies this session's current environment.",
-      inputSchema: emptyToolInputSchema,
-      outputSchema: envelopeSchema(environmentListSchema),
-      annotations: readOnlyAnnotations,
+      title: mockosManagementOperations.list_environments.title,
+      description: mockosManagementOperations.list_environments.description,
+      ...mockosManagementOperations.list_environments.mcp,
     },
     async (_input, extra) => {
       const context = requestContext(dependencies, extra);
@@ -343,12 +277,9 @@ export const registerMockosTools = (
   const deleteEnvironment = server.registerTool(
     "delete_environment",
     {
-      title: "Delete mock identity environment",
-      description:
-        "Permanently deletes an environment. Omitting environmentId targets the current environment.",
-      inputSchema: environmentRefToolInputSchema,
-      outputSchema: envelopeSchema(deleteEnvironmentResultSchema),
-      annotations: destructiveAnnotations,
+      title: mockosManagementOperations.delete_environment.title,
+      description: mockosManagementOperations.delete_environment.description,
+      ...mockosManagementOperations.delete_environment.mcp,
     },
     async ({ environmentId }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -372,12 +303,9 @@ export const registerMockosTools = (
   const configureEnvironment = server.registerTool(
     "configure_environment",
     {
-      title: "Configure mock identity environment",
-      description:
-        "Updates mutable environment settings. Omitting environmentId targets the current environment.",
-      inputSchema: configureEnvironmentToolInputSchema,
-      outputSchema: envelopeSchema(environmentConfigSchema),
-      annotations: idempotentMutationAnnotations,
+      title: mockosManagementOperations.configure_environment.title,
+      description: mockosManagementOperations.configure_environment.description,
+      ...mockosManagementOperations.configure_environment.mcp,
     },
     async ({ environmentId, ...patch }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -395,12 +323,9 @@ export const registerMockosTools = (
   const seedIdentities = server.registerTool(
     "seed_identities",
     {
-      title: "Seed users and groups",
-      description:
-        "Creates users and groups in an environment. Omitting environmentId targets the current environment.",
-      inputSchema: seedIdentitiesToolInputSchema,
-      outputSchema: envelopeSchema(seedIdentitiesResultSchema),
-      annotations: mutationAnnotations,
+      title: mockosManagementOperations.seed_identities.title,
+      description: mockosManagementOperations.seed_identities.description,
+      ...mockosManagementOperations.seed_identities.mcp,
     },
     async ({ environmentId, users, groups }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -418,12 +343,9 @@ export const registerMockosTools = (
   const createApplication = server.registerTool(
     "create_application",
     {
-      title: "Create application registration",
-      description:
-        "Registers an OAuth/OIDC client in an environment. Omitting environmentId targets the current environment.",
-      inputSchema: createApplicationToolInputSchema,
-      outputSchema: envelopeSchema(applicationRegistrationSchema),
-      annotations: mutationAnnotations,
+      title: mockosManagementOperations.create_application.title,
+      description: mockosManagementOperations.create_application.description,
+      ...mockosManagementOperations.create_application.mcp,
     },
     async ({ environmentId, ...input }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -441,12 +363,9 @@ export const registerMockosTools = (
   const mintToken = server.registerTool(
     "mint_token",
     {
-      title: "Mint identity token",
-      description:
-        "Mints a token, optionally with a deterministic broken-token variant, in the current or named environment.",
-      inputSchema: mintTokenToolInputSchema,
-      outputSchema: envelopeSchema(mintedTokenSchema),
-      annotations: mutationAnnotations,
+      title: mockosManagementOperations.mint_token.title,
+      description: mockosManagementOperations.mint_token.description,
+      ...mockosManagementOperations.mint_token.mcp,
     },
     async ({ environmentId, ...input }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -464,12 +383,9 @@ export const registerMockosTools = (
   const runProvisioningCycle = server.registerTool(
     "run_provisioning_cycle",
     {
-      title: "Run outbound provisioning cycle",
-      description:
-        "Starts a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target.",
-      inputSchema: runProvisioningCycleToolInputSchema,
-      outputSchema: envelopeSchema(provisioningRunSchema),
-      annotations: outboundMutationAnnotations,
+      title: mockosManagementOperations.run_provisioning_cycle.title,
+      description: mockosManagementOperations.run_provisioning_cycle.description,
+      ...mockosManagementOperations.run_provisioning_cycle.mcp,
     },
     async ({ environmentId, ...input }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -497,12 +413,9 @@ export const registerMockosTools = (
   const setScenario = server.registerTool(
     "set_scenario",
     {
-      title: "Set deterministic failure scenario",
-      description:
-        "Creates or replaces an injected behavior at an environment injection point.",
-      inputSchema: setScenarioToolInputSchema,
-      outputSchema: envelopeSchema(scenarioSpecSchema),
-      annotations: idempotentMutationAnnotations,
+      title: mockosManagementOperations.set_scenario.title,
+      description: mockosManagementOperations.set_scenario.description,
+      ...mockosManagementOperations.set_scenario.mcp,
     },
     async ({ environmentId, ...scenario }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -520,12 +433,9 @@ export const registerMockosTools = (
   const clearScenario = server.registerTool(
     "clear_scenario",
     {
-      title: "Clear deterministic failure scenarios",
-      description:
-        "Clears one scenario by id, or all scenarios when scenarioId is omitted.",
-      inputSchema: clearScenarioToolInputSchema,
-      outputSchema: envelopeSchema(clearScenarioResultSchema),
-      annotations: idempotentMutationAnnotations,
+      title: mockosManagementOperations.clear_scenario.title,
+      description: mockosManagementOperations.clear_scenario.description,
+      ...mockosManagementOperations.clear_scenario.mcp,
     },
     async ({ environmentId, scenarioId }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -543,12 +453,9 @@ export const registerMockosTools = (
   const getRequestLog = server.registerTool(
     "get_request_log",
     {
-      title: "Get request log",
-      description:
-        "Returns a filtered page of inbound, outbound, or control traffic for an environment.",
-      inputSchema: getRequestLogToolInputSchema,
-      outputSchema: envelopeSchema(requestLogPageSchema),
-      annotations: readOnlyAnnotations,
+      title: mockosManagementOperations.get_request_log.title,
+      description: mockosManagementOperations.get_request_log.description,
+      ...mockosManagementOperations.get_request_log.mcp,
     },
     async ({ environmentId, ...query }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -566,12 +473,9 @@ export const registerMockosTools = (
   const assertRequests = server.registerTool(
     "assert_requests",
     {
-      title: "Assert captured requests",
-      description:
-        "Evaluates a deterministic assertion against captured environment traffic.",
-      inputSchema: assertRequestsToolInputSchema,
-      outputSchema: envelopeSchema(assertionResultSchema),
-      annotations: readOnlyAnnotations,
+      title: mockosManagementOperations.assert_requests.title,
+      description: mockosManagementOperations.assert_requests.description,
+      ...mockosManagementOperations.assert_requests.mcp,
     },
     async ({ environmentId, ...assertion }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -589,12 +493,9 @@ export const registerMockosTools = (
   const simulateLifecycle = server.registerTool(
     "simulate_lifecycle",
     {
-      title: "Simulate provider lifecycle transition",
-      description:
-        "Applies an Entra or Okta user lifecycle action, including token revocation, in the current or named environment.",
-      inputSchema: simulateLifecycleToolInputSchema,
-      outputSchema: envelopeSchema(lifecycleResultSchema),
-      annotations: destructiveAnnotations,
+      title: mockosManagementOperations.simulate_lifecycle.title,
+      description: mockosManagementOperations.simulate_lifecycle.description,
+      ...mockosManagementOperations.simulate_lifecycle.mcp,
     },
     async ({ environmentId, userId, action }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -612,12 +513,9 @@ export const registerMockosTools = (
   const getWellKnownUrls = server.registerTool(
     "get_wellknown_urls",
     {
-      title: "Get provider endpoint URLs",
-      description:
-        "Returns issuer, discovery, OAuth/OIDC, JWKS, and SCIM URLs for an environment.",
-      inputSchema: environmentRefToolInputSchema,
-      outputSchema: envelopeSchema(wellKnownUrlsSchema),
-      annotations: readOnlyAnnotations,
+      title: mockosManagementOperations.get_wellknown_urls.title,
+      description: mockosManagementOperations.get_wellknown_urls.description,
+      ...mockosManagementOperations.get_wellknown_urls.mcp,
     },
     async ({ environmentId }, extra) => {
       const context = requestContext(dependencies, extra);
@@ -635,12 +533,9 @@ export const registerMockosTools = (
   const setCurrentEnvironment = server.registerTool(
     "set_current_environment",
     {
-      title: "Select current environment",
-      description:
-        "Selects the environment used when other tools omit environmentId; pass null to clear the cursor.",
-      inputSchema: setCurrentEnvironmentToolInputSchema,
-      outputSchema: envelopeSchema(currentEnvironmentCursorSchema),
-      annotations: idempotentMutationAnnotations,
+      title: mockosManagementOperations.set_current_environment.title,
+      description: mockosManagementOperations.set_current_environment.description,
+      ...mockosManagementOperations.set_current_environment.mcp,
     },
     async ({ environmentId }, extra) => {
       const context = requestContext(dependencies, extra);
