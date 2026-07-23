@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { assertBehaviorSpecBounds, jsonValueSchema } from "./behavior";
+import { mockMcpCapabilityNameSchema } from "./mock-mcp";
 import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
+export * from "./mock-mcp";
 export * from "./provisioning";
 export * from "./scim";
 
@@ -283,12 +286,30 @@ export const scenarioListPageSchema = z
 export type ScenarioListPage = z.infer<typeof scenarioListPageSchema>;
 
 export const requestLogSourceSchema = z.enum(["inbound", "outbound", "control"]);
+export const requestLogProviderSchema = z.union([providerIdSchema, z.literal("mcp")]);
+export const requestLogProtocolSchema = z.enum(["http", "mcp"]);
+const requestLogMcpArgumentsValueSchema = z.record(
+  z.string().min(1).max(256),
+  jsonValueSchema
+);
+export const requestLogMcpArgumentsSchema: z.ZodType<Record<string, unknown>> =
+  z.preprocess((input) => {
+    if (input !== undefined) {
+      assertBehaviorSpecBounds(input, {
+        maximumBytes: 256 * 1024,
+        maximumDepth: 32,
+        maximumNodes: 20_000,
+      });
+    }
+    return input;
+  }, requestLogMcpArgumentsValueSchema);
 export const requestLogEntrySchema = z
   .object({
     id: z.string().min(1),
     timestamp: z.iso.datetime(),
     source: requestLogSourceSchema,
-    provider: providerIdSchema,
+    provider: requestLogProviderSchema,
+    protocol: requestLogProtocolSchema.optional(),
     method: z.string().min(1),
     path: z.string().min(1),
     requestHeaders: z.record(z.string(), z.string()),
@@ -298,13 +319,46 @@ export const requestLogEntrySchema = z
     responseBody: z.string().nullable(),
     durationMs: z.number().int().min(0),
     correlationId: z.string().min(1),
+    mcpMethod: z.string().min(1).max(256).optional(),
+    mcpTool: mockMcpCapabilityNameSchema.optional(),
+    mcpArguments: requestLogMcpArgumentsSchema.optional(),
+    mcpErrorCode: z.number().int().min(-32_768).max(32_767).optional(),
+    mcpToolIsError: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((entry, context) => {
+    const hasMcpMetadata =
+      entry.mcpMethod !== undefined ||
+      entry.mcpTool !== undefined ||
+      entry.mcpArguments !== undefined ||
+      entry.mcpErrorCode !== undefined ||
+      entry.mcpToolIsError !== undefined;
+    if (hasMcpMetadata && entry.protocol !== "mcp") {
+      context.addIssue({
+        code: "custom",
+        message: "MCP request metadata requires protocol mcp.",
+        path: ["protocol"],
+      });
+    }
+    if (
+      (entry.mcpTool !== undefined ||
+        entry.mcpArguments !== undefined ||
+        entry.mcpToolIsError !== undefined) &&
+      entry.mcpMethod !== "tools/call"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "MCP tool metadata requires method tools/call.",
+        path: ["mcpMethod"],
+      });
+    }
+  });
 export type RequestLogEntry = z.infer<typeof requestLogEntrySchema>;
 
 const assertionMethodSchema = z.string().trim().min(1).max(32);
 const assertionPathSchema = z.string().min(1).max(2048);
 const assertionBodyIncludesSchema = z.string().min(1).max(8192);
+const assertionMcpMethodSchema = z.string().min(1).max(256);
 
 const assertionCountSchema = z
   .object({
@@ -353,6 +407,9 @@ export const assertionSequenceStepSchema = z
     status: z.number().int().min(100).max(599).optional(),
     bodyIncludes: assertionBodyIncludesSchema.optional(),
     responseBodyIncludes: assertionBodyIncludesSchema.optional(),
+    mcpMethod: assertionMcpMethodSchema.optional(),
+    mcpTool: mockMcpCapabilityNameSchema.optional(),
+    mcpArguments: requestLogMcpArgumentsSchema.optional(),
   })
   .strict()
   .refine((step) => Object.values(step).some((value) => value !== undefined), {
@@ -368,6 +425,9 @@ export const assertionSpecSchema = z
     status: z.number().int().min(100).max(599).optional(),
     bodyIncludes: assertionBodyIncludesSchema.optional(),
     responseBodyIncludes: assertionBodyIncludesSchema.optional(),
+    mcpMethod: assertionMcpMethodSchema.optional(),
+    mcpTool: mockMcpCapabilityNameSchema.optional(),
+    mcpArguments: requestLogMcpArgumentsSchema.optional(),
     sequence: z.array(assertionSequenceStepSchema).min(2).max(100).optional(),
     count: assertionCountSchema.default({ atLeast: 1 }),
   })
@@ -560,10 +620,13 @@ export type ClearScenarioResult = z.infer<typeof clearScenarioResultSchema>;
 export const requestLogQuerySchema = z
   .object({
     source: requestLogSourceSchema.optional(),
-    provider: providerIdSchema.optional(),
+    provider: requestLogProviderSchema.optional(),
+    protocol: requestLogProtocolSchema.optional(),
     method: z.string().trim().min(1).max(32).optional(),
     path: z.string().min(1).max(2048).optional(),
     status: z.number().int().min(100).max(599).optional(),
+    mcpMethod: assertionMcpMethodSchema.optional(),
+    mcpTool: mockMcpCapabilityNameSchema.optional(),
     limit: z.number().int().min(1).max(1_000).default(100),
     cursor: z.string().min(1).max(512).optional(),
   })

@@ -86,11 +86,11 @@ afterEach(() => {
 describe("core substrate", () => {
   it("applies ordered PRAGMA user_version migrations idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(5);
-    expect(getSchemaVersion(store)).toBe(5);
-    expect(applyMigrations(store)).toBe(5);
+    expect(applyMigrations(store)).toBe(6);
+    expect(getSchemaVersion(store)).toBe(6);
+    expect(applyMigrations(store)).toBe(6);
     expect(
       store.get<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"
@@ -140,7 +140,7 @@ describe("core substrate", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(5);
+    expect(applyMigrations(store)).toBe(6);
     expect(
       store.get<{ status: string; target_ref: string | null }>(
         "SELECT status, target_ref FROM provisioning_runs WHERE id = ?",

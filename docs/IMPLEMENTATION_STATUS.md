@@ -1,6 +1,7 @@
 # Implementation status
 
-Status: Accepted M0-M3/M5 and sampled M6 evidence retained; F0 foundations and M7 management reads are source-only; bounded Entra MSAL Node local X/Q passed
+Status: Accepted M0-M3/M5 and sampled M6 evidence retained; M7/F0 are
+source-complete, F1 is locally partial, and bounded Entra MSAL Node local X/Q passed
 Last reviewed: 2026-07-26
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
@@ -12,14 +13,16 @@ acceptance record; it does not inherit M3 evidence or qualify the guarded deploy
 workflow. M6 has its own exact-source, CI, version, and sampled workers.dev acceptance
 record; it does not inherit M3/M5 evidence or qualify the guarded Cloudflare-credential
 deployment workflow. The additive M7 application/scenario management-read substrate is
-source-complete in the repository revision carrying this document, but has no hosted CI,
-deployed-version, or console acceptance evidence yet. The additive Entra MSAL Node
-tranche is a separate source candidate with local actual-network and
-official-client evidence only. The F0 contracts, management operation registry,
-checked OpenAPI/client artifacts, and disabled wrapper boundaries also pass the full
-local repository gate in the revision carrying this document. F0 has no hosted CI,
-deployment, or distribution evidence yet and does not activate an experimental
-runtime.
+source-complete in the repository revision carrying this document, but has no hosted
+CI, deployed-version, or console acceptance evidence yet. The additive Entra MSAL Node
+tranche is a separate source candidate with local actual-network and official-client
+evidence only. The F0 contracts, management operation registry, checked OpenAPI/client
+artifacts, and disabled wrapper boundaries also pass the full local repository gate in
+the revision carrying this document. F0 has no hosted CI, deployment, or distribution
+evidence yet and does not activate an experimental runtime. The
+[F1 foundation](./f-series/f1-mcp-foundation.md) adds locally tested contracts,
+revisioned state/session persistence, declarative evaluation, and MCP-aware request
+assertions, but no mock-MCP transport or Worker route yet.
 
 Evidence levels are intentionally separate. The
 [documentation index](./README.md) defines designed (D), implemented (I),
@@ -34,6 +37,7 @@ milestone is V or P.
 | M0 workspace substrate | Complete locally and in hosted CI through M3 | The repository-wide format, types, tests, build, Wrangler-shape, and production/staging dry-run gates pass at exact M3 candidate `8645f405d5e3b922c30d51339b8b27f9fe30d93e`; see [CI run 29886610480](https://github.com/reachjalil/mockos/actions/runs/29886610480). |
 | Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](../packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
 | F0 contract, OpenAPI, and client foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](../packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](../packages/contracts/src/operations/management.ts) covers all 15 live MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](../packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](../packages/client/src/generated.ts). The fetch-based [client](../packages/client/src/client.ts), fail-closed [Code Mode wrapper](../packages/codemode/src/index.ts), and [`NoSandbox`](../packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the three workspace packages remain private pending distribution/runtime qualification. |
+| F1 mock-MCP foundation | Partial source tranche; full local gate green | Strict [mock-MCP contracts](../packages/contracts/src/mock-mcp.ts), bounded trust-boundary and supported-JSON-Schema validation, [declarative evaluation](../packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/session tables, an atomic [repository](../packages/core/src/mock-mcp/repository.ts), and exact MCP request assertions pass focused suites and the full local repository gate. Replacement invalidates old state and sessions; state is bounded on write/read; sequences use an explicit expected-state commit so stale concurrent plans fail before writing; scripts fail closed. There is no `@mockos/mcp-mock` adapter, public route, management tool, official-client Worker evidence, hosted CI, or deployment in this tranche. |
 | Synchronous SQL store | Accepted through the tested M5 slice | The Node [adapter](../packages/testkit/src/sql-store.ts) and [unit test](../packages/testkit/src/testkit.test.ts) share the synchronous store contract exercised through SQLite Durable Object Worker integrations. M5 adds append-only provisioning target, staged-run target, run/step, and watermark state, including one active run per app/target; local gates and the controlled-target hosted run passed. |
 | Core migrations and directory repositories | Accepted through M5; bounded M6 source suite and deployed sample green | The accepted [core substrate](../packages/core/src/core.test.ts), [directory/lifecycle](../packages/core/src/directory-lifecycle.test.ts), [Okta OAuth](../packages/core/src/okta.test.ts), and [scenario/log](../packages/core/src/scenario-log.test.ts) cover the M3 engine. The M5 [provisioning planner/interpreter](../packages/core/src/provisioning) passed focused/full and controlled-target gates. M6 focused tests cover the bounded [Classic Authn service](../packages/core/src/authn/okta-authn.ts), deterministic broken-token mutations, active/successor key handling, private-key scrubbing, bounded retention, and stale-instance/sign-rotate races. Authn state retrieval uses a sliding five-minute expiry while session capabilities retain their fixed five-minute issuance expiry. Each table is capped at 10,000 retained rows and each User at 32 retained rows per kind; ordered oldest-expiry eviction and a 256-row-per-table issuance GC pass are index-backed without advancing schema v5, preserving rollback compatibility. The [M6 deployed sample](./evidence/m6-workers-dev-smoke.md) exercises the externally observable slices, not every source-only retention/concurrency/security assertion. |
 | Deterministic test seams | Complete through M3; bounded M6 token/key paths accepted | The [clock/RNG](../packages/testkit/src/determinism.ts) and persisted [scenario service](../packages/core/src/scenario/scenario-service.ts) have deterministic unit coverage. The M6 token stream adds exact-only rotation and claim-skew actions with fixed broken-token mutations; the deployed sample exercised rotation, skew, and every mutation. Production signing-key material remains cryptographically generated, and deeper deterministic assertions remain source evidence. |
@@ -158,4 +162,6 @@ encoding, response/problem validation, abort forwarding, exact route/scope agree
 all six behavior variants, disabled Code Mode, and fail-closed `NoSandbox`. The full
 local `pnpm check` gate, including all existing Worker/M suites and Wrangler dry-run,
 is green. Hosted CI, merge, deployment, package publication, Worker Loader evidence,
-F1-F3 runtimes, F4 authorization/audit, and F6 Code Mode activation remain pending.
+The F1 protocol-independent foundation is now present, but the F1 transport/runtime
+exit gate, F2-F3 runtimes, F4 authorization/audit, and F6 Code Mode activation remain
+pending.

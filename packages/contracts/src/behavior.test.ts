@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { behaviorSpecSchema } from "./behavior";
+import {
+  assertBehaviorSpecBounds,
+  BehaviorSpecBoundsError,
+  behaviorSpecSchema,
+  parseBehaviorSpec,
+} from "./behavior";
 import { DEFAULT_F_SERIES_FEATURE_FLAGS, fSeriesFeatureFlagsSchema } from "./features";
 
 describe("F-series behavior contract", () => {
@@ -104,6 +109,32 @@ describe("F-series behavior contract", () => {
         onFailure: "fallback",
       })
     ).toThrow(/requires a fallback/);
+  });
+
+  it("bounds bytes, tree depth, nodes, and cycles before recursive parsing", () => {
+    const deeplyNested: Record<string, unknown> = {};
+    let cursor = deeplyNested;
+    for (let index = 0; index < 40; index += 1) {
+      const next: Record<string, unknown> = {};
+      cursor.next = next;
+      cursor = next;
+    }
+    expect(() => parseBehaviorSpec(deeplyNested)).toThrow(BehaviorSpecBoundsError);
+    expect(() =>
+      assertBehaviorSpecBounds(
+        { values: Array.from({ length: 10 }, () => 1) },
+        {
+          maximumNodes: 5,
+        }
+      )
+    ).toThrow(/node limit/);
+    expect(() =>
+      assertBehaviorSpecBounds({ text: "large" }, { maximumBytes: 4 })
+    ).toThrow(/byte limit/);
+
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => assertBehaviorSpecBounds(cycle)).toThrow(/acyclic/);
   });
 });
 describe("F-series feature defaults", () => {

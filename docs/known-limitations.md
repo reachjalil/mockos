@@ -142,9 +142,11 @@ slice has sampled H evidence, but no current fixture is V or P.
   user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
   OIDC-federated CI access.
 - F0 adds contracts and checked integration boundaries, not an enabled product
-  runtime. `BehaviorSpec` is a version-one schema only: there is no behavior evaluator,
-  MCP-mock transport, LLM planner/renderer, sequence state, template engine, or script
-  executor yet. The OpenAPI document contains exactly five already-implemented
+  runtime. The partial F1 foundation now adds bounded behavior parsing, a declarative
+  evaluator, revisioned mock-MCP configuration and sequence state, session tables, and
+  MCP-aware request assertions. There is still no MCP-mock transport or Worker route,
+  LLM planner/renderer, production script executor, management operation, or official
+  client conformance evidence. The OpenAPI document contains exactly five already-implemented
   self-hosted HTTP control routes; the other ten MCP operations are deliberately absent
   from the HTTP client. `env:ro`/`env:rw` are contract metadata until F4 implements
   scoped-key/role/ACL enforcement. Code Mode has no Worker import, flag, `LOADER`, or

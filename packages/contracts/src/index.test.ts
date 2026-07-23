@@ -16,6 +16,7 @@ import {
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  requestLogEntrySchema,
   SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
@@ -88,6 +89,48 @@ describe("wire contracts", () => {
     });
     expect(getRequestLogToolInputSchema.parse({}).limit).toBe(100);
     expect(assertRequestsToolInputSchema.parse({}).count).toEqual({ atLeast: 1 });
+  });
+
+  it("accepts only bounded JSON objects as MCP request arguments", () => {
+    const base = {
+      id: "request-1",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "mcp",
+      protocol: "mcp",
+      method: "POST",
+      path: "/mcp-mock/server",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: 200,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: 1,
+      correlationId: "correlation-1",
+      mcpMethod: "tools/call",
+      mcpTool: "lookup",
+    } as const;
+    expect(
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpArguments: { nested: { values: [null, true, 42, "text"] } },
+      }).mcpArguments
+    ).toEqual({ nested: { values: [null, true, 42, "text"] } });
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpArguments: { invalid: 1n },
+      })
+    ).toThrow();
+
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() =>
+      assertionSpecSchema.parse({
+        mcpArguments: cyclic,
+        count: { atLeast: 1 },
+      })
+    ).toThrow();
   });
 
   it("bounds management pages and keeps application listings secret-free", () => {
