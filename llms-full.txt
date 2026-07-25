@@ -48,9 +48,11 @@ Repository path: `README.md`
 > outputs, headers, credentials, tool inputs, stream frame/byte counts, `planId`, and
 > `requestHash` are not captured. Configured midstream errors, the OpenAI Responses
 > API, Anthropic betas, conversation state, actual-network/hosted qualification, and
-> complete F2 remain unavailable. The guarded GitHub promotion
-> workflows remain unqualified. This is not yet
-> a stable npm release or a production-SLA service. See the
+> complete F2 remain unavailable. Separate local official-client
+> candidates qualify `@azure/msal-node` 5.4.2 and `@okta/okta-auth-js` 8.0.1 through
+> D/I/S/X/Q only; neither has H/V/P evidence. The guarded GitHub promotion workflows
+> remain unqualified. This is not yet a stable npm release or a production-SLA
+> service. See the
 > [evidence ledger](docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -110,6 +112,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - An Okta OIDC profile covering discovery, hosted authorization code + S256 PKCE,
   refresh exchange, token introspection and revocation, and RFC 8628 device
   authorization in local tests
+- Explicit confidential and public OAuth application registrations. Public clients
+  have no stored or returned secret, cannot use `client_credentials`, can redeem code
+  and refresh grants without a secret, and can revoke only their own tokens;
+  introspection remains confidential-client-only
 - Entra and Okta refresh-token rotation with scope narrowing, replay-family
   invalidation, and lifecycle-driven access/refresh revocation
 - An accepted SCIM 2.0 Users/Groups surface at `/scim/v2`, bounded
@@ -185,6 +191,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
   Configured midstream errors, OpenAI Responses, Anthropic betas,
   runtime/conversation state, reset, Wrangler-network or deployed conformance, and
   Cloud pinning remain unavailable
+- Local actual-network official-client qualifications for MSAL Node 5.4.2 as an Entra
+  confidential client and Okta Auth JS 8.0.1 as an Okta public client. Both use MCP
+  for setup, observation, lifecycle, and cleanup and traverse an owned local Wrangler
+  HTTPS process; each is D/I/S/X/Q evidence only
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -223,18 +233,15 @@ npm publication, or live-provider parity. M6 has a separate
 for all six bounded slices. It does not promote the generated case index or fixture
 corpora to corpus-wide deployed or verified-live parity.
 
-## Evidence tiers
+## Evidence levels
 
-- **Source** means an exact revision has linked automated local and/or hosted-CI
-  evidence. Hosted CI is still source evidence.
-- **Deployed** means an exact source revision and exact mockOS deployment/version have
-  a recorded smoke or acceptance run.
-- **Verified-live** is reserved for sanitized, independently reviewed comparison with
-  a real Entra ID tenant or Okta organization. No current fixture or milestone has
-  `verified-live` status.
-
-Source, deployed, and verified-live are independent claims; evidence at one tier never
-silently promotes another.
+mockOS records designed (D), implemented (I), source-tested (S),
+integration-tested (X), SDK/client-qualified (Q), hosted-smoke (H), verified-live (V),
+and production-ready (P) independently. Local official-client execution can establish
+X/Q without H. Hosted CI remains S; H requires an exact remote serving version and
+recorded smoke. V requires sanitized, reviewed comparison with a real provider. No
+current fixture or milestone is V or P. See the
+[documentation index](docs/README.md) for the exact definitions.
 
 ## Local verification
 
@@ -247,6 +254,9 @@ pnpm check
 
 The concrete [local curl walkthrough](docs/quickstarts/curl.md) uses the implemented
 control and identity-protocol routes. The
+[Entra MSAL Node](docs/quickstarts/entra-msal-node.md) and
+[Okta Auth JS](docs/quickstarts/okta-auth-js-node.md) guides reproduce the two
+bounded local official-client paths. The
 [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) configures a mock LLM
 through MCP and calls its bounded provider data plane; the
 [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md) does the same for the
@@ -1454,6 +1464,38 @@ invented HTTP path.
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "clientType": {
+            "const": "public"
+          }
+        },
+        "required": [
+          "clientType"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "clientSecret"
+          ]
+        },
+        "properties": {
+          "grantTypes": {
+            "items": {
+              "enum": [
+                "authorization_code",
+                "refresh_token",
+                "urn:ietf:params:oauth:grant-type:device_code"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "appRoles": {
       "default": [],
@@ -1473,6 +1515,14 @@ invented HTTP path.
     "clientSecret": {
       "maxLength": 1024,
       "minLength": 8,
+      "type": "string"
+    },
+    "clientType": {
+      "default": "confidential",
+      "enum": [
+        "confidential",
+        "public"
+      ],
       "type": "string"
     },
     "environmentId": {
@@ -1541,88 +1591,168 @@ invented HTTP path.
   "additionalProperties": false,
   "properties": {
     "data": {
-      "additionalProperties": false,
-      "properties": {
-        "appRoles": {
-          "default": [],
-          "items": {
-            "maxLength": 128,
-            "minLength": 1,
-            "type": "string"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "appRoles": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 100,
+              "type": "array"
+            },
+            "clientId": {
+              "minLength": 3,
+              "type": "string"
+            },
+            "clientSecret": {
+              "minLength": 8,
+              "type": "string"
+            },
+            "clientType": {
+              "const": "confidential",
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "type": "string"
+            },
+            "grantTypes": {
+              "items": {
+                "enum": [
+                  "authorization_code",
+                  "refresh_token",
+                  "client_credentials",
+                  "urn:ietf:params:oauth:grant-type:device_code"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "groupClaimsMode": {
+              "enum": [
+                "none",
+                "security",
+                "all"
+              ],
+              "type": "string"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            "redirectUris": {
+              "items": {
+                "format": "uri",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
           },
-          "maxItems": 100,
-          "type": "array"
-        },
-        "clientId": {
-          "minLength": 3,
-          "type": "string"
-        },
-        "clientSecret": {
-          "minLength": 8,
-          "type": "string"
-        },
-        "createdAt": {
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
-          "type": "string"
-        },
-        "grantTypes": {
-          "default": [
-            "authorization_code",
-            "refresh_token"
+          "required": [
+            "name",
+            "id",
+            "clientId",
+            "redirectUris",
+            "appRoles",
+            "groupClaimsMode",
+            "createdAt",
+            "clientType",
+            "clientSecret",
+            "grantTypes"
           ],
-          "items": {
-            "enum": [
-              "authorization_code",
-              "refresh_token",
-              "client_credentials",
-              "urn:ietf:params:oauth:grant-type:device_code"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
+          "type": "object"
         },
-        "groupClaimsMode": {
-          "default": "none",
-          "enum": [
-            "none",
-            "security",
-            "all"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "appRoles": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 100,
+              "type": "array"
+            },
+            "clientId": {
+              "minLength": 3,
+              "type": "string"
+            },
+            "clientType": {
+              "const": "public",
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "type": "string"
+            },
+            "grantTypes": {
+              "items": {
+                "enum": [
+                  "authorization_code",
+                  "refresh_token",
+                  "urn:ietf:params:oauth:grant-type:device_code"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "groupClaimsMode": {
+              "enum": [
+                "none",
+                "security",
+                "all"
+              ],
+              "type": "string"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            "redirectUris": {
+              "items": {
+                "format": "uri",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "name",
+            "id",
+            "clientId",
+            "redirectUris",
+            "appRoles",
+            "groupClaimsMode",
+            "createdAt",
+            "clientType",
+            "grantTypes"
           ],
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "name": {
-          "maxLength": 120,
-          "minLength": 1,
-          "type": "string"
-        },
-        "redirectUris": {
-          "items": {
-            "format": "uri",
-            "type": "string"
-          },
-          "maxItems": 50,
-          "minItems": 1,
-          "type": "array"
+          "type": "object"
         }
-      },
-      "required": [
-        "name",
-        "redirectUris",
-        "grantTypes",
-        "appRoles",
-        "groupClaimsMode",
-        "id",
-        "clientId",
-        "clientSecret",
-        "createdAt"
-      ],
-      "type": "object"
+      ]
     },
     "meta": {
       "additionalProperties": false,
@@ -9895,8 +10025,11 @@ Repository path: `docs/mcp.md`
 
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with separate partial OpenAI/Anthropic data planes
-Last reviewed: 2026-07-25
+Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact
+deployed versions; 20-tool F1 locally qualified; 24-tool F2 source registry with
+separate partial OpenAI/Anthropic data planes; MSAL and Okta Auth JS local
+official-client management qualified
+Last reviewed: 2026-07-26
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
@@ -9907,6 +10040,9 @@ the exact tested slice: public revision
 `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` passed the full local gate, hosted CI,
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
+Separate local official-client candidates use the same MCP registry for environment
+creation, seeding, application registration, URL discovery, request observation,
+lifecycle, and cleanup. Those local results do not add hosted evidence.
 
 The current source appends five F1 and four F2 management tools without changing that
 historical acceptance claim. Management MCP controls mockOS; it is not a simulated
@@ -9967,6 +10103,24 @@ readers. The generated
 separate application-facing provider operations; those operations are not management
 tools.
 
+| Tool | Implemented behavior |
+| --- | --- |
+| `create_environment` | Create an isolated Entra ID or Okta environment and select it for this session |
+| `list_environments` | List account environments and the session's selected ID |
+| `delete_environment` | Purge one named or selected environment and clear the cursor when applicable |
+| `configure_environment` | Update name, idle TTL, or request-log row limit |
+| `seed_identities` | Create synthetic users and groups, including named group membership |
+| `create_application` | Register a confidential or public OIDC/OAuth client; return a creation-only synthetic secret only for confidential clients |
+| `run_provisioning_cycle` | Queue a deterministic outbound SCIM cycle against a saved or inline validated test target |
+| `mint_token` | Mint an ID-token-shaped bearer JWT for a seeded subject, optionally broken |
+| `set_scenario` | Create or completely replace a deterministic injected behavior by scenario ID |
+| `clear_scenario` | Clear one scenario or all scenarios in an environment |
+| `get_request_log` | Return a filtered, newest-first page of captured request entries |
+| `assert_requests` | Count exact request matches and return matching request IDs |
+| `simulate_lifecycle` | Apply a provider- and state-valid User lifecycle action and report state/version/ETag plus effective token revocations |
+| `get_wellknown_urls` | Derive provider URLs from the active public origin and environment |
+| `set_current_environment` | Set or clear the transport session's environment cursor |
+
 All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
 to those routes.
@@ -9989,6 +10143,44 @@ Successful calls return both text content and structured content shaped as an en
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
 error result containing a problem document. SDK schema-validation failures occur before
 handler entry and return the SDK's generic input-validation error instead.
+
+## Application registration authentication
+
+`create_application` accepts `clientType: "confidential" | "public"`.
+`confidential` is the default for backward compatibility. A confidential registration
+returns `clientSecret` exactly once; later application summaries contain neither that
+plaintext nor its stored hash.
+
+A public registration:
+
+- requires `clientType: "public"`;
+- rejects `clientSecret` rather than ignoring or storing it;
+- rejects the `client_credentials` grant;
+- returns `clientType: "public"` with no `clientSecret`; and
+- authenticates bounded code and refresh grants with a known client ID and no secret.
+
+Do not invent or persist an empty placeholder secret for a public client. A spurious
+secret makes token authentication fail.
+
+This conditional is machine-readable in the SDK 1.29 `tools/list` result using JSON
+Schema Draft-7 `if`/`then`. The input is a strict object with only `name` and
+`redirectUris` unconditionally required.
+`clientType`, `grantTypes`, `appRoles`, and `groupClaimsMode` retain advertised
+defaults without being placed in `required`. An `allOf` `if`/`then` branch for
+`clientType: "public"` forbids `clientSecret` and narrows `grantTypes` so
+`client_credentials` is not an allowed item. The output envelope's `data` uses exact
+confidential/public branches: the confidential branch requires `clientSecret`, while
+the public branch has no such property. Runtime Zod validation and discovery therefore
+describe the same bounded contract.
+
+For the Okta profile, discovery advertises `none` for token and revocation endpoint
+authentication. Introspection deliberately remains confidential and advertises only
+`client_secret_basic` and `client_secret_post`. Public revocation is not anonymous:
+the caller identifies its public client, and the core changes only tokens owned by that
+client ID. The pinned Okta Auth JS 8.0.1 path sends a client-ID-only Basic compatibility
+shape, which the adapter normalizes to public `none`. A core negative regression proves
+an unrelated public client cannot change another application's active access token or
+rotated refresh family.
 
 ## Returned protocol URLs and mock authentication
 
@@ -10074,6 +10266,10 @@ or concurrently redeeming an already consumed token invalidates its refresh fami
 associated access tokens. A known token belonging to a newly disabled User returns the
 provider-shaped disabled-account error: Entra `invalid_grant` with `AADSTS50057`, or
 Okta `invalid_grant` with `The resource owner account is disabled.`
+
+The same family rules apply to confidential and public registrations. Public refresh
+tokens are still bearer credentials; client type does not add DPoP, sender constraint,
+or browser-storage protection.
 
 ## Token minting
 
@@ -10171,9 +10367,12 @@ path, exact status, MCP method, and MCP tool. `assert_requests` supports:
 - `count.atLeast`, `count.atMost`, or `count.exactly` constraints.
 
 It does not currently assert headers, parsed JSON/JSONPath, or regular expressions.
-Use synthetic identities and tokens: captured protocol bodies can contain test
-credentials or tokens even though management API keys and outbound target Bearer
-values are redacted.
+Use synthetic identities and tokens. Structured secret-bearing form/JSON fields,
+token response values, sensitive headers, and redirect `Location` secrets are redacted
+before durable insertion, while safe request structure remains assertable. This
+key/media-type policy is not general content classification: non-secret fields and
+some non-JSON bodies may still be retained. Never use production credentials or real
+personal data.
 
 ## Outbound provisioning
 
@@ -10224,6 +10423,13 @@ The [M6 deployment record](docs/evidence/m6-workers-dev-smoke.md) separately bin
 public source, CI, staging/production versions, the sampled six-slice acceptance, and
 cleanup. It does not qualify every tool or fixture, the guarded Cloudflare-credential
 deployment workflow, or verified-live parity.
+
+The [Entra MSAL Node](docs/evidence/entra-msal-node-local-qualification.md) and
+[Okta Auth JS](docs/evidence/okta-auth-js-local-qualification.md) records separately bind
+the official MCP SDK to exact local client versions and actual-network Wrangler HTTPS
+flows. They qualify only the tools and provider sequences each record names. Neither
+is a hosted MCP command matrix, remote Worker smoke, verified-live comparison, or
+production-readiness result.
 
 Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
 additionally binds that revision to an exact mockOS deployment/version and recorded
@@ -12784,15 +12990,17 @@ Repository path: `docs/known-limitations.md`
 
 Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
 source-qualified F0/F1, partial OpenAI/Anthropic F2 with bounded metadata observation,
-bounded MSAL Node local X/Q, and remaining limits; deliberately candid
+bounded MSAL Node and Okta Auth JS local X/Q, and remaining limits; deliberately
+candid
 Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
 SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
 (P) are separate levels. Hosted CI is source execution; H requires an exact remote
 serving version and recorded smoke; V requires sanitized, reviewed real-provider
-comparison. The bounded MSAL Node slice is D/I/S/X/Q yes and H/V/P no. The bounded M6
-slice has sampled H evidence, but no current fixture is V or P.
+comparison. The bounded MSAL Node and Okta Auth JS slices are each D/I/S/X/Q yes and
+H/V/P no. The bounded M6 slice has sampled H evidence, but no current fixture is V or
+P.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -12814,6 +13022,28 @@ slice has sampled H evidence, but no current fixture is V or P.
   qualify `@azure/msal-browser`, public-client helpers, device or client-credential
   grants, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real Entra
   tenant, or P.
+- The only official Okta identity-client qualification is
+  `@okta/okta-auth-js` 8.0.1 for one public application, custom authorization server,
+  authorization code with S256 PKCE, Node `parseFromUrl` using the exact
+  SDK-exposed `_getLocation` seam, JWKS-backed ID-token verification, refresh rotation,
+  owner-bound public access-token revocation, and refresh rejection after `suspend`.
+  It passes through local Wrangler HTTPS and uses
+  `@modelcontextprotocol/sdk` 1.29.0 for management. This is local X/Q evidence, not
+  workers.dev, hosted Cloud, custom-domain H, or real-organization V. It does not
+  qualify browser callback UX, Sign-In Widget, IDX, other Auth JS versions, UserInfo,
+  device flow, Classic Authn, Sessions, Factors, access-token signature validation,
+  distributed transaction storage, or P.
+- Public OAuth registration is explicit, not a general anonymous-client mode. Public
+  clients store and receive no secret and cannot request `client_credentials`.
+  SDK 1.29 `tools/list` exposes the same conditional input and exact result branches;
+  omitted `clientType` remains confidential.
+  Code/refresh redemption requires the known public client with no spurious secret.
+  Introspection stays confidential-client-only. Revocation accepts `none` and the
+  Auth JS client-ID-only Basic compatibility shape, but updates only tokens owned by
+  that public client. A core negative regression protects another application's active
+  access token and rotated family, while the actual-client lifecycle count proves SDK
+  revocation changed state rather than merely returning idempotent 200. Refresh tokens
+  remain bearer credentials without DPoP or another sender constraint.
 - The bounded SCIM parser/PATCH/core service, HTTP adapter, and Worker mount are
   accepted for M3. All 113 SCIM fixtures execute green against the HTTP composition
   locally and in hosted CI, with focused Worker integration tested separately. The
@@ -12861,18 +13091,25 @@ slice has sampled H evidence, but no current fixture is V or P.
   tests remain source evidence, and neither tier is a general log-security audit.
 - Structured provider request-log capture now redacts secret-bearing form and JSON
   keys across routes, sensitive request/response header families, and secret query or
-  fragment fields in redirect `Location` values before persistence. The MSAL
-  actual-network flow and focused lifecycle Worker test prove absence of its password,
-  client secret, authorization code, PKCE verifier, and issued token values while
-  retaining the safe request sequence. This is not a general content-classification or
-  log-security audit: non-secret structured protocol fields and non-JSON response bodies
-  may still be retained. Malformed form/JSON, primitive JSON request, and
+  fragment fields in redirect `Location` values before persistence. The MSAL and Okta
+  Auth JS actual-network flows plus focused Worker coverage protect each named
+  exercised password, authorization code, PKCE verifier, and issued token field; the
+  confidential MSAL flow additionally checks its client secret. The Auth JS flow
+  parses its named fields as `[REDACTED]` and rejects raw, `encodeURIComponent`, and
+  URL-form-encoded representations of every exercised value. Safe request sequences
+  remain assertable. This is not arbitrary-encoding classification or a general
+  log-security audit: non-secret structured protocol fields and non-JSON response
+  bodies may still be retained. Malformed form/JSON, primitive JSON request, and
   unsupported-media request bodies are replaced rather than stored, but production
   credentials and personal data remain prohibited.
-- The MSAL harness has focused normal-completion and ready-Worker `SIGTERM` cleanup
-  evidence: the signal probe observes exit `143`, port release, Wrangler process-group
-  exit, and temporary-state removal. It does not qualify uncatchable `SIGKILL`, Windows
-  process-tree behavior, abrupt machine loss, or every interruption point while the
+- The MSAL and Auth JS wrappers share one local official-client parent and one cleanup
+  verifier. Each has focused normal-completion and ready-Worker `SIGTERM` cleanup
+  evidence: its signal probe observes exit `143`, provider and inspector port release,
+  Wrangler process-group exit, and temporary-state removal. Distinct explicit
+  inspector ports let both qualifications and cleanup probes pass concurrently. The
+  parent and cleanup verifier reject inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and
+  strip it from children. This does not qualify uncatchable `SIGKILL`, Windows
+  process-tree behavior, abrupt machine loss, or every interruption point while either
   client is active.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
@@ -12885,7 +13122,8 @@ slice has sampled H evidence, but no current fixture is V or P.
 - Refresh tokens rotate only within this deterministic mock. Scope escalation and
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
-  combination are not claimed.
+  combination are not claimed. Public-client refresh tokens are bearer credentials;
+  the Auth JS qualification does not add browser-storage or exfiltration resistance.
 - The M6 signing-key implementation keeps active and pre-published successor private
   JWKs in the environment's SQLite state; application-level encryption at rest is not
   implemented. Rotation scrubs the previous active private JWK in the same transaction
@@ -13052,13 +13290,14 @@ slice has sampled H evidence, but no current fixture is V or P.
 - The additive M7 management-read substrate is source-only. Application and scenario
   pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
   exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,
-  public HTTP route, or CLI command was added. Application creation still returns its
-  plaintext client secret exactly once; later application pages are a distinct strict
-  summary shape that contains neither the secret nor its stored hash. There is no
-  secret recovery endpoint, and an ambiguous failed create response must not be retried
-  automatically. Hosted CI, exact-version deployment, private control-plane ownership
-  enforcement, no-store response handling, and console one-time-display behavior remain
-  pending evidence rather than inherited claims.
+  public HTTP route, or CLI command was added. Confidential application creation
+  returns its plaintext client secret exactly once; public creation returns none.
+  Later application pages are a distinct strict summary shape that contains neither a
+  secret nor its stored hash. There is no secret recovery endpoint, and an ambiguous
+  failed confidential create response must not be retried automatically. Hosted CI,
+  exact-version deployment, private control-plane ownership enforcement, no-store
+  response handling, and console one-time-display behavior remain pending evidence
+  rather than inherited claims.
 - M5 outbound provisioning is manually accepted for the exact tested source pair.
   Public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`, CI run
   `29957994237`, the six active Worker versions, both terminal-success Workflow runs,
@@ -13103,10 +13342,11 @@ slice has sampled H evidence, but no current fixture is V or P.
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
-- workers.dev cannot provide wildcard subdomains. The MSAL Node local qualification
-  proves an explicit request-derived path authority only against an HTTPS loopback
-  Wrangler listener; no workers.dev or Cloud client smoke has run. SDKs that require
-  an Okta-style bare organization host may not work before custom-domain cutover.
+- workers.dev cannot provide wildcard subdomains. The MSAL Node and Okta Auth JS local
+  qualifications prove explicit request-derived path authorities only against an HTTPS
+  loopback Wrangler listener; no workers.dev or Cloud official-client smoke has run.
+  SDKs that require an Okta-style bare organization host may not work before
+  custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
 - The staging and production workers.dev targets most recently passed the sampled M6
@@ -13152,7 +13392,8 @@ Repository path: `docs/IMPLEMENTATION_STATUS.md`
 
 Status: Accepted M0-M3/M5 and sampled M6 evidence retained; M7/F0 are
 source-complete, F1 is locally source-qualified, F2 has a partial OpenAI/Anthropic
-source and metadata-observation slice, and bounded Entra MSAL Node local X/Q passed
+source and metadata-observation slice, and bounded Entra MSAL Node and Okta Auth JS
+local X/Q passed
 Last reviewed: 2026-07-26
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
@@ -13165,12 +13406,13 @@ workflow. M6 has its own exact-source, CI, version, and sampled workers.dev acce
 record; it does not inherit M3/M5 evidence or qualify the guarded Cloudflare-credential
 deployment workflow. The additive M7 application/scenario management-read substrate is
 source-complete in the repository revision carrying this document, but has no hosted
-CI, deployed-version, or console acceptance evidence yet. The additive Entra MSAL Node
-tranche is a separate source candidate with local actual-network and official-client
-evidence only. The F0 contracts, management operation registry, checked OpenAPI/client
-artifacts, and disabled wrapper boundaries also pass the full local repository gate in
-the revision carrying this document. F0 has no hosted CI, deployment, or distribution
-evidence yet and does not activate an experimental runtime. The
+CI, deployed-version, or console acceptance evidence yet. The Entra MSAL Node and Okta
+Auth JS tranches are separate local actual-network and official-client source
+candidates; they do not inherit earlier hosted or deployed evidence. The F0 contracts,
+management operation registry, checked OpenAPI/client artifacts, and disabled wrapper
+boundaries also pass the full local repository gate in the revision carrying this
+document. F0 has no hosted CI, deployment, or distribution evidence yet and does not
+activate an experimental runtime. The
 [locally source-qualified F1 implementation](docs/f-series/f1-mcp-foundation.md) adds the
 hand-written `2025-11-25` adapter, five management tools, revisioned state/hash-only
 sessions, declarative evaluation, path/subdomain routing, and MCP-aware request
@@ -13204,15 +13446,15 @@ pinning remain unavailable. F2 therefore remains incomplete.
 Evidence levels are intentionally separate. The
 [documentation index](docs/README.md) defines designed (D), implemented (I),
 source-tested (S), integration-tested (X), pinned SDK/client-qualified (Q),
-hosted-smoke (H), verified-live (V), and production-ready (P). The MSAL tranche is
-D/I/S/X/Q yes and H/V/P no. Existing exact-version workers.dev records may establish H
-for their raw-protocol samples without establishing Q, V, or P. No current fixture or
-milestone is V or P.
+hosted-smoke (H), verified-live (V), and production-ready (P). Both official-client
+tranches are D/I/S/X/Q yes and H/V/P no. Existing exact-version workers.dev records
+may establish H for their raw-protocol samples without establishing Q, V, or P. No
+current fixture or milestone is V or P.
 
 | Area | State | Evidence and boundary |
 | --- | --- | --- |
 | M0 workspace substrate | Complete locally and in hosted CI through M3 | The repository-wide format, types, tests, build, Wrangler-shape, and production/staging dry-run gates pass at exact M3 candidate `8645f405d5e3b922c30d51339b8b27f9fe30d93e`; see [CI run 29886610480](https://github.com/reachjalil/mockos/actions/runs/29886610480). |
-| Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
+| Contracts v0 | Accepted through the bounded M6 runtime slice; additive public-client source candidate | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. The current source candidate adds explicit `confidential`/`public` registrations: confidential remains the default and returns a creation-only secret, while public rejects any secret and `client_credentials` and returns none. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished, and the additive public-client contract has no H evidence. |
 | F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 24 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine operation catalog](docs/reference/management-operations.v1.json), [product capability index](docs/reference/product-capabilities.v1.json), self-hosted HTTP reference, [mock OpenAI](docs/reference/mock-llm-openai.v1.json) and [mock Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests, and agent-readable indexes with exact-count, repository-reference, JSON-Pointer/Markdown-anchor, evidence-reference, executable-export, drift, and inert-secret checks. The capability index explicitly declares a partial F0-F2 interface slice containing management MCP, companion management HTTP, mock-MCP, bounded OpenAI/Anthropic, and disabled Code Mode. It names identity-provider, SCIM/provisioning-outcome, and private Cloud product rows as unindexed, so absence never means unsupported; their existing management operations remain covered inside the MCP/HTTP rows. Public provider/outcome rows await exact public contracts, while private Cloud remains a private evidence/policy overlay on an immutable public revision. Each included row identifies executable authorities and anchored limitations. Support describes the referenced bounded contract; source, hosted CI, private Cloud pin, deployment, and verified-live evidence independently record qualification, coverage, and current-versus-historical revision relation. The historical M6 bundle did not remotely exercise the five companion HTTP routes, so that deployed claim remains unqualified even though its context is retained. Each provider manifest is generated from its executable operation table and remains separate from management OpenAPI. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
 | F1 environment-hosted mock MCP | Locally source-qualified; hosted CI/merge/deployment unqualified | Strict [mock-MCP contracts](packages/contracts/src/mock-mcp.ts), bounded JSON Schema/templates/results, [declarative evaluation](packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/hash-only-session tables, the atomic [repository](packages/core/src/mock-mcp/repository.ts), five MCP-only management operations, and the hand-written [`@mockos/mcp-mock`](packages/mcp-mock) `2025-11-25` adapter pass their focused suites and the complete repository gate. The [path-mode Worker integration](apps/worker/test/mock-mcp.integration.test.ts) configures through management MCP and exercises the routed official SDK, separate credential/session boundary, pagination and all capability kinds, reset, idempotent/revision-changing writes, delete, and redacted MCP observations; host-resolver tests separately cover both endpoint forms. State is capped per value and at 256 rows/2 MiB in aggregate. Identical writes preserve revision/state/sessions; changed replacements and in-flight revision checks prevent stale results; result validation and HTTP-abort handling during configured latency happen before staged sequence commit; scripts fail closed. Resource-template reverse matching is bounded/linear and deterministic for empty, percent-encoded, and adjacent-variable captures. Message-level `notifications/cancelled` remains deliberately unenforced. The [F1 guide](docs/mock-mcp.md) records exact limits and gaps. Hosted CI, merge, package publication, deployment, wildcard TLS, private hosted integration, GET/list-change streaming, a second protocol version, scripts, proxy, and broader client/ecosystem conformance remain unqualified or unavailable. |
 | F2 mock-LLM kernel, management definitions, provider data planes, and observation | Partial source-qualified implementation; hosted/deployed provider evidence unqualified | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, behavior adapter, pure OpenAI/Anthropic projections, and exact provider boundary. The [task guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v8 persistence, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply, hash-only provider credentials, secret-safe validation, and non-round-trippable safe views. Executable OpenAI and Anthropic adapters add exact path/subdomain routes, model list/retrieve, bounded Chat Completions/Messages parsing, provider-shaped local/configured errors, fresh transport IDs, alternate/platform-key rejection, credential non-reflection, response limits, and abort-aware initial delay. Both dialects own bounded SSE for `stream: true`, payload-delta-only cadence, one absolute initial-wait/pacing/backpressure duration, strict preflight rejection when planned initial-plus-payload delay is not less than that duration, precomputed 2 MiB body enforcement, and cancel/deadline truncation without fabricated success. OpenAI additionally accepts Boolean-only `include_usage`/`include_obfuscation` and default-on opaque compatibility padding. Anthropic emits named message/content-block events with cumulative `message_delta` usage and no `[DONE]` or mock-emitted `ping`; clients should still tolerate upstream `ping`. It owns exact `x-api-key`, `anthropic-version: 2023-06-01`, and beta-header rejection. Configured errors remain provider JSON before HTTP `200` even when streaming is requested; configured mid-stream injection is unavailable. The environment runtime hashes before reading the current definition, compares strict verifiers without early exit, derives stateless turns from prior assistant messages, and rechecks the revision before committing the plan inside the Durable Object and returning it to the edge. Successfully parsed/planned POSTs that pass response preflight reserve one metadata-only `pending` row before delay/headers and append-once finalize that same sequence as `completed`, `cancelled`, `deadline_exceeded`, or `failed`; actual delivered status/duration enter only the terminal child, while pending reads use explicit `102`/`0` legacy-column sentinels. Configured errors use `llmErrorKind` and are `completed` when delivered. Existing `get_request_log` and `assert_requests` schemas perform exact count/query/ordered-sequence matching over dialect, operation, slug, exact selected revision, model, stream, turn, outcome, response ID, usage, stop reason, ordered tool names, and error kind. Empty headers/null bodies exclude prompts, outputs, credentials, tool inputs, `planId`, and `requestHash`; stream frame/byte counts are internal test evidence only. Reservation/finalization are fail-open, so missing or pending evidence remains possible. Package suites plus [OpenAI](apps/worker/test/mock-llm.integration.test.ts) and [Anthropic](apps/worker/test/mock-llm-anthropic.integration.test.ts) local Worker integrations configure through MCP, exercise pinned official-SDK provider flows, and query/assert completed/configured-error observations through the official MCP client. Direct adapter/edge-router tests, rather than the Worker-pool service binding, prove persisted `cancelled` outcomes. Generated [OpenAI](docs/reference/mock-llm-openai.v1.json), [Anthropic](docs/reference/mock-llm-anthropic.v1.json), and [product capability](docs/reference/product-capabilities.v1.json) manifests record the exact bounded contracts and evidence boundary. Management remains 24 MCP tools and five management HTTP routes. Designed, implemented, source-tested, and mounted-Worker integration-tested are yes for this bounded observation slice; provider SDK qualification remains provider-behavior-specific. Actual network, hosted smoke, Cloud pinning, deployment, production readiness, and live-provider parity remain no/unqualified. OpenAI Responses/configured mid-stream errors, Anthropic betas, conversation/evaluator state, and reset remain unavailable, so the F2 exit gate is not satisfied. |
@@ -13224,9 +13466,10 @@ milestone is V or P.
 | Entra OIDC runtime | Accepted M3 slice; bounded M6 token/key/Graph slice sampled in deployment | [Core](packages/core/src/core.test.ts), [Worker OIDC](apps/worker/test/oidc.integration.test.ts), and [lifecycle cascade](apps/worker/test/lifecycle-cascade.integration.test.ts) tests cover the accepted M3 hosted-login, authorization-code, refresh/lifecycle, Entra-claim, and RS256/JWKS slice; the [M3 deployed smoke](docs/evidence/m3-workers-dev-smoke.md) exercised those principal paths. M6 source tests add deterministic broken tokens, skew, one-key rollover overlap, and group overage with trusted same-environment Graph fallback capped at 1,000 returned IDs. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises rotation/stale-JWKS verification, plus-300-second skew, all five broken variants, and the exact path-mode 200/201 boundary. The 1,001-ID ceiling, concurrency, private-key scrubbing, and subdomain routing remain source evidence; broader error fidelity and verified-live comparison remain open. |
 | Entra MSAL Node client | Bounded local D/I/S/X/Q passed; H/V/P unqualified | Pinned `@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local Wrangler HTTPS socket. The official MCP client creates and cleans up the environment; MSAL uses the request-derived custom authority with host-only `knownAuthorities` and `ProtocolMode.OIDC`, completes code + S256 PKCE and forced refresh, then receives `invalid_grant`/`AADSTS50057` after lifecycle disable. The exact six-request sequence and absence of password, secret, code, verifier, and token values from durable evidence pass. See the [quickstart](docs/quickstarts/entra-msal-node.md) and [local record](docs/evidence/entra-msal-node-local-qualification.md). No remote Worker, hosted Cloud, real Entra tenant, broad MSAL matrix, or production-readiness result is claimed. |
 | Okta runtime | Accepted M3 implementation plus bounded M6 Classic Authn deployed sample | Existing [core](packages/core/src/okta.test.ts), [HTTP adapter](packages/engine-http/src/okta.test.ts), and [Worker integration](apps/worker/test/okta.integration.test.ts) cover the M3 OAuth/device/directory slice. M6 adds core/HTTP/Worker coverage for `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, explicit `LOCKED_OUT`, state retrieval/cancellation, hash-only capabilities, replay denial, lifecycle and SCIM-password-change revocation, and issuance-race denial. Successful retrieval slides state expiry; session expiry remains fixed. The HTTP shape uses singular `_embedded.factor` (an array), omits `passwordChanged`, permits same-origin CORS only for `POST` with `accept`/`content-type`, emits no credentialed-CORS allowance, and returns `403` cross-origin. Request/response bodies are recursively secret-redacted, malformed bodies are wholly redacted, and sensitive Authn headers are redacted. The [M6 smoke](docs/evidence/m6-workers-dev-smoke.md) samples initial states, state retrieval, CORS, privacy, and redaction; factor verification, cancellation/replay and revocation details not sampled there, verified-live comparison, and the rest of the Classic machine remain open or source-only as stated. |
+| Okta Auth JS public client | Bounded local D/I/S/X/Q passed; H/V/P unqualified | Pinned `@okta/okta-auth-js` 8.0.1 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local Wrangler HTTPS socket. MCP discovery and runtime agree on strict conditional public/confidential registration. Auth JS uses `getWithRedirect`, S256 PKCE, `parseFromUrl` with the exact Node `_getLocation` seam, JWKS-backed ID-token verification, refresh rotation, and public access-token revocation. Lifecycle then revokes exactly one remaining access token and produces SDK `invalid_grant` after Okta `suspend`, proving the SDK revocation changed state. The exact eight-request sequence, token statuses `[200, 200, 400]`, raw/URI/form-encoded value absence, named-field structural redaction, normal cleanup, and focused ready-Worker `SIGTERM` cleanup pass. See the [quickstart](docs/quickstarts/okta-auth-js-node.md) and [local record](docs/evidence/okta-auth-js-local-qualification.md). A cross-client core regression protects owner-bound revocation; introspection remains confidential. No browser, hosted, real-Okta, broad SDK, or P result is claimed. |
 | Scenario injection and request log | Accepted through the tested M5 assertion slice; M6 actions sampled in deployment; bounded F1/F2 metadata source-qualified | Accepted M3 [scenario/log tests](packages/core/src/scenario-log.test.ts) cover deterministic scenarios, filtering, retention, and assertions. M5 response-body predicates, repeated non-overlapping ordered counts, Worker capture/redaction, local process e2e, and both hosted four-request assertions passed. M6 key rotation and clock skew are restricted to exact internal `token.before_sign` evaluation rather than the generic catch-all; both were sampled by the exact-version M6 deployed smoke. F1 adds exact MCP metadata. F2 schema v8 adds metadata-only OpenAI/Anthropic pending/terminal lifecycle rows plus exact query/count/sequence matchers, tested in core and mounted Worker/MCP integration. F1/F2 additions inherit no M5/M6 hosted or deployed evidence, and F2 observation is fail-open rather than an audit guarantee. |
 | M7 application/scenario management reads | Source-complete; hosted CI, rollout, and console acceptance pending | Strict [contracts](packages/contracts/src/index.ts) cap management pages at 25 records and bind cursors to the application or scenario resource kind. [Core](packages/core/src/directory/applications.ts) and [scenario](packages/core/src/scenario/scenario-service.ts) keyset pagination is covered by focused tests, and the [Durable Object integration](apps/worker/test/management-rpc.integration.test.ts) exercises the additive `listApplications`/`listScenarios` RPCs. Application summaries are constructed field-by-field and exclude both the creation-only plaintext `clientSecret` and the persisted hash. No MCP tool, public HTTP route, CLI command, schema migration, hosted deployment, or private-console result is claimed by this source slice. |
-| MCP runtime | Accepted 15-tool M5 hosted slice; 20-tool F1 registry locally qualified; 24-tool F2 source registry | The handler-agnostic [registry and tests](packages/mcp/src/index.test.ts) preserve `run_provisioning_cycle` as tool 15, append five locally source-qualified F1 operations, and append four source-implemented F2 definition operations. Authenticated mounted Worker tests, the built-CLI process e2e, and staging/production hosted starts passed for the historical M5 set only. No F1/F2 addition inherits that deployed evidence, and npm distribution remains open. |
+| MCP runtime | Accepted 15-tool M5 hosted slice; 20-tool F1 registry locally qualified; 24-tool F2 source registry; official-client local setup/observation added | The handler-agnostic [registry and tests](packages/mcp/src/index.test.ts) preserve `run_provisioning_cycle` as tool 15, append five locally source-qualified F1 operations, and append four source-implemented F2 definition operations. The SDK 1.29 `tools/list` regression for `create_application` proves defaulted inputs remain optional, an explicit public `if`/`then` forbids a secret and narrows grants, and exact output branches expose a secret only for confidential registrations. Authenticated mounted Worker tests, the built-CLI process e2e, and staging/production hosted starts passed for the historical M5 set only. The two local official-client harnesses use MCP for setup, discovery, observation, lifecycle, and cleanup. No F1/F2 addition inherits deployed evidence, the client runs do not re-exercise every tool remotely, and npm distribution remains open. |
 | CLI Stage A | Accepted M5 source command; unpublished | The unpublished `@mockos/cli` 0.1.0 source includes secret-safe `provision run` and capability negotiation for `run_provisioning_cycle`; all 19 CLI tests and the built-CLI process e2e are green. Package publication and a complete deployed CLI command matrix remain open. |
 | Cloudflare Worker / Durable Object | Bounded M6 exact-version deployment sample accepted | Exact M6 public revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed the full local gate and [CI run 29966667984](https://github.com/reachjalil/mockos/actions/runs/29966667984). Its staging version `9ea22805-e38e-4a1b-807f-f80646cbe298` and production version `0695adab-d162-4f01-a3cf-da9c1640acdc` were manually deployed with the existing Access Keys preserved, confirmed 100% active, and passed source-locked exact-serving-version smoke. See the [M6 deployment record](docs/evidence/m6-workers-dev-smoke.md). The guarded Cloudflare-credential promotion workflow and verified-live parity remain unqualified. |
 | SCIM inbound and lifecycle APIs | Accepted for bounded M3; M6 edges sampled in deployment | Portable contracts, bounded filter/PATCH logic, versioned persistence/service behavior, the `/scim/v2` HTTP/Worker composition, provider dialects, Graph/Okta directory adapters, and lifecycle policy have focused local and hosted coverage. All 113 accepted SCIM fixtures execute green against the HTTP composition; Worker SCIM and lifecycle-cascade suites qualify the mounted runtime. The M6 corpus separately covers an injection-locked `409` conflict with no partial mutation, a soft-delete race with tombstone-only effects, and two exact malformed-PATCH tolerances (`missing_schemas` and `singleton_operations`) that leave strict parsing and all unrelated defects unchanged. Those central paths passed the M6 deployed sample; the full eight-case M6 fixture corpus, all 113 accepted fixtures, and verified-live comparison did not run remotely. |
@@ -13290,15 +13533,18 @@ or verified-live provider comparison.
 
 ## Entra MSAL Node local client qualification
 
-The source candidate carrying this document pins `@azure/msal-node` 5.4.2 and adds a
-dedicated actual-network harness. An owned local Wrangler process serves HTTPS. The
+The source candidate carrying this document pins `@azure/msal-node` 5.4.2. Its thin
+provider wrapper now configures the same shared official-client actual-network and
+signal-cleanup harnesses used by the Okta qualification. An owned local Wrangler
+process serves HTTPS. The
 parent anchors the captured `localhost` leaf and validates its hostname plus ownership
 nonce before the child adds that certificate as a process-local CA through
 `NODE_EXTRA_CA_CERTS`, retaining standard Node trust. The child independently requires
 an HTTPS `localhost` origin and the same nonce; no alternate-certificate rejection is
-qualified. It connects to management through the official MCP SDK and configures the
-Entra application entirely through the discovered tool contract. MSAL uses the returned
-issuer with
+qualified. The shared parent rejects inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and
+strips it from child environments. It connects to management through the official MCP
+SDK and configures the Entra application entirely through the discovered tool contract.
+MSAL uses the returned issuer with
 `knownAuthorities: [new URL(authority).host]` and
 `system.protocolMode: ProtocolMode.OIDC`.
 
@@ -13309,22 +13555,59 @@ discovery/login/code/refresh/disabled-refresh sequence, proves durable credentia
 redaction, deletes the environment, closes MCP, and removes the temporary CA. The
 focused lifecycle Worker test independently protects the persistent redaction
 boundary. A separate `SIGTERM` cleanup probe observes parent exit `143`, releases the
-port, removes the detached Wrangler process group, and removes temporary state.
+provider and inspector ports, removes the detached Wrangler process group, and removes
+temporary state. Distinct explicit inspector ports allow the Entra and Okta
+qualifications and cleanup probes to pass concurrently.
 
-`pnpm e2e:entra-msal`, `pnpm e2e:entra-msal-cleanup`, and the focused Worker tests
-passed locally; exact output is in the
+`pnpm e2e:entra-msal` and `pnpm e2e:entra-msal-cleanup` were rerun successfully under
+Node 24.18.0; focused source tests also passed. Exact output is in the
 [qualification record](docs/evidence/entra-msal-node-local-qualification.md). This is
 D/I/S/X/Q evidence for the named version and flow only. The signal probe covers a ready
 Worker on this local platform, not `SIGKILL`, Windows, or every active-client
 interruption point. No hosted-CI result is claimed by this local record, and there is no
 H, V, or P evidence.
 
+## Okta Auth JS local client qualification
+
+The current source candidate pins `@okta/okta-auth-js` 8.0.1 and adds explicit public
+application registrations. Public clients store and return no secret, reject a
+supplied secret and `client_credentials`, and authenticate code/refresh redemption
+without one. Okta discovery advertises `none` for token and revocation authentication;
+introspection remains confidential. Public revocation requires the owning client ID
+and cannot affect another application's token family.
+
+The official MCP client creates, seeds, configures, observes, and deletes the
+environment. Auth JS performs `getWithRedirect` plus S256 PKCE, and its `parseFromUrl`
+path exchanges the code and verifies the RS256 ID token from discovery/JWKS. The Node
+harness supplies the SDK-exposed `_getLocation` seam because the method otherwise
+dereferences `window`; this is part of the exact 8.0.1 Node qualification, not a
+browser or version-range claim. `renewTokens` rotates the refresh token,
+`token.revoke` returns 200 for the refreshed access token through public
+client-ID-only Basic compatibility. The following suspension revokes exactly one
+remaining access token, proving the SDK call changed state; a later SDK refresh fails
+with `invalid_grant` and `User account is disabled.`. A separate core regression proves
+an unrelated public client cannot revoke another application's active access token or
+rotated refresh family.
+
+The final `pnpm check`, `pnpm e2e:okta-authjs`, and
+`pnpm e2e:okta-authjs-cleanup` passed under Node 24.18.0.
+The exact eight-request sequence, token statuses `[200, 200, 400]`, functional
+revocation postcondition, raw/URI/form-encoded credential and token absence,
+named-field structural redaction, environment deletion, process-group exit, released
+provider/inspector ports, and temporary-state removal are in the
+[qualification record](docs/evidence/okta-auth-js-local-qualification.md). This is
+D/I/S/X/Q for the named version and flow only. No hosted-CI execution, remote Worker,
+browser, real Okta organization, verified-live comparison, or P result is claimed.
+
+## M7 management reads
+
 The M7 application/scenario management-read substrate is source-complete but not
 deployed. Its strict query contract defaults to and caps pages at 25 records with a
 512-character cursor ceiling. Core reads use stable `(created_at, id)` keysets and
 resource-kind-bound cursors. `ApplicationSummary` is deliberately distinct from the
-creation response: `createApplication` still returns the generated plaintext secret
-once, while every later list result excludes it and the stored hash. The two new
+creation response: `createApplication` returns a generated plaintext secret once only
+for confidential registrations; public registrations return none. Every later list
+result excludes both plaintext and stored hashes. The two new
 Durable Object RPCs are additive and schema-v5 compatible. The full local `pnpm check`
 gate, including the focused contract/core coverage and real Durable Object integration,
 is green; hosted CI, exact-version staging/production rollout, private Edge/Control
@@ -13361,7 +13644,7 @@ Repository path: `docs/security/threat-model.md`
 
 Status: M3/M5 controls accepted; bounded M6 deployed sample retained; F1 controls are
 source-only; partial OpenAI/Anthropic F2 controls are source-only; OAuth evidence
-redaction has local MSAL X/Q and Worker source proof
+redaction has local MSAL and Okta Auth JS X/Q plus Worker source proof
 Last reviewed: 2026-07-26
 
 ## Assets and trust boundaries
@@ -13392,8 +13675,9 @@ presented as a production identity control. Environment URLs and synthetic direc
 credentials should be treated as test artifacts, not security boundaries.
 
 Primary threats are environment-ID guessing, cross-environment SQL access, OAuth
-redirect abuse, code replay, refresh-token theft, signing-key confusion, stored XSS in
-hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
+redirect abuse, code replay, public-client impersonation, cross-client revocation,
+refresh-token theft, signing-key confusion, stored XSS in hosted pages or logs,
+refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, authentication-state user enumeration, Authn
 state/session capability theft or replay, parser or body resource exhaustion, secret
 leakage through form/JSON bodies or redirect locations in durable logs, unbounded
@@ -13610,14 +13894,19 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   to exactly one environment Durable Object and its SQLite state.
 - Redirect URIs are compared exactly. Authorization codes are short-lived, one-time,
   and S256-PKCE-bound where configured.
-- Application secrets, refresh tokens, and tracked OAuth access tokens are stored as
-  hashes. Signing keys remain environment-local. The active and pre-published successor
-  private JWKs stay inside the signing service; rotation scrubs the previous active
-  private JWK transactionally and bounds the ring to four rows. A second rotation is
-  blocked for the exact 26-hour rollback/verification-overlap window qualified for
-  built-in Worker/MCP issuance with a fixed one-hour lifetime and bounded skew. Trusted
-  public-core test seams can create longer or overridden temporal claims and are outside
-  that guarantee.
+- Confidential application secrets, refresh tokens, and tracked OAuth access tokens
+  are stored as hashes. Public registrations store no secret or secret hash, reject a
+  supplied secret and `client_credentials`, and return no secret. Signing keys remain
+  environment-local. The active and pre-published successor private JWKs stay inside
+  the signing service; rotation scrubs the previous active private JWK transactionally
+  and bounds the ring to four rows. A second rotation is blocked for the exact 26-hour
+  rollback/verification-overlap window qualified for built-in Worker/MCP issuance with
+  a fixed one-hour lifetime and bounded skew. Trusted public-core test seams can create
+  longer or overridden temporal claims and are outside that guarantee.
+- SDK 1.29 `tools/list` exposes the application distinction as a strict object with
+  optional advertised defaults, a Draft-7 public `if`/`then` that forbids
+  `clientSecret` and narrows grants, and exact output branches. A regression compares
+  that discovered machine contract with runtime behavior.
 - Classic Authn verifies the password before returning account state and stores only
   hashes of bearer capabilities. Valid state reads slide expiry to five minutes from
   the read; one-time session capabilities retain a fixed five-minute issuance expiry.
@@ -13644,6 +13933,16 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
+- Secretless token authentication succeeds only for a known public registration when
+  no secret is supplied; a spurious secret fails. Introspection always requires a
+  confidential client's secret. Public revocation requires the owning client ID and
+  changes only access-token rows or refresh families stored for that ID. The Okta HTTP
+  adapter accepts the pinned Auth JS client-ID-only Basic compatibility shape as
+  public `none`; it does not turn revocation into an anonymous cross-client mutation.
+  A core negative regression preserves another application's active access token and
+  rotated refresh family. In the SDK run, lifecycle revokes exactly one remaining
+  access token after SDK revocation, proving state changed despite RFC 7009's
+  idempotent 200 response.
 - Provider-valid disable, suspend, deprovision, and delete transitions revoke effective
   access/refresh credentials in the same transaction as the state change. User deletion
   also removes Group membership and increments affected Group versions atomically.
@@ -13664,19 +13963,23 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
-- The local MSAL acceptance harness keeps TLS verification enabled. For readiness, the
-  parent anchors the captured Wrangler leaf, validates its `localhost` hostname, and
-  requires the owned child's nonce. It writes the certificate to a temporary
-  mode-`0600` CA file and passes that file to the client through
-  `NODE_EXTRA_CA_CERTS`; this augments standard Node roots rather than exclusively
-  pinning the certificate. The client independently requires an HTTPS `localhost`
-  origin and the same nonce. Cleanup deletes the file, and the harness neither installs
-  a system CA nor uses `NODE_TLS_REJECT_UNAUTHORIZED=0`. No alternate-certificate
-  rejection is qualified.
-- The local signal-cleanup probe interrupts a ready harness with `SIGTERM` and requires
-  parent exit `143`, a reusable loopback port, an absent Wrangler process group, and
-  removed temporary state. It does not establish uncatchable `SIGKILL`, Windows
-  process-tree, or every active-client interruption boundary.
+- The MSAL and Okta Auth JS wrappers configure one shared local official-client
+  acceptance harness, which keeps TLS verification enabled. For readiness, the parent
+  anchors the captured Wrangler leaf, validates its `localhost` hostname, and requires
+  the owned child's nonce. It writes the certificate to a temporary mode-`0600` CA
+  file and passes that file to the client through `NODE_EXTRA_CA_CERTS`; this augments
+  standard Node roots rather than exclusively pinning the certificate. Each client
+  independently requires an HTTPS `localhost` origin and the same nonce. Cleanup
+  deletes the file. The parent and cleanup harnesses reject an inherited
+  `NODE_TLS_REJECT_UNAUTHORIZED=0`, strip that variable from child environments, and
+  have focused negative guards. They never install a system CA. No
+  alternate-certificate rejection is qualified.
+- Each provider wrapper configures the shared signal-cleanup verifier. It interrupts a
+  ready harness with `SIGTERM` and requires parent exit `143`, a reusable loopback
+  provider port and Wrangler inspector port, an absent Wrangler process group, and
+  removed temporary state. Explicit distinct inspector ports allow the Entra and Okta
+  qualifications to run concurrently. This does not establish uncatchable `SIGKILL`,
+  Windows process-tree, or every active-client interruption boundary.
 - F1 captures MCP method, tool, canonical arguments, top-level error code, and
   tool-level `isError` as bounded synthetic test evidence. Authorization and session
   headers are redacted, trusted routing headers are omitted, and raw JSON-RPC request
@@ -13707,6 +14010,17 @@ the harness plus focused lifecycle Worker test prove that its password, client s
 authorization code, PKCE verifier, issued tokens, and redirect code are absent from
 durable evidence. This is local S/X/Q evidence, not H, a penetration test, V, or P.
 
+The [Okta Auth JS local record](docs/evidence/okta-auth-js-local-qualification.md)
+separately exercises a real local HTTPS socket with pinned
+`@okta/okta-auth-js` 8.0.1 and the official MCP SDK. Public creation returns no secret;
+the exact code/JWKS/refresh/revoke/suspended-refresh sequence and functional revocation
+postcondition pass; and owner isolation has a core negative regression. The harness
+requires `[REDACTED]` in each exercised named field and rejects raw, URI-encoded, and
+URL-form-encoded representations of its password, code, verifier, and
+initial/refreshed tokens. This is exact representation evidence, not arbitrary
+encoding classification. It is local S/X/Q evidence, not H, a penetration test, V, or
+P.
+
 Those records establish deployed mock acceptance only when an exact revision is bound
 to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
 separate tier reserved for sanitized, independently reviewed comparison with a real
@@ -13736,20 +14050,25 @@ not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 wor
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
 
-The F2 definition and bounded OpenAI/Anthropic controls likewise have source evidence only.
-They are not a penetration test, hosted rollback, multi-tenant authorization review,
-load/abuse envelope, deployment, or live-provider evidence. `accept_any` deliberately
-accepts any syntactically valid credential through the provider's required channel
-without verifier comparison; it is suitable only for synthetic tests and is not
-public/anonymous access or production authorization. `strict` compares the current
-hash-only verifier, but a successful mock check still grants only this synthetic
-  provider behavior. Metadata-only observation/query/assertion is source-qualified
-  but fail-open and not an audit control. Conversation/response state, reset,
-  configured midstream errors, OpenAI Responses, Anthropic betas/broad parameters,
-  Wrangler-network qualification, deployment, and private Cloud pinning remain
-  absent.
+The F2 definition and bounded OpenAI/Anthropic controls likewise have source evidence
+only. They are not a penetration test, hosted rollback, multi-tenant authorization
+review, load/abuse envelope, deployment, or live-provider evidence. `accept_any`
+deliberately accepts any syntactically valid credential through the provider's
+required channel without verifier comparison; it is suitable only for synthetic tests
+and is not public/anonymous access or production authorization. `strict` compares the
+current hash-only verifier, but a successful mock check still grants only this
+synthetic provider behavior. Metadata-only observation/query/assertion is
+source-qualified but fail-open and not an audit control. Conversation/response state,
+reset, configured midstream errors, OpenAI Responses, Anthropic betas/broad
+parameters, Wrangler-network qualification, deployment, and private Cloud pinning
+remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
+
+Public-client refresh tokens are bearer credentials. The local Auth JS result does not
+provide sender constraint, DPoP, browser-storage hardening, cross-process transaction
+isolation, or distributed replay protection. Production applications must not infer
+those controls from secretless application registration or owner-bound revocation.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment
