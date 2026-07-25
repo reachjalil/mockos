@@ -1,0 +1,307 @@
+import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
+import { canonicalMockLlmJson } from "./canonical-json";
+import type { RenderedLlmWire, RenderLlmPlanOptions } from "./wire";
+
+type MockLlmResponsePlan = Extract<MockLlmPlan, { readonly kind: "response" }>;
+type MockLlmErrorPlan = Extract<MockLlmPlan, { readonly kind: "error" }>;
+type MockLlmErrorKind = MockLlmErrorPlan["error"]["kind"];
+type MockLlmStopReason = MockLlmResponsePlan["stopReason"];
+
+const OPENAI_ERROR_STATUS = {
+  invalid_request: 400,
+  authentication: 401,
+  permission_denied: 403,
+  not_found: 404,
+  request_too_large: 413,
+  rate_limit: 429,
+  timeout: 408,
+  internal: 500,
+  overloaded: 503,
+} as const satisfies Record<MockLlmErrorKind, number>;
+
+const OPENAI_ERROR_TYPE = {
+  invalid_request: "invalid_request_error",
+  authentication: "authentication_error",
+  permission_denied: "permission_error",
+  not_found: "invalid_request_error",
+  request_too_large: "request_too_large_error",
+  rate_limit: "rate_limit_error",
+  timeout: "timeout_error",
+  internal: "api_error",
+  overloaded: "server_error",
+} as const satisfies Record<MockLlmErrorKind, string>;
+
+const OPENAI_FINISH_REASON = {
+  end_turn: "stop",
+  max_tokens: "length",
+  stop_sequence: "stop",
+  tool_use: "tool_calls",
+} as const satisfies Record<MockLlmStopReason, string>;
+
+const jsonHeaders = (planId: string): Readonly<Record<string, string>> => ({
+  "content-type": "application/json",
+  "x-request-id": planId,
+});
+
+const eventStreamHeaders = (planId: string): Readonly<Record<string, string>> => ({
+  "content-type": "text/event-stream",
+  "x-request-id": planId,
+});
+
+const errorHeaders = (plan: MockLlmErrorPlan): Readonly<Record<string, string>> => ({
+  ...jsonHeaders(plan.planId),
+  ...(plan.error.retryAfterSeconds === undefined
+    ? {}
+    : { "retry-after": String(plan.error.retryAfterSeconds) }),
+});
+
+const splitCodePoints = (value: string, chunkSize: number): readonly string[] => {
+  const codePoints = Array.from(value);
+  const chunks: string[] = [];
+  for (let offset = 0; offset < codePoints.length; offset += chunkSize) {
+    chunks.push(codePoints.slice(offset, offset + chunkSize).join(""));
+  }
+  return chunks;
+};
+
+const toolCalls = (plan: MockLlmResponsePlan) =>
+  plan.segments
+    .filter(
+      (
+        segment
+      ): segment is Extract<
+        MockLlmResponsePlan["segments"][number],
+        { readonly type: "tool_call" }
+      > => segment.type === "tool_call"
+    )
+    .map((segment) => ({
+      id: segment.id,
+      type: "function" as const,
+      function: {
+        arguments: canonicalMockLlmJson(segment.input),
+        name: segment.name,
+      },
+    }));
+
+const completionUsage = (plan: MockLlmResponsePlan) => ({
+  completion_tokens: plan.usage.outputTokens,
+  prompt_tokens: plan.usage.inputTokens,
+  total_tokens: plan.usage.inputTokens + plan.usage.outputTokens,
+});
+
+const renderOpenAiJsonResponse = (plan: MockLlmResponsePlan): RenderedLlmWire => {
+  const textSegments = plan.segments.filter(
+    (
+      segment
+    ): segment is Extract<
+      MockLlmResponsePlan["segments"][number],
+      { readonly type: "text" }
+    > => segment.type === "text"
+  );
+  const calls = toolCalls(plan);
+  return {
+    kind: "json",
+    status: 200,
+    headers: jsonHeaders(plan.planId),
+    body: {
+      id: plan.planId,
+      object: "chat.completion",
+      created: plan.createdAtEpochSeconds,
+      model: plan.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content:
+              textSegments.length === 0
+                ? null
+                : textSegments.map((segment) => segment.text).join(""),
+            refusal: null,
+            ...(calls.length === 0 ? {} : { tool_calls: calls }),
+          },
+          logprobs: null,
+          finish_reason: OPENAI_FINISH_REASON[plan.stopReason],
+        },
+      ],
+      usage: completionUsage(plan),
+    },
+  };
+};
+
+const openAiSseFrame = (event: Readonly<Record<string, unknown>>): string =>
+  `data: ${JSON.stringify(event)}\n\n`;
+
+const openAiChunk = (
+  plan: MockLlmResponsePlan,
+  choice: Readonly<Record<string, unknown>>,
+  includeUsage: boolean
+): Readonly<Record<string, unknown>> => ({
+  id: plan.planId,
+  object: "chat.completion.chunk",
+  created: plan.createdAtEpochSeconds,
+  model: plan.model,
+  choices: [choice],
+  ...(includeUsage ? { usage: null } : {}),
+});
+
+const renderOpenAiSseResponse = (
+  plan: MockLlmResponsePlan,
+  includeUsage: boolean
+): RenderedLlmWire => {
+  const frames: string[] = [
+    openAiSseFrame(
+      openAiChunk(
+        plan,
+        {
+          index: 0,
+          delta: { role: "assistant", content: "", refusal: null },
+          logprobs: null,
+          finish_reason: null,
+        },
+        includeUsage
+      )
+    ),
+  ];
+
+  let toolIndex = 0;
+  for (const segment of plan.segments) {
+    if (segment.type === "text") {
+      for (const text of splitCodePoints(segment.text, plan.cadence.chunkSize)) {
+        frames.push(
+          openAiSseFrame(
+            openAiChunk(
+              plan,
+              {
+                index: 0,
+                delta: { content: text },
+                logprobs: null,
+                finish_reason: null,
+              },
+              includeUsage
+            )
+          )
+        );
+      }
+      continue;
+    }
+
+    const argumentChunks = splitCodePoints(
+      canonicalMockLlmJson(segment.input),
+      plan.cadence.chunkSize
+    );
+    const firstArguments = argumentChunks[0] ?? "";
+    frames.push(
+      openAiSseFrame(
+        openAiChunk(
+          plan,
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: toolIndex,
+                  id: segment.id,
+                  type: "function",
+                  function: {
+                    name: segment.name,
+                    arguments: firstArguments,
+                  },
+                },
+              ],
+            },
+            logprobs: null,
+            finish_reason: null,
+          },
+          includeUsage
+        )
+      )
+    );
+    for (const argumentChunk of argumentChunks.slice(1)) {
+      frames.push(
+        openAiSseFrame(
+          openAiChunk(
+            plan,
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: toolIndex,
+                    function: { arguments: argumentChunk },
+                  },
+                ],
+              },
+              logprobs: null,
+              finish_reason: null,
+            },
+            includeUsage
+          )
+        )
+      );
+    }
+    toolIndex += 1;
+  }
+
+  frames.push(
+    openAiSseFrame(
+      openAiChunk(
+        plan,
+        {
+          index: 0,
+          delta: {},
+          logprobs: null,
+          finish_reason: OPENAI_FINISH_REASON[plan.stopReason],
+        },
+        includeUsage
+      )
+    )
+  );
+  if (includeUsage) {
+    frames.push(
+      openAiSseFrame({
+        id: plan.planId,
+        object: "chat.completion.chunk",
+        created: plan.createdAtEpochSeconds,
+        model: plan.model,
+        choices: [],
+        usage: completionUsage(plan),
+      })
+    );
+  }
+  frames.push("data: [DONE]\n\n");
+  return {
+    kind: "sse",
+    status: 200,
+    headers: eventStreamHeaders(plan.planId),
+    frames,
+  };
+};
+
+const renderOpenAiError = (plan: MockLlmErrorPlan): RenderedLlmWire => ({
+  kind: "json",
+  status: OPENAI_ERROR_STATUS[plan.error.kind],
+  headers: errorHeaders(plan),
+  body: {
+    error: {
+      message: plan.error.message,
+      type: OPENAI_ERROR_TYPE[plan.error.kind],
+      param: null,
+      code: plan.error.kind,
+    },
+  },
+});
+
+/**
+ * Projects one provider-neutral plan into the Chat Completions dialect. Streaming
+ * returns immediate SSE frames; the edge runtime remains responsible for cadence.
+ */
+export const renderOpenAiPlan = (
+  plan: MockLlmPlan,
+  options: RenderLlmPlanOptions
+): RenderedLlmWire => {
+  if (plan.kind === "error") return renderOpenAiError(plan);
+  return options.stream
+    ? renderOpenAiSseResponse(plan, options.includeUsage === true)
+    : renderOpenAiJsonResponse(plan);
+};

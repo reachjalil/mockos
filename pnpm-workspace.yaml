@@ -4,6 +4,7 @@ packages:
   - packages/*
 
 catalog:
+  "@anthropic-ai/sdk": 0.115.0
   "@azure/msal-node": 5.4.2
   "@biomejs/biome": 2.5.4
   "@changesets/cli": 2.29.7
@@ -15,6 +16,7 @@ catalog:
   "@types/node": 26.1.1
   agents: 0.17.4
   hono: 4.12.31
+  openai: 6.49.0
   sharp: 0.35.3
   turbo: 2.10.5
   tsx: 4.23.1

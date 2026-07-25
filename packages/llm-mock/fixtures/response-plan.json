@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "kind": "response",
+  "planId": "llmp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "model": "mockos-chat-1",
+  "createdAtEpochSeconds": 1784973600,
+  "turnIndex": 2,
+  "seed": "fixture-seed",
+  "segments": [
+    {
+      "type": "text",
+      "text": "Hi 🧪!"
+    },
+    {
+      "type": "tool_call",
+      "id": "call_weather",
+      "name": "get_weather",
+      "input": {
+        "units": "celsius",
+        "location": {
+          "country": "DE",
+          "city": "Berlin"
+        }
+      }
+    }
+  ],
+  "stopReason": "tool_use",
+  "usage": {
+    "inputTokens": 11,
+    "outputTokens": 7
+  },
+  "cadence": {
+    "initialDelayMilliseconds": 5,
+    "chunkDelayMilliseconds": 10,
+    "chunkSize": 128,
+    "maximumDurationMilliseconds": 5000
+  }
+}

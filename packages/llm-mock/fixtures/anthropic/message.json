@@ -1,0 +1,43 @@
+{
+  "id": "llmp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "container": null,
+  "content": [
+    {
+      "type": "text",
+      "text": "Hi 🧪!",
+      "citations": null
+    },
+    {
+      "type": "tool_use",
+      "id": "call_weather",
+      "name": "get_weather",
+      "input": {
+        "units": "celsius",
+        "location": {
+          "country": "DE",
+          "city": "Berlin"
+        }
+      },
+      "caller": {
+        "type": "direct"
+      }
+    }
+  ],
+  "model": "mockos-chat-1",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "cache_creation": null,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "inference_geo": null,
+    "input_tokens": 11,
+    "output_tokens": 7,
+    "output_tokens_details": null,
+    "server_tool_use": null,
+    "service_tier": "standard"
+  }
+}
