@@ -41,6 +41,8 @@ const expectedHttpOperations = [
 const read = (path) => readFile(resolve(process.cwd(), path), "utf8");
 const catalogPath = "docs/reference/management-operations.v1.json";
 const catalog = JSON.parse(await read(catalogPath));
+const productCapabilityIndexPath = "docs/reference/product-capabilities.v1.json";
+const productCapabilityIndex = JSON.parse(await read(productCapabilityIndexPath));
 const mockLlmOpenAiProviderPath = "docs/reference/mock-llm-openai.v1.json";
 const mockLlmOpenAiProvider = JSON.parse(await read(mockLlmOpenAiProviderPath));
 const mockLlmAnthropicProviderPath = "docs/reference/mock-llm-anthropic.v1.json";
@@ -48,6 +50,399 @@ const mockLlmAnthropicProvider = JSON.parse(await read(mockLlmAnthropicProviderP
 const failures = [];
 
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+const evidenceTiers = ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"];
+const evidenceQualifications = ["qualified", "unqualified", "not-applicable"];
+const evidenceCoverages = ["full", "partial", "none", "not-applicable"];
+const evidenceRevisionRelations = ["current", "historical", "not-applicable"];
+const capabilitySupports = ["supported", "partial", "unsupported"];
+const capabilityRoles = [
+  "management-plane",
+  "companion-management",
+  "provider-data-plane",
+  "synthetic-agent-data-plane",
+];
+const interfaceKinds = [
+  "mcp-streamable-http",
+  "self-hosted-http",
+  "openai-http",
+  "anthropic-http",
+  "mcp-code-mode",
+];
+const managementRelationships = ["primary", "companion", "mcp-only", "unavailable"];
+const executableAuthorityKinds = ["contract", "registry", "runtime", "feature-flag"];
+
+if (
+  productCapabilityIndex.schemaVersion !== 1 ||
+  productCapabilityIndex.provenance?.generator?.path !==
+    "packages/openapi/src/index.ts" ||
+  productCapabilityIndex.provenance?.generator?.export !==
+    "generateMockosProductCapabilityIndex" ||
+  !Array.isArray(productCapabilityIndex.provenance?.relatedArtifacts) ||
+  !productCapabilityIndex.provenance.relatedArtifacts.includes(catalogPath) ||
+  !productCapabilityIndex.provenance.relatedArtifacts.includes(
+    mockLlmOpenAiProviderPath
+  ) ||
+  !productCapabilityIndex.provenance.relatedArtifacts.includes(
+    mockLlmAnthropicProviderPath
+  ) ||
+  productCapabilityIndex.supportModel?.rule !==
+    "support-describes-bounded-contract-not-hosted-qualification" ||
+  !equal(productCapabilityIndex.evidenceModel?.tiers, evidenceTiers) ||
+  !equal(
+    productCapabilityIndex.evidenceModel?.dimensions?.qualification,
+    evidenceQualifications
+  ) ||
+  !equal(
+    productCapabilityIndex.evidenceModel?.dimensions?.coverage,
+    evidenceCoverages
+  ) ||
+  !equal(
+    productCapabilityIndex.evidenceModel?.dimensions?.revisionRelation,
+    evidenceRevisionRelations
+  ) ||
+  productCapabilityIndex.evidenceModel?.rule !==
+    "tiers-and-dimensions-are-independent-no-implicit-promotion"
+) {
+  failures.push(
+    "the generated product capability index must identify executable provenance and keep evidence tiers and dimensions independent"
+  );
+}
+
+const includedDomains = productCapabilityIndex.coverage?.includedDomains;
+const unindexedDomains = productCapabilityIndex.coverage?.unindexedDomains;
+const unindexedDomainIds = unindexedDomains?.map(({ id }) => id);
+const includedDomainIds = includedDomains?.map(({ id }) => id);
+if (
+  productCapabilityIndex.coverage?.status !== "partial" ||
+  productCapabilityIndex.coverage?.scope !== "f0-f2-agent-dependency-interface-slice" ||
+  productCapabilityIndex.coverage?.rule !== "absence-means-unindexed-not-unsupported" ||
+  !Array.isArray(includedDomainIds) ||
+  includedDomainIds.length === 0 ||
+  new Set(includedDomainIds).size !== includedDomainIds.length ||
+  includedDomains.some(
+    (domain) =>
+      typeof domain?.id !== "string" ||
+      domain.id.length === 0 ||
+      !Array.isArray(domain.authorityRefs) ||
+      domain.authorityRefs.length === 0 ||
+      new Set(domain.authorityRefs).size !== domain.authorityRefs.length
+  ) ||
+  !Array.isArray(unindexedDomainIds) ||
+  ![
+    "identity-provider-data-planes",
+    "scim-and-provisioning-data-planes",
+    "private-cloud-product-surfaces",
+  ].every((id) => unindexedDomainIds.includes(id)) ||
+  new Set(unindexedDomainIds).size !== unindexedDomainIds.length ||
+  unindexedDomains.some(
+    (domain) =>
+      typeof domain?.id !== "string" ||
+      domain.id.length === 0 ||
+      typeof domain?.reason !== "string" ||
+      domain.reason.length === 0 ||
+      !Array.isArray(domain.contextRefs) ||
+      domain.contextRefs.length === 0 ||
+      new Set(domain.contextRefs).size !== domain.contextRefs.length
+  )
+) {
+  failures.push(
+    "the product capability index must declare its non-exhaustive F0-F2 slice and named unindexed product domains"
+  );
+}
+
+const capabilities = productCapabilityIndex.capabilities;
+if (!Array.isArray(capabilities) || capabilities.length === 0) {
+  failures.push(
+    "the generated product capability index must contain interface entries"
+  );
+}
+
+const capabilityIds = (capabilities ?? []).map(({ id }) => id);
+const specificationRefs = (capabilities ?? []).map(
+  ({ specificationRef }) => specificationRef
+);
+if (
+  capabilityIds.some((id) => typeof id !== "string" || id.length === 0) ||
+  new Set(capabilityIds).size !== capabilityIds.length ||
+  new Set(specificationRefs).size !== specificationRefs.length
+) {
+  failures.push("product capability IDs and specification references must be unique");
+}
+
+for (const capability of capabilities ?? []) {
+  const actualEvidenceTiers = Object.keys(capability.evidence ?? {});
+  const executableAuthorities = capability.provenance?.executableAuthorities;
+  const executableAuthorityKeys = (executableAuthorities ?? []).map(
+    ({ path, export: exportedName }) => `${path}#${exportedName}`
+  );
+  if (
+    typeof capability.title !== "string" ||
+    capability.title.length === 0 ||
+    typeof capability.scope !== "string" ||
+    capability.scope.length === 0 ||
+    !capabilitySupports.includes(capability.support) ||
+    !capabilityRoles.includes(capability.role) ||
+    !interfaceKinds.includes(capability.interface?.kind) ||
+    !managementRelationships.includes(capability.interface?.management) ||
+    !equal([...actualEvidenceTiers].sort(), [...evidenceTiers].sort()) ||
+    !Array.isArray(executableAuthorities) ||
+    executableAuthorities.length === 0 ||
+    executableAuthorities.some(
+      (authority) =>
+        !executableAuthorityKinds.includes(authority?.kind) ||
+        typeof authority?.path !== "string" ||
+        authority.path.length === 0 ||
+        typeof authority?.export !== "string" ||
+        authority.export.length === 0
+    ) ||
+    new Set(executableAuthorityKeys).size !== executableAuthorityKeys.length ||
+    !Array.isArray(capability.limitationRefs) ||
+    capability.limitationRefs.length === 0 ||
+    new Set(capability.limitationRefs).size !== capability.limitationRefs.length
+  ) {
+    failures.push(
+      `product capability ${capability.id ?? "<missing-id>"} has an invalid bounded interface shape`
+    );
+  }
+
+  for (const [tier, claim] of Object.entries(capability.evidence ?? {})) {
+    const proofRefs = claim?.proofRefs;
+    const contextRefs = claim?.contextRefs;
+    const qualified = claim?.qualification === "qualified";
+    const notApplicable = claim?.qualification === "not-applicable";
+    if (
+      !evidenceQualifications.includes(claim?.qualification) ||
+      !evidenceCoverages.includes(claim?.coverage) ||
+      !evidenceRevisionRelations.includes(claim?.revisionRelation) ||
+      typeof claim?.scope !== "string" ||
+      claim.scope.length === 0 ||
+      !Array.isArray(proofRefs) ||
+      !Array.isArray(contextRefs) ||
+      new Set(proofRefs).size !== proofRefs.length ||
+      new Set(contextRefs).size !== contextRefs.length ||
+      (qualified && proofRefs.length === 0) ||
+      (!qualified && proofRefs.length !== 0) ||
+      (qualified && !["full", "partial"].includes(claim.coverage)) ||
+      (qualified && !["current", "historical"].includes(claim.revisionRelation)) ||
+      (claim.qualification === "unqualified" &&
+        (claim.coverage !== "none" ||
+          !["current", "historical"].includes(claim.revisionRelation))) ||
+      (notApplicable &&
+        (claim.coverage !== "not-applicable" ||
+          claim.revisionRelation !== "not-applicable" ||
+          contextRefs.length !== 0))
+    ) {
+      failures.push(
+        `product capability ${capability.id} evidence tier ${tier} has inconsistent qualification, coverage, revision, or proof references`
+      );
+    }
+  }
+}
+
+const parseRepositoryRef = (reference) => {
+  const hashIndex = reference.indexOf("#");
+  return {
+    path: hashIndex === -1 ? reference : reference.slice(0, hashIndex),
+    fragment: hashIndex === -1 ? null : reference.slice(hashIndex + 1),
+  };
+};
+
+const isSafeRepositoryPath = (path) =>
+  path.length > 0 &&
+  !path.startsWith("/") &&
+  !path.includes("\\") &&
+  !path.split("/").some((part) => part === "" || part === "." || part === "..");
+
+const resolveJsonPointer = (document, pointer) => {
+  if (pointer === "") return document;
+  if (!pointer.startsWith("/")) {
+    throw new Error("fragment is not an absolute JSON Pointer");
+  }
+  let current = document;
+  for (const rawToken of pointer.slice(1).split("/")) {
+    const token = decodeURIComponent(rawToken)
+      .replaceAll("~1", "/")
+      .replaceAll("~0", "~");
+    if (
+      typeof current !== "object" ||
+      current === null ||
+      !Object.hasOwn(current, token)
+    ) {
+      throw new Error(`missing JSON Pointer token ${JSON.stringify(token)}`);
+    }
+    current = current[token];
+  }
+  return current;
+};
+
+const markdownAnchor = (heading) =>
+  heading
+    .trim()
+    .toLowerCase()
+    .replaceAll(/<[^>]+>/g, "")
+    .replaceAll(/[`*_~]/g, "")
+    .replaceAll(/[^\p{L}\p{N}\s-]/gu, "")
+    .replaceAll(/\s+/g, "-");
+
+const hasMarkdownAnchor = (document, fragment) => {
+  const decoded = decodeURIComponent(fragment);
+  if (
+    document.includes(`<a id="${decoded}"></a>`) ||
+    document.includes(`<a name="${decoded}"></a>`)
+  ) {
+    return true;
+  }
+  return document
+    .split(/\r?\n/u)
+    .filter((line) => /^#{1,6}\s+/u.test(line))
+    .map((line) => line.replace(/^#{1,6}\s+/u, "").replace(/\s+#+\s*$/u, ""))
+    .some((heading) => markdownAnchor(heading) === decoded);
+};
+
+const hasTypeScriptExport = (document, exportedName) => {
+  const escaped = exportedName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `\\bexport\\s+(?:declare\\s+)?(?:const|let|var|function|class|type|interface|enum)\\s+${escaped}\\b`,
+    "u"
+  ).test(document);
+};
+
+const repositoryReferences = [];
+repositoryReferences.push({
+  owner: "product capability generator",
+  reference: productCapabilityIndex.provenance?.generator?.path,
+  fragmentRequired: false,
+  exportedName: productCapabilityIndex.provenance?.generator?.export,
+});
+for (const reference of productCapabilityIndex.provenance?.relatedArtifacts ?? []) {
+  repositoryReferences.push({
+    owner: "product capability related artifact",
+    reference,
+    fragmentRequired: false,
+  });
+}
+for (const domain of productCapabilityIndex.coverage?.includedDomains ?? []) {
+  for (const reference of domain.authorityRefs ?? []) {
+    repositoryReferences.push({
+      owner: `product domain ${domain.id}`,
+      reference,
+      fragmentRequired: false,
+    });
+  }
+}
+for (const domain of productCapabilityIndex.coverage?.unindexedDomains ?? []) {
+  for (const reference of domain.contextRefs ?? []) {
+    repositoryReferences.push({
+      owner: `unindexed product domain ${domain.id}`,
+      reference,
+      fragmentRequired: false,
+    });
+  }
+}
+for (const capability of productCapabilityIndex.capabilities ?? []) {
+  repositoryReferences.push({
+    owner: `${capability.id} specification`,
+    reference: capability.specificationRef,
+    fragmentRequired: true,
+  });
+  for (const authority of capability.provenance?.executableAuthorities ?? []) {
+    repositoryReferences.push({
+      owner: `${capability.id} executable authority`,
+      reference: authority.path,
+      fragmentRequired: false,
+      exportedName: authority.export,
+    });
+  }
+  for (const [kind, reference] of Object.entries(capability.documentation ?? {})) {
+    if (reference !== null) {
+      repositoryReferences.push({
+        owner: `${capability.id} documentation.${kind}`,
+        reference,
+        fragmentRequired: false,
+      });
+    }
+  }
+  for (const reference of capability.limitationRefs ?? []) {
+    repositoryReferences.push({
+      owner: `${capability.id} limitation`,
+      reference,
+      fragmentRequired: true,
+    });
+  }
+  for (const [tier, claim] of Object.entries(capability.evidence ?? {})) {
+    for (const reference of [
+      ...(claim?.proofRefs ?? []),
+      ...(claim?.contextRefs ?? []),
+    ]) {
+      repositoryReferences.push({
+        owner: `${capability.id} evidence.${tier}`,
+        reference,
+        fragmentRequired: false,
+      });
+    }
+  }
+}
+
+const repositoryContents = new Map();
+for (const {
+  owner,
+  reference,
+  fragmentRequired,
+  exportedName,
+} of repositoryReferences) {
+  if (typeof reference !== "string") {
+    failures.push(`${owner} is missing a repository reference`);
+    continue;
+  }
+  const { path, fragment } = parseRepositoryRef(reference);
+  if (!isSafeRepositoryPath(path)) {
+    failures.push(`${owner} has unsafe repository reference ${reference}`);
+    continue;
+  }
+  let value = repositoryContents.get(path);
+  if (value === undefined) {
+    value = await read(path).catch(() => null);
+    if (value !== null) repositoryContents.set(path, value);
+  }
+  if (value === null) {
+    failures.push(`${owner} references missing repository path ${path}`);
+    continue;
+  }
+  if (
+    exportedName !== undefined &&
+    (typeof exportedName !== "string" ||
+      exportedName.length === 0 ||
+      !hasTypeScriptExport(value, exportedName))
+  ) {
+    failures.push(
+      `${owner} references missing TypeScript export ${String(exportedName)} in ${path}`
+    );
+  }
+  if (fragmentRequired && fragment === null) {
+    failures.push(`${owner} must include an explicit JSON Pointer or Markdown anchor`);
+    continue;
+  }
+  if (fragment !== null) {
+    try {
+      if (path.endsWith(".json")) {
+        resolveJsonPointer(JSON.parse(value), fragment);
+      } else if (path.endsWith(".md")) {
+        if (fragment.length === 0 || !hasMarkdownAnchor(value, fragment)) {
+          throw new Error(`missing Markdown anchor ${JSON.stringify(fragment)}`);
+        }
+      } else {
+        throw new Error(
+          "fragments are supported only for JSON and Markdown references"
+        );
+      }
+    } catch (error) {
+      failures.push(
+        `${owner} has invalid repository fragment ${reference}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+}
 
 if (catalog.managementMcp?.toolCount !== 24) {
   failures.push("the generated management catalog must report exactly 24 MCP tools");
@@ -368,6 +763,7 @@ const publicMcpFiles = [
   "docs/reference/self-hosted-http.md",
   "skills/mockos-testing/SKILL.md",
   catalogPath,
+  productCapabilityIndexPath,
   mockLlmOpenAiProviderPath,
   mockLlmAnthropicProviderPath,
   "llms.txt",

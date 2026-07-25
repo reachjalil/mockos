@@ -3,6 +3,8 @@ import {
   mockosHttpOperationIds,
   mockosHttpOperations,
 } from "@mockos/contracts/operations";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   generateMockLlmAnthropicProviderDocumentation,
@@ -10,6 +12,7 @@ import {
   generateMockosHttpOperationManifest,
   generateMockosManagementDocumentationCatalog,
   generateMockosManagementOpenApi,
+  generateMockosProductCapabilityIndex,
 } from "../src/index";
 
 describe("management OpenAPI generation", () => {
@@ -153,6 +156,199 @@ describe("management OpenAPI generation", () => {
     }
 
     const serialized = JSON.stringify(catalog);
+    expect(serialized).not.toMatch(/mk_[A-Za-z0-9_-]{32,128}/);
+    expect(serialized).not.toMatch(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/);
+  });
+
+  it("declares its partial coverage and keeps evidence dimensions independent", () => {
+    const index = generateMockosProductCapabilityIndex();
+    const catalog = generateMockosManagementDocumentationCatalog();
+    const byId = new Map(
+      index.capabilities.map((capability) => [capability.id, capability])
+    );
+
+    expect(index).toMatchObject({
+      schemaVersion: 1,
+      provenance: {
+        generator: {
+          path: "packages/openapi/src/index.ts",
+          export: "generateMockosProductCapabilityIndex",
+        },
+        relatedArtifacts: [
+          "docs/reference/management-operations.v1.json",
+          "docs/reference/mock-llm-openai.v1.json",
+          "docs/reference/mock-llm-anthropic.v1.json",
+        ],
+      },
+      coverage: {
+        status: "partial",
+        scope: "f0-f2-agent-dependency-interface-slice",
+        rule: "absence-means-unindexed-not-unsupported",
+      },
+      supportModel: {
+        rule: "support-describes-bounded-contract-not-hosted-qualification",
+      },
+      evidenceModel: {
+        tiers: ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"],
+        dimensions: {
+          qualification: ["qualified", "unqualified", "not-applicable"],
+          coverage: ["full", "partial", "none", "not-applicable"],
+          revisionRelation: ["current", "historical", "not-applicable"],
+        },
+        rule: "tiers-and-dimensions-are-independent-no-implicit-promotion",
+      },
+    });
+
+    expect(index.coverage.unindexedDomains.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        "identity-provider-data-planes",
+        "scim-and-provisioning-data-planes",
+        "private-cloud-product-surfaces",
+      ])
+    );
+    expect(byId.get("management.mcp")?.support).toBe(
+      catalog.managementMcp.status === "implemented" ? "supported" : "unsupported"
+    );
+    expect(byId.get("management.self-hosted-http")?.support).toBe(
+      catalog.selfHostedHttp.status === "implemented" ? "supported" : "unsupported"
+    );
+    expect(byId.get("mock-llm.openai")?.support).toBe(
+      catalog.future.mockLlmApis.providerDataPlane.openAi.status === "source-qualified"
+        ? "supported"
+        : "partial"
+    );
+    expect(byId.get("mock-llm.anthropic")?.support).toBe(
+      catalog.future.mockLlmApis.providerDataPlane.anthropic.status ===
+        "source-qualified"
+        ? "supported"
+        : "partial"
+    );
+    expect(byId.get("code-mode")).toMatchObject({
+      support:
+        catalog.future.codeMode.status === "unavailable" ? "unsupported" : "partial",
+      evidence: {
+        source: {
+          qualification: "qualified",
+          coverage: "full",
+          revisionRelation: "current",
+        },
+      },
+    });
+    expect(byId.get("management.mcp")?.evidence.hostedCi).toMatchObject({
+      qualification: "qualified",
+      coverage: "partial",
+      revisionRelation: "historical",
+    });
+    expect(byId.get("management.self-hosted-http")?.evidence.hostedCi).toMatchObject({
+      qualification: "qualified",
+      coverage: "full",
+      revisionRelation: "historical",
+    });
+    expect(byId.get("management.self-hosted-http")?.evidence.deployed).toMatchObject({
+      qualification: "unqualified",
+      coverage: "none",
+      revisionRelation: "historical",
+      proofRefs: [],
+      contextRefs: ["docs/evidence/m6-workers-dev-smoke.md"],
+    });
+    expect(byId.get("mock-llm.openai")?.evidence.cloudPin.qualification).toBe(
+      catalog.future.mockLlmApis.providerDataPlane.openAi.evidence.cloudPin
+    );
+    expect(byId.get("mock-llm.anthropic")?.evidence.cloudPin.qualification).toBe(
+      catalog.future.mockLlmApis.providerDataPlane.anthropic.evidence.cloudPin
+    );
+  });
+
+  it("keeps capability records thin and every positive evidence claim provable", () => {
+    const index = generateMockosProductCapabilityIndex();
+    const repositoryRoot = resolve(import.meta.dirname, "../../..");
+    const ids = index.capabilities.map(({ id }) => id);
+    const specificationRefs = index.capabilities.map(
+      ({ specificationRef }) => specificationRef
+    );
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(specificationRefs).size).toBe(specificationRefs.length);
+    expect(index.capabilities.length).toBeGreaterThan(0);
+
+    for (const capability of index.capabilities) {
+      expect(capability.scope.length).toBeGreaterThan(0);
+      expect(capability.documentation.guide.length).toBeGreaterThan(0);
+      expect(capability.documentation.reference.length).toBeGreaterThan(0);
+      expect(capability.documentation.limitations).toBe("docs/known-limitations.md");
+      expect(capability.limitationRefs.length).toBeGreaterThan(0);
+
+      const refs = [
+        capability.specificationRef,
+        capability.documentation.guide,
+        capability.documentation.quickstart,
+        capability.documentation.reference,
+        capability.documentation.limitations,
+        ...capability.limitationRefs,
+        ...capability.provenance.executableAuthorities.map(({ path }) => path),
+        ...Object.values(capability.evidence).flatMap((claim) => [
+          ...claim.proofRefs,
+          ...claim.contextRefs,
+        ]),
+      ].filter((reference): reference is string => reference !== null);
+      for (const reference of refs) {
+        const fragmentIndex = reference.indexOf("#");
+        const path =
+          fragmentIndex === -1 ? reference : reference.slice(0, fragmentIndex);
+        expect(
+          existsSync(resolve(repositoryRoot, path)),
+          `${capability.id} references missing repository path ${path}`
+        ).toBe(true);
+      }
+
+      for (const [tier, claim] of Object.entries(capability.evidence)) {
+        expect(claim.scope.length).toBeGreaterThan(0);
+        if (claim.qualification === "qualified") {
+          expect(
+            claim.proofRefs.length,
+            `${capability.id} ${tier} needs proof references`
+          ).toBeGreaterThan(0);
+        } else {
+          expect(
+            claim.proofRefs,
+            `${capability.id} ${tier} must not imply absent proof`
+          ).toEqual([]);
+        }
+        if (claim.qualification === "unqualified") {
+          expect(claim.coverage).toBe("none");
+          expect(claim.revisionRelation).not.toBe("not-applicable");
+        }
+        if (claim.qualification === "not-applicable") {
+          expect(claim.coverage).toBe("not-applicable");
+          expect(claim.revisionRelation).toBe("not-applicable");
+          expect(claim.contextRefs).toEqual([]);
+        }
+        if (tier === "source" && claim.qualification === "qualified") {
+          expect(
+            claim.proofRefs.every((reference) => reference.endsWith(".test.ts")),
+            `${capability.id} source qualification must cite executable tests`
+          ).toBe(true);
+        }
+      }
+    }
+
+    for (const domain of index.coverage.includedDomains) {
+      expect(domain.authorityRefs.length).toBeGreaterThan(0);
+      for (const reference of domain.authorityRefs) {
+        expect(existsSync(resolve(repositoryRoot, reference))).toBe(true);
+      }
+    }
+    for (const domain of index.coverage.unindexedDomains) {
+      expect(domain.contextRefs.length).toBeGreaterThan(0);
+      for (const reference of domain.contextRefs) {
+        expect(existsSync(resolve(repositoryRoot, reference))).toBe(true);
+      }
+    }
+
+    const serialized = JSON.stringify(index);
+    expect(serialized).not.toContain('"inputSchema"');
+    expect(serialized).not.toContain('"outputSchema"');
+    expect(serialized).not.toContain('"maxBodyBytes"');
     expect(serialized).not.toMatch(/mk_[A-Za-z0-9_-]{32,128}/);
     expect(serialized).not.toMatch(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/);
   });

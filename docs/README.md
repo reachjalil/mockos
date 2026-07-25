@@ -24,6 +24,7 @@ support, deployment, or provider-parity claim.
 | Configure, replace, inspect, and remove a mock LLM through MCP | [MCP-managed mock OpenAI and Anthropic](./mock-llm.md) |
 | Understand the partial mock-LLM planner/provider architecture | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
 | Understand MCP, the console, CLI, HTTP, and provider endpoints | [Interface model](./concepts/interface-model.md) |
+| Compare bounded product support with source, hosted-CI, Cloud-pin, deployment, and verified-live evidence | [Machine-readable product capability index](./reference/product-capabilities.v1.json) |
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
 | Run a concrete OIDC flow | [Entra SSO guide](./quickstarts/entra-sso.md) or [curl walkthrough](./quickstarts/curl.md) |
@@ -38,6 +39,7 @@ support, deployment, or provider-parity claim.
 - [Management MCP behavior](./mcp.md)
 - [Generated 24-tool reference](./reference/management-tools.md)
 - [Machine-readable management catalog](./reference/management-operations.v1.json)
+- [Machine-readable product capability index](./reference/product-capabilities.v1.json)
 - [Machine-readable mock OpenAI provider manifest](./reference/mock-llm-openai.v1.json)
 - [Machine-readable mock Anthropic provider manifest](./reference/mock-llm-anthropic.v1.json)
 - [Self-hosted HTTP reference](./reference/self-hosted-http.md)
@@ -52,6 +54,18 @@ equivalent. Environment mock MCP and mock LLM provider endpoints are separate da
 called by the application or agent under test. Their source behavior and exact
 boundaries are in [Environment-hosted mock MCP](./mock-mcp.md) and
 [MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
+The generated product capability index links each interface included in its explicitly
+partial F0-F2 slice to executable authorities, specifications, guides, anchored
+limitations, and five independent evidence tiers. Each evidence claim separates
+qualification, coverage, and its relationship to the current revision. Its `support`
+field describes only the referenced bounded contract; it does not assert hosted CI, a
+private Cloud pin, deployment, or verified-live provider parity. Absence means
+unindexed, not unsupported: identity, provisioning, and private Cloud product surfaces
+are named as unindexed domains. Their existing management operations are already
+covered by the MCP/HTTP rows; provider and provisioning-outcome rows wait for exact
+public machine contracts. Private Cloud remains a separate overlay that joins private
+product evidence and policy to an immutable public revision without exposing private
+authorities in this artifact.
 
 ## Provider behavior
 

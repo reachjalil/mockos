@@ -1,0 +1,588 @@
+{
+  "capabilities": [
+    {
+      "documentation": {
+        "guide": "docs/mcp.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": "docs/getting-started/mcp-first.md",
+        "reference": "docs/reference/management-tools.md"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "current-24-tool-cloud-pin"
+        },
+        "deployed": {
+          "contextRefs": [],
+          "coverage": "partial",
+          "proofRefs": ["docs/evidence/m5-workers-dev-smoke.md"],
+          "qualification": "qualified",
+          "revisionRelation": "historical",
+          "scope": "historical-15-tool-m5-deployed-slice"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "partial",
+          "proofRefs": ["docs/evidence/m5-workers-dev-smoke.md"],
+          "qualification": "qualified",
+          "revisionRelation": "historical",
+          "scope": "historical-15-tool-m5-hosted-ci-slice"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": [
+            "packages/contracts/src/operations/management.test.ts",
+            "packages/mcp/src/index.test.ts",
+            "apps/worker/test/mcp.integration.test.ts"
+          ],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "current-24-tool-source-registry"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "not-applicable",
+          "proofRefs": [],
+          "qualification": "not-applicable",
+          "revisionRelation": "not-applicable",
+          "scope": "management-interface"
+        }
+      },
+      "id": "management.mcp",
+      "interface": {
+        "kind": "mcp-streamable-http",
+        "management": "primary"
+      },
+      "limitationRefs": [
+        "docs/reference/management-operations.v1.json#/managementMcp/standaloneGet",
+        "docs/reference/management-operations.v1.json#/managementMcp/scopeEnforcement"
+      ],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "mockosManagementOperations",
+            "kind": "registry",
+            "path": "packages/contracts/src/operations/management.ts"
+          },
+          {
+            "export": "registerMockosTools",
+            "kind": "runtime",
+            "path": "packages/mcp/src/index.ts"
+          }
+        ]
+      },
+      "role": "management-plane",
+      "scope": "current-24-tool-registry",
+      "specificationRef": "docs/reference/management-operations.v1.json#/managementMcp",
+      "support": "supported",
+      "title": "Management MCP"
+    },
+    {
+      "documentation": {
+        "guide": "docs/reference/self-hosted-http.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": "docs/quickstarts/curl.md",
+        "reference": "packages/openapi/openapi/mockos-management.v1.json"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "current-public-revision-cloud-pin"
+        },
+        "deployed": {
+          "contextRefs": ["docs/evidence/m6-workers-dev-smoke.md"],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "historical",
+          "scope": "exact-five-route-m6-bundle-not-remotely-exercised"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": ["docs/evidence/m6-workers-dev-smoke.md"],
+          "qualification": "qualified",
+          "revisionRelation": "historical",
+          "scope": "exact-five-route-m6-ancestor"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": [
+            "packages/openapi/test/drift.test.ts",
+            "apps/worker/test/oidc.integration.test.ts",
+            "apps/worker/test/directory.integration.test.ts"
+          ],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "current-five-route-source-contract"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "not-applicable",
+          "proofRefs": [],
+          "qualification": "not-applicable",
+          "revisionRelation": "not-applicable",
+          "scope": "management-interface"
+        }
+      },
+      "id": "management.self-hosted-http",
+      "interface": {
+        "kind": "self-hosted-http",
+        "management": "companion"
+      },
+      "limitationRefs": ["docs/reference/self-hosted-http.md#deliberate-limits"],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "mockosHttpOperations",
+            "kind": "registry",
+            "path": "packages/contracts/src/operations/management.ts"
+          },
+          {
+            "export": "createWorkerApp",
+            "kind": "runtime",
+            "path": "apps/worker/src/app.ts"
+          }
+        ]
+      },
+      "role": "companion-management",
+      "scope": "current-five-route-companion",
+      "specificationRef": "packages/openapi/openapi/mockos-management.v1.json#",
+      "support": "supported",
+      "title": "Self-hosted management HTTP"
+    },
+    {
+      "documentation": {
+        "guide": "docs/mock-mcp.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": "docs/mock-mcp.md",
+        "reference": "docs/reference/management-tools.md"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f1-current-public-revision"
+        },
+        "deployed": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f1-current-source"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f1-current-source"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": [
+            "packages/mcp-mock/src/sdk-conformance.test.ts",
+            "packages/mcp-mock/src/repository-integration.test.ts",
+            "apps/worker/test/mock-mcp.integration.test.ts"
+          ],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "bounded-f1-current-source"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "not-applicable",
+          "proofRefs": [],
+          "qualification": "not-applicable",
+          "revisionRelation": "not-applicable",
+          "scope": "synthetic-mcp-data-plane"
+        }
+      },
+      "id": "mock-mcp.data-plane",
+      "interface": {
+        "kind": "mcp-streamable-http",
+        "management": "mcp-only"
+      },
+      "limitationRefs": ["docs/mock-mcp.md#current-limitations"],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "MOCK_MCP_PROTOCOL_VERSION",
+            "kind": "contract",
+            "path": "packages/contracts/src/mock-mcp.ts"
+          },
+          {
+            "export": "createMockMcpFetchHandler",
+            "kind": "runtime",
+            "path": "packages/mcp-mock/src/index.ts"
+          },
+          {
+            "export": "routeEnvironmentRequest",
+            "kind": "runtime",
+            "path": "packages/worker-kit/src/edge-router.ts"
+          }
+        ]
+      },
+      "role": "synthetic-agent-data-plane",
+      "scope": "bounded-mcp-2025-11-25-subset",
+      "specificationRef": "docs/reference/management-operations.v1.json#/future/mockMcpServers",
+      "support": "supported",
+      "title": "Environment-hosted mock MCP"
+    },
+    {
+      "documentation": {
+        "guide": "docs/mock-llm.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": "docs/quickstarts/openai-sdk.md",
+        "reference": "docs/reference/mock-llm-openai.v1.json"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-openai-current-public-revision"
+        },
+        "deployed": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-openai-current-source"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-openai-current-source"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": [
+            "packages/llm-mock/src/openai-http.test.ts",
+            "packages/llm-mock/src/sdk-conformance.test.ts",
+            "apps/worker/test/mock-llm.integration.test.ts"
+          ],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "bounded-openai-current-source"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "bounded-openai-provider-parity"
+        }
+      },
+      "id": "mock-llm.openai",
+      "interface": {
+        "kind": "openai-http",
+        "management": "mcp-only"
+      },
+      "limitationRefs": [
+        "docs/reference/mock-llm-openai.v1.json#/request/streaming",
+        "docs/reference/mock-llm-openai.v1.json#/request/multimodal"
+      ],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "mockLlmOpenAiProviderManifest",
+            "kind": "contract",
+            "path": "packages/llm-mock/src/openai-http.ts"
+          },
+          {
+            "export": "createMockLlmOpenAiFetchHandler",
+            "kind": "runtime",
+            "path": "packages/llm-mock/src/openai-http.ts"
+          },
+          {
+            "export": "EnvironmentMockLlmOpenAiRuntime",
+            "kind": "runtime",
+            "path": "packages/worker-kit/src/mock-llm-runtime.ts"
+          },
+          {
+            "export": "routeEnvironmentRequest",
+            "kind": "runtime",
+            "path": "packages/worker-kit/src/edge-router.ts"
+          }
+        ]
+      },
+      "role": "provider-data-plane",
+      "scope": "bounded-openai-chat-completions-subset",
+      "specificationRef": "docs/reference/mock-llm-openai.v1.json#",
+      "support": "supported",
+      "title": "Mock OpenAI data plane"
+    },
+    {
+      "documentation": {
+        "guide": "docs/mock-llm.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": "docs/quickstarts/anthropic-sdk.md",
+        "reference": "docs/reference/mock-llm-anthropic.v1.json"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-anthropic-current-public-revision"
+        },
+        "deployed": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-anthropic-current-source"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "f2-anthropic-current-source"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": [
+            "packages/llm-mock/src/anthropic-http.test.ts",
+            "packages/llm-mock/src/anthropic-security.test.ts",
+            "apps/worker/test/mock-llm-anthropic.integration.test.ts"
+          ],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "bounded-anthropic-current-source"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "bounded-anthropic-provider-parity"
+        }
+      },
+      "id": "mock-llm.anthropic",
+      "interface": {
+        "kind": "anthropic-http",
+        "management": "mcp-only"
+      },
+      "limitationRefs": [
+        "docs/reference/mock-llm-anthropic.v1.json#/request/streaming",
+        "docs/reference/mock-llm-anthropic.v1.json#/request/multimodal",
+        "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures"
+      ],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "mockLlmAnthropicProviderManifest",
+            "kind": "contract",
+            "path": "packages/llm-mock/src/anthropic-http.ts"
+          },
+          {
+            "export": "createMockLlmAnthropicFetchHandler",
+            "kind": "runtime",
+            "path": "packages/llm-mock/src/anthropic-http.ts"
+          },
+          {
+            "export": "EnvironmentMockLlmAnthropicRuntime",
+            "kind": "runtime",
+            "path": "packages/worker-kit/src/mock-llm-runtime.ts"
+          },
+          {
+            "export": "routeEnvironmentRequest",
+            "kind": "runtime",
+            "path": "packages/worker-kit/src/edge-router.ts"
+          }
+        ]
+      },
+      "role": "provider-data-plane",
+      "scope": "bounded-anthropic-messages-subset",
+      "specificationRef": "docs/reference/mock-llm-anthropic.v1.json#",
+      "support": "supported",
+      "title": "Mock Anthropic data plane"
+    },
+    {
+      "documentation": {
+        "guide": "packages/codemode/README.md",
+        "limitations": "docs/known-limitations.md",
+        "quickstart": null,
+        "reference": "docs/f-series/f0-foundation.md"
+      },
+      "evidence": {
+        "cloudPin": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "disabled-boundary-cloud-pin"
+        },
+        "deployed": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "disabled-boundary-deployment"
+        },
+        "hostedCi": {
+          "contextRefs": [],
+          "coverage": "none",
+          "proofRefs": [],
+          "qualification": "unqualified",
+          "revisionRelation": "current",
+          "scope": "disabled-boundary-hosted-ci"
+        },
+        "source": {
+          "contextRefs": [],
+          "coverage": "full",
+          "proofRefs": ["packages/codemode/test/disabled.test.ts"],
+          "qualification": "qualified",
+          "revisionRelation": "current",
+          "scope": "disabled-fail-closed-boundary"
+        },
+        "verifiedLive": {
+          "contextRefs": [],
+          "coverage": "not-applicable",
+          "proofRefs": [],
+          "qualification": "not-applicable",
+          "revisionRelation": "not-applicable",
+          "scope": "management-interface"
+        }
+      },
+      "id": "code-mode",
+      "interface": {
+        "kind": "mcp-code-mode",
+        "management": "unavailable"
+      },
+      "limitationRefs": [
+        "docs/reference/management-operations.v1.json#/future/codeMode/status"
+      ],
+      "provenance": {
+        "executableAuthorities": [
+          {
+            "export": "DEFAULT_F_SERIES_FEATURE_FLAGS",
+            "kind": "feature-flag",
+            "path": "packages/contracts/src/features.ts"
+          },
+          {
+            "export": "requireMockosCodeModeEnabled",
+            "kind": "runtime",
+            "path": "packages/codemode/src/index.ts"
+          }
+        ]
+      },
+      "role": "management-plane",
+      "scope": "disabled-fail-closed-boundary",
+      "specificationRef": "docs/reference/management-operations.v1.json#/future/codeMode",
+      "support": "unsupported",
+      "title": "MCP Code Mode"
+    }
+  ],
+  "coverage": {
+    "includedDomains": [
+      {
+        "authorityRefs": [
+          "packages/contracts/src/operations/management.ts",
+          "packages/mcp/src/index.ts",
+          "apps/worker/src/app.ts"
+        ],
+        "id": "management-mcp-and-self-hosted-http"
+      },
+      {
+        "authorityRefs": [
+          "packages/contracts/src/mock-mcp.ts",
+          "packages/mcp-mock/src/index.ts",
+          "packages/llm-mock/src/openai-http.ts",
+          "packages/llm-mock/src/anthropic-http.ts",
+          "packages/worker-kit/src/mock-llm-runtime.ts",
+          "packages/worker-kit/src/edge-router.ts"
+        ],
+        "id": "synthetic-agent-data-planes"
+      },
+      {
+        "authorityRefs": [
+          "packages/contracts/src/features.ts",
+          "packages/codemode/src/index.ts"
+        ],
+        "id": "future-code-mode-boundary"
+      }
+    ],
+    "rule": "absence-means-unindexed-not-unsupported",
+    "scope": "f0-f2-agent-dependency-interface-slice",
+    "status": "partial",
+    "unindexedDomains": [
+      {
+        "contextRefs": ["docs/identity/entra.md", "docs/identity/okta.md"],
+        "id": "identity-provider-data-planes",
+        "reason": "provider-contract-not-yet-joined"
+      },
+      {
+        "contextRefs": [
+          "docs/identity/scim.md",
+          "docs/quickstarts/provisioning-cycle.md"
+        ],
+        "id": "scim-and-provisioning-data-planes",
+        "reason": "provider-and-outcome-contracts-not-yet-joined"
+      },
+      {
+        "contextRefs": ["docs/IMPLEMENTATION_STATUS.md"],
+        "id": "private-cloud-product-surfaces",
+        "reason": "private-overlay-required"
+      }
+    ]
+  },
+  "evidenceModel": {
+    "dimensions": {
+      "coverage": ["full", "partial", "none", "not-applicable"],
+      "qualification": ["qualified", "unqualified", "not-applicable"],
+      "revisionRelation": ["current", "historical", "not-applicable"]
+    },
+    "rule": "tiers-and-dimensions-are-independent-no-implicit-promotion",
+    "tiers": ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"]
+  },
+  "provenance": {
+    "generator": {
+      "export": "generateMockosProductCapabilityIndex",
+      "path": "packages/openapi/src/index.ts"
+    },
+    "relatedArtifacts": [
+      "docs/reference/management-operations.v1.json",
+      "docs/reference/mock-llm-openai.v1.json",
+      "docs/reference/mock-llm-anthropic.v1.json"
+    ]
+  },
+  "schemaVersion": 1,
+  "supportModel": {
+    "rule": "support-describes-bounded-contract-not-hosted-qualification"
+  }
+}
