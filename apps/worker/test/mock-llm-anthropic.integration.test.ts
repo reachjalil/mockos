@@ -127,7 +127,7 @@ const anthropicClient = (environmentId: string, apiKey = ANTHROPIC_MOCK_CREDENTI
   });
 
 describe("public mock Anthropic Worker route", () => {
-  it("configures through MCP and serves a bounded official-SDK non-streaming slice", {
+  it("configures through MCP and serves the bounded official-SDK provider slice", {
     timeout: 30_000,
   }, async () => {
     const management = await connectManagement();
@@ -269,6 +269,44 @@ describe("public mock Anthropic Worker route", () => {
         })
       );
 
+      const streamedTool = client.messages.stream({
+        model: "mock-tool-1",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Stream the Berlin lookup" }],
+        tools: [
+          {
+            name: "get_weather",
+            description: "Return synthetic weather.",
+            input_schema: {
+              type: "object",
+              properties: { location: { type: "string" } },
+            },
+          },
+        ],
+      });
+      const streamedToolConnection = await streamedTool.withResponse();
+      const streamedToolMessage = await streamedTool.finalMessage();
+      expect(streamedToolMessage).toMatchObject({
+        id: expect.stringMatching(/^msg_[a-f0-9]{32}$/),
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        usage: {
+          input_tokens: 11,
+          output_tokens: 5,
+        },
+      });
+      expect(streamedToolMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          id: "call_weather_1",
+          name: "get_weather",
+          input: { location: "Berlin", units: "celsius" },
+        })
+      );
+      expect(streamedToolConnection.request_id).toMatch(/^req_[a-f0-9]{32}$/);
+      expect(streamedToolConnection.request_id).not.toBe(firstMessage._request_id);
+      expect(streamedToolMessage.id).not.toBe(firstMessage.id);
+
       const toolHistory = await client.messages.create({
         model: "mock-text-1",
         max_tokens: 64,
@@ -311,6 +349,76 @@ describe("public mock Anthropic Worker route", () => {
         text: "Hello from the Anthropic mock.",
       });
 
+      const rawText = await client.messages
+        .create({
+          model: "mock-text-1",
+          max_tokens: 64,
+          messages: [{ role: "user", content: "Stream named text events" }],
+          stream: true,
+        })
+        .withResponse();
+      const textEvents = [];
+      for await (const event of rawText.data) textEvents.push(event);
+      expect(textEvents.map((event) => event.type)).toEqual([
+        "message_start",
+        "content_block_start",
+        "content_block_delta",
+        "content_block_stop",
+        "message_delta",
+        "message_stop",
+      ]);
+      expect(
+        textEvents
+          .filter((event) => event.type === "content_block_delta")
+          .map((event) => (event.delta.type === "text_delta" ? event.delta.text : ""))
+          .join("")
+      ).toBe("Hello from the Anthropic mock.");
+      const textStart = textEvents.find((event) => event.type === "message_start");
+      if (textStart?.type !== "message_start") {
+        throw new Error("Expected an Anthropic message_start event.");
+      }
+      expect(textStart.message).toMatchObject({
+        id: expect.stringMatching(/^msg_[a-f0-9]{32}$/),
+        stop_reason: null,
+        usage: {
+          input_tokens: 11,
+          output_tokens: 0,
+        },
+      });
+      const textDelta = textEvents.find((event) => event.type === "message_delta");
+      if (textDelta?.type !== "message_delta") {
+        throw new Error("Expected an Anthropic message_delta event.");
+      }
+      expect(textDelta).toMatchObject({
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: {
+          input_tokens: 11,
+          output_tokens: 5,
+        },
+      });
+      expect(rawText.request_id).toMatch(/^req_[a-f0-9]{32}$/);
+      expect(rawText.request_id).not.toBe(streamedToolConnection.request_id);
+      expect(textStart.message.id).not.toBe(streamedToolMessage.id);
+
+      const cancellable = await client.messages.create({
+        model: "mock-text-1",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Cancel before terminal success" }],
+        stream: true,
+      });
+      const cancellableIterator = cancellable[Symbol.asyncIterator]();
+      const firstCancellableEvent = await cancellableIterator.next();
+      expect(firstCancellableEvent).toMatchObject({
+        done: false,
+        value: { type: "message_start" },
+      });
+      const observedCancellableTypes = [firstCancellableEvent.value?.type];
+      cancellable.controller.abort();
+      await expect(cancellableIterator.next()).resolves.toMatchObject({
+        done: true,
+      });
+      expect(observedCancellableTypes).not.toContain("message_stop");
+
       await expect(
         client.messages.create({
           model: "mock-rate-limit-1",
@@ -337,20 +445,31 @@ describe("public mock Anthropic Worker route", () => {
           error: { type: "not_found_error" },
         },
       });
-      await expect(
-        client.messages.create({
-          model: "mock-text-1",
+
+      let streamingError: unknown;
+      try {
+        await client.messages.create({
+          model: "mock-rate-limit-1",
           max_tokens: 64,
-          messages: [{ role: "user", content: "No streaming" }],
+          messages: [{ role: "user", content: "Rate limit while streaming" }],
           stream: true,
-        })
-      ).rejects.toMatchObject({
-        status: 400,
+        });
+      } catch (error) {
+        streamingError = error;
+      }
+      expect(streamingError).toBeInstanceOf(Anthropic.APIError);
+      expect(streamingError).toMatchObject({
+        status: 429,
+        requestID: expect.stringMatching(/^req_[a-f0-9]{32}$/),
         error: {
           type: "error",
-          error: { type: "invalid_request_error" },
+          error: { type: "rate_limit_error" },
         },
       });
+      if (!(streamingError instanceof Anthropic.APIError)) {
+        throw new Error("Expected an Anthropic APIError.");
+      }
+      expect(streamingError.headers?.get("content-type")).toContain("application/json");
 
       await expect(
         anthropicClient(environmentId, PLATFORM_KEY).models.list()

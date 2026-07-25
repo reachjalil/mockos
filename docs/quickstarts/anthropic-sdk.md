@@ -1,11 +1,11 @@
 # Test an application with the mock Anthropic SDK surface
 
-Status: Anthropic non-streaming source workflow; no hosted or deployed qualification
+Status: Anthropic JSON/SSE source workflow; no hosted or deployed qualification
 Last reviewed: 2026-07-25
 
 This quickstart creates a deterministic model through management MCP, proves the
 separate provider data plane with authenticated `GET /v1/models`, and calls
-non-streaming Messages through the official Anthropic JavaScript SDK. It uses a
+JSON and streaming Messages through the official Anthropic JavaScript SDK. It uses a
 path-mode URL from a local source Worker.
 
 The exact source evidence pins `@anthropic-ai/sdk@0.115.0`. A newer SDK may work, but
@@ -224,7 +224,60 @@ mockOS accepts exactly `anthropic-version: 2023-06-01`; it does not negotiate a
 different version. Definition-controlled usage is not calculated by tokenizing the
 prompt.
 
-## 4. Exercise a custom tool
+## 4. Stream a Message through the SDK
+
+Set `stream: true` and consume the official SDK's raw async iterator:
+
+```js
+const stream = await client.messages.create({
+  model: "mock-agent-1",
+  max_tokens: 64,
+  messages: [{ role: "user", content: "Hello" }],
+  stream: true,
+});
+
+const eventTypes = [];
+let streamedText = "";
+for await (const event of stream) {
+  eventTypes.push(event.type);
+  if (
+    event.type === "content_block_delta" &&
+    event.delta.type === "text_delta"
+  ) {
+    streamedText += event.delta.text;
+  }
+}
+
+if (streamedText !== "This response is deterministic.") {
+  throw new Error(`unexpected streamed response: ${JSON.stringify(streamedText)}`);
+}
+if (eventTypes.at(0) !== "message_start" || eventTypes.at(-1) !== "message_stop") {
+  throw new Error(`unexpected event order: ${JSON.stringify(eventTypes)}`);
+}
+```
+
+The wire uses named SSE events with a JSON `data` line. The exact successful order is
+`message_start`, then `content_block_start`, zero or more
+`content_block_delta` events, `content_block_stop`, `message_delta`, and
+`message_stop`. Each text payload delta has type `text_delta`; streamed custom-tool
+arguments use `input_json_delta`. `message_delta` carries cumulative usage. Anthropic
+Messages does not use an OpenAI-style `[DONE]` sentinel. mockOS emits no `ping`
+event, although a reusable client should tolerate the upstream protocol's `ping`.
+
+Only text and canonical tool-input JSON payload deltas consume configured chunk
+cadence. Message/content-block structural events are immediate. Initial delay happens
+before response headers, and one absolute `maximumDurationMilliseconds` covers that
+initial wait, payload pacing, and reader backpressure. The complete precomputed SSE
+body is capped at 2,097,152 UTF-8 bytes.
+
+Preflight requires
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+to be strictly less than `maximumDurationMilliseconds`; equality fails generically
+before HTTP `200`. An abort during the pre-header delay returns an empty `499`.
+Cancellation, reader close, or deadline after HTTP `200` truncates the stream without
+fabricating `message_stop`.
+
+## 5. Exercise a custom tool
 
 The bounded Messages subset accepts only custom client tools. A tool definition needs
 a unique `[A-Za-z0-9_-]{1,64}` name and an `input_schema` object whose `type` is
@@ -249,6 +302,10 @@ const toolMessage = await client.messages.create({
 });
 ```
 
+Use `stream: true` on the same request to exercise incremental
+`input_json_delta.partial_json` frames. Concatenate them before parsing; structural
+`content_block_start` and `content_block_stop` events remain immediate.
+
 Supported history blocks are:
 
 - `text` in either `user` or `assistant` content;
@@ -260,7 +317,7 @@ This structural acceptance is intentionally narrower and looser than broad Anthr
 semantics: the first slice does not enforce user/assistant turn alternation or verify
 that a `tool_result.tool_use_id` corresponds to an earlier `tool_use.id`.
 
-## 5. Prove bounded negative cases
+## 6. Prove bounded negative cases
 
 Keep `maxRetries: 0`, then require the exact failure:
 
@@ -270,7 +327,8 @@ Keep `maxRetries: 0`, then require the exact failure:
   `400 invalid_request_error`;
 - send any `anthropic-beta` or `anthropic-beta-*` header and require
   `400 invalid_request_error`;
-- set `stream: true` and require `400 invalid_request_error`; or
+- send an unknown top-level field or a non-Boolean `stream` and require
+  `400 invalid_request_error`; or
 - call a missing model and require `404 not_found_error`.
 
 The provider accepts only `x-api-key`. `Authorization`, `x-anthropic-api-key`, an
@@ -278,7 +336,10 @@ OpenAI Bearer Mock Credential, and the platform management Access Key are reject
 Do not place either accepted credential in request JSON: request and response
 credential reflection fail closed.
 
-## 6. Clean up with the latest revision
+Configured error plans are still provider-shaped JSON failures before HTTP `200`;
+configured midstream error events after `200` are unsupported.
+
+## 7. Clean up with the latest revision
 
 In `finally`:
 
@@ -301,13 +362,19 @@ no hosted or deployed qualification and does not prove a Wrangler network round 
 Cloud consumption, staging, production, service availability, or live Anthropic
 parity.
 
-The current provider slice has no streaming/SSE, beta APIs, multimodal input,
-thinking, sampling controls, stop sequences, metadata, built-in/server tools,
-non-auto tool choice, durable conversation/evaluator state, reset, or LLM-specific
-observations/assertions. Model-list pagination query parameters are ignored and the
-response is always one page. Required `max_tokens` is validated from `1` through
-`1,000,000,000` and enters the deterministic fingerprint; `max_tokens` does not
-truncate a configured response plan.
+The selected response plan is revision-rechecked and committed in the
+Environment Durable Object before it returns to the edge for streaming. The current planner is
+stateless, so that commit does not advance conversation/evaluator state. Future
+persisted state needs a separate, explicitly qualified plan-reuse and abort design;
+post-header cancellation does not roll back the already completed plan commit.
+
+The current provider slice has no beta APIs, multimodal input, thinking, sampling
+controls, stop sequences, metadata, built-in/server tools, non-auto tool choice,
+configured midstream errors, durable conversation/evaluator state, reset, or
+LLM-specific observations/assertions. Model-list pagination query parameters are
+ignored and the response is always one page. Required `max_tokens` is validated from
+`1` through `1,000,000,000` and enters the deterministic fingerprint; `max_tokens`
+does not truncate a configured response plan.
 
 Use the generated [Anthropic provider manifest](../reference/mock-llm-anthropic.v1.json)
 instead of guessing from Anthropic's broader API.

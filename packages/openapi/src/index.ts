@@ -205,7 +205,7 @@ export type MockLlmAnthropicProviderDocumentation = {
     id: "create_message" | "list_models" | "retrieve_model";
     method: "GET" | "POST";
     path: "/v1/messages" | "/v1/models" | "/v1/models/{model}";
-    streaming: false;
+    streaming: boolean;
   }>;
   request: {
     mediaType: "application/json";
@@ -230,7 +230,7 @@ export type MockLlmAnthropicProviderDocumentation = {
     system: "optional-bounded-string";
     toolDefinitions: "unique-custom-tools-with-object-input-schema";
     toolChoice: "absent-or-auto";
-    streaming: "rejected";
+    streaming: "absent-or-false-json-true-sse";
     multimodal: "unsupported";
     betaFeatures: "unsupported";
     unknownTopLevelFields: "rejected";
@@ -242,18 +242,40 @@ export type MockLlmAnthropicProviderDocumentation = {
     messageIdPrefix: "msg_";
     transportIds: "fresh-per-invocation";
     deterministicPlanIdExposure: "never";
+    streaming: {
+      format: "server-sent-events";
+      framing: "named-event-and-json-data";
+      order: "message-start-content-block-start-payload-content-block-stop-message-delta-message-stop";
+      doneSentinel: "none";
+      initialDelay: "pre-header";
+      pacedFrames: "text-delta-and-input-json-delta-only";
+      immediateFrames: "message-and-content-block-structural-events";
+      payloadEventsPerContentBlock: "zero-or-more";
+      maximumDuration: "absolute-includes-initial-pacing-backpressure";
+      scheduleAdmissibility: "initial+max(payload-count-minus-one,zero)*delay<maximum";
+      payloadFrameCount: "unicode-code-point-chunks-of-text-and-canonical-tool-input-json";
+      deadlineEquality: "rejected";
+      bodySizing: "entire-precomputed-sse-utf8";
+      preflightFailure: "generic-json-before-200";
+      cancellationOrDeadline: "truncate-without-fabricated-message-stop";
+      messageDeltaUsage: "cumulative";
+      mockEmittedPing: "none-clients-should-tolerate-upstream";
+      configuredError: "provider-json-before-200-even-when-stream-requested";
+      configuredMidstreamErrors: "unsupported";
+    };
   };
   planning: {
     conversationState: "stateless";
     turnIndex: "prior-assistant-message-count";
     stateKey: "server-slug+dialect+model";
     definitionRevision: "rechecked-before-plan-commit";
-    initialDelay: "abort-aware";
-    chunkCadence: "inert-without-streaming";
+    stateCommit: "durable-object-before-edge-plan-return";
+    initialDelay: "abort-aware-pre-header";
+    chunkCadence: "payload-deltas-only";
   };
   security: {
     requestCredentialReflection: "rejected";
-    responseCredentialReflection: "rejected";
+    responseCredentialReflection: "rejected-before-header";
   };
   evidence: {
     packageTests: "qualified";
@@ -554,7 +576,7 @@ export type MockosManagementDocumentationCatalog = {
       };
       guide: "docs/mock-llm.md";
       providerDataPlane: {
-        status: "openai-streaming-and-anthropic-non-streaming-source-qualified";
+        status: "openai-and-anthropic-streaming-source-qualified";
         managementConfiguration: "MCP-only";
         manifests: readonly [
           "docs/reference/mock-llm-openai.v1.json",
@@ -724,7 +746,7 @@ export const generateMockLlmAnthropicProviderDocumentation =
       system: "optional-bounded-string",
       toolDefinitions: "unique-custom-tools-with-object-input-schema",
       toolChoice: "absent-or-auto",
-      streaming: "rejected",
+      streaming: "absent-or-false-json-true-sse",
       multimodal: "unsupported",
       betaFeatures: "unsupported",
       unknownTopLevelFields: "rejected",
@@ -736,18 +758,43 @@ export const generateMockLlmAnthropicProviderDocumentation =
       messageIdPrefix: "msg_",
       transportIds: "fresh-per-invocation",
       deterministicPlanIdExposure: "never",
+      streaming: {
+        format: "server-sent-events",
+        framing: "named-event-and-json-data",
+        order:
+          "message-start-content-block-start-payload-content-block-stop-message-delta-message-stop",
+        doneSentinel: "none",
+        initialDelay: "pre-header",
+        pacedFrames: "text-delta-and-input-json-delta-only",
+        immediateFrames: "message-and-content-block-structural-events",
+        payloadEventsPerContentBlock: "zero-or-more",
+        maximumDuration: "absolute-includes-initial-pacing-backpressure",
+        scheduleAdmissibility:
+          "initial+max(payload-count-minus-one,zero)*delay<maximum",
+        payloadFrameCount:
+          "unicode-code-point-chunks-of-text-and-canonical-tool-input-json",
+        deadlineEquality: "rejected",
+        bodySizing: "entire-precomputed-sse-utf8",
+        preflightFailure: "generic-json-before-200",
+        cancellationOrDeadline: "truncate-without-fabricated-message-stop",
+        messageDeltaUsage: "cumulative",
+        mockEmittedPing: "none-clients-should-tolerate-upstream",
+        configuredError: "provider-json-before-200-even-when-stream-requested",
+        configuredMidstreamErrors: "unsupported",
+      },
     },
     planning: {
       conversationState: "stateless",
       turnIndex: "prior-assistant-message-count",
       stateKey: "server-slug+dialect+model",
       definitionRevision: "rechecked-before-plan-commit",
-      initialDelay: "abort-aware",
-      chunkCadence: "inert-without-streaming",
+      stateCommit: "durable-object-before-edge-plan-return",
+      initialDelay: "abort-aware-pre-header",
+      chunkCadence: "payload-deltas-only",
     },
     security: {
       requestCredentialReflection: "rejected",
-      responseCredentialReflection: "rejected",
+      responseCredentialReflection: "rejected-before-header",
     },
     evidence: {
       packageTests: "qualified",
@@ -952,7 +999,7 @@ export const generateMockosManagementDocumentationCatalog =
           },
           guide: "docs/mock-llm.md",
           providerDataPlane: {
-            status: "openai-streaming-and-anthropic-non-streaming-source-qualified",
+            status: "openai-and-anthropic-streaming-source-qualified",
             managementConfiguration: "MCP-only",
             manifests: [
               "docs/reference/mock-llm-openai.v1.json",
@@ -1395,6 +1442,11 @@ export const generateMockosProductCapabilityIndex =
               },
               {
                 kind: "runtime",
+                path: "packages/llm-mock/src/edge-stream.ts",
+                export: "prepareEdgeSseStream",
+              },
+              {
+                kind: "runtime",
                 path: "packages/worker-kit/src/mock-llm-runtime.ts",
                 export: "EnvironmentMockLlmAnthropicRuntime",
               },
@@ -1414,6 +1466,8 @@ export const generateMockosProductCapabilityIndex =
               [
                 "packages/llm-mock/src/anthropic-http.test.ts",
                 "packages/llm-mock/src/anthropic-security.test.ts",
+                "packages/llm-mock/src/edge-stream.test.ts",
+                "packages/llm-mock/src/sdk-conformance.test.ts",
                 "apps/worker/test/mock-llm-anthropic.integration.test.ts",
               ]
             ),
@@ -1438,7 +1492,7 @@ export const generateMockosProductCapabilityIndex =
             limitations: "docs/known-limitations.md",
           },
           limitationRefs: [
-            "docs/reference/mock-llm-anthropic.v1.json#/request/streaming",
+            "docs/reference/mock-llm-anthropic.v1.json#/response/streaming/configuredMidstreamErrors",
             "docs/reference/mock-llm-anthropic.v1.json#/request/multimodal",
             "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures",
           ],

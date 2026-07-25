@@ -141,19 +141,24 @@ tool history, and model-pagination assumptions.
   while content-derived deterministic plan IDs remain internal. After the final
   definition-revision check, the runtime commits the selected plan inside the
   Environment Durable Object before returning it to the edge; current turn selection
-  remains stateless and does not persist conversation state.
-- OpenAI streaming precomputes the complete SSE sequence and rejects a body over
+  remains stateless and does not persist conversation state. A post-header abort does
+  not roll back that completed commit; future persisted state requires separately
+  qualified plan-reuse, retry, and abort semantics.
+- OpenAI and Anthropic streaming precompute the complete SSE sequence and reject a body over
   2,097,152 UTF-8 bytes with a generic JSON error before HTTP `200`. Initial delay is
   abort-aware and occurs before response headers. Only payload deltas are
-  cadence-paced; role, terminal, optional usage, and `[DONE]` frames are immediate.
+  cadence-paced; provider structural and terminal frames are immediate.
   One absolute maximum duration includes initial wait, pacing, and response
   backpressure. Preflight also requires
   `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
   to be strictly less than `maximumDurationMilliseconds`; equality is rejected to
   avoid a deadline race. Payload frame count comes from Unicode code-point chunks of
-  text and canonical tool arguments. Cancellation or deadline after HTTP `200`
-  truncates the stream without fabricating a terminal chunk or success. Configured
-  midstream errors are unsupported.
+  text and canonical provider tool arguments/input JSON. Cancellation or deadline
+  after HTTP `200` truncates the stream without fabricating a terminal chunk or
+  success. Anthropic named events end with `message_stop` and report cumulative
+  `message_delta` usage; the mock emits neither `[DONE]` nor `ping`, although clients
+  should tolerate upstream `ping`. Configured errors remain provider JSON before
+  HTTP `200` even for `stream: true`; configured midstream errors are unsupported.
 - `include_obfuscation` defaults to true and adds fresh opaque compatibility padding
   to regular OpenAI delta chunks. The padding is not derived from request material
   and is rejected from provider-body reflection checks, but it is not qualified as
@@ -319,7 +324,7 @@ without verifier comparison; it is suitable only for synthetic tests and is not
 public/anonymous access or production authorization. `strict` compares the current
 hash-only verifier, but a successful mock check still grants only this synthetic
   provider behavior. Conversation/response state, reset, LLM observation/assertion,
-  configured midstream errors, OpenAI Responses, Anthropic streaming/betas/broad
+  configured midstream errors, OpenAI Responses, Anthropic betas/broad
   parameters, Wrangler-network qualification, deployment, and private Cloud pinning
   remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a

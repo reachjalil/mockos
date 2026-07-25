@@ -17,6 +17,7 @@ vi.mock("./anthropic", async (importOriginal) => {
   };
 });
 
+import { renderAnthropicPlan } from "./anthropic";
 import {
   createMockLlmAnthropicFetchHandler,
   MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES,
@@ -63,7 +64,7 @@ const providerHeaders = () => ({
   "x-api-key": CREDENTIAL,
 });
 
-const messageRequest = () =>
+const messageRequest = (overrides: Readonly<Record<string, unknown>> = {}) =>
   new Request("https://mockos.test", {
     method: "POST",
     headers: {
@@ -74,6 +75,7 @@ const messageRequest = () =>
       model: TEST_MODEL,
       max_tokens: 64,
       messages: [{ role: "user", content: "Hello" }],
+      ...overrides,
     }),
   });
 
@@ -229,6 +231,93 @@ describe("mock Anthropic security boundary", () => {
       request_id: FIXED_IDENTITY.requestId,
     });
     expect(serialized).not.toContain(CREDENTIAL);
+    expect(providerRuntime.planMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("scans the complete rendered stream before returning provider headers", async () => {
+    securityRenderState.override = ((_plan, options) =>
+      ({
+        kind: "sse",
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "request-id": options.requestId ?? FIXED_IDENTITY.requestId,
+        },
+        frames: [
+          {
+            data: `event: content_block_delta\ndata: ${JSON.stringify({
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: CREDENTIAL },
+            })}\n\n`,
+            cadence: "payload",
+          },
+        ],
+      }) satisfies RenderedLlmWire) as AnthropicRenderer;
+    const providerRuntime = runtime();
+
+    const response = await handler(providerRuntime)(messageRequest({ stream: true }), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    const serialized = await response.text();
+    expect(serialized).not.toContain(CREDENTIAL);
+    expect(JSON.parse(serialized)).toMatchObject({
+      type: "error",
+      error: { type: "api_error" },
+    });
+    expect(providerRuntime.planMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("preflights a complete provider-valid streamed wire against the 2 MiB cap", async () => {
+    const completeWire = renderAnthropicPlan(textPlan(), {
+      stream: true,
+      requestId: FIXED_IDENTITY.requestId,
+      responseId: FIXED_IDENTITY.responseId,
+    });
+    if (completeWire.kind !== "sse") {
+      throw new Error("Expected the Anthropic renderer to produce SSE.");
+    }
+    const oversizedWire: RenderedLlmWire = {
+      ...completeWire,
+      frames: completeWire.frames.map((frame) =>
+        frame.data.includes('"text_delta"')
+          ? {
+              data: `event: content_block_delta\ndata: ${JSON.stringify({
+                type: "content_block_delta",
+                index: 0,
+                delta: {
+                  type: "text_delta",
+                  text: "x".repeat(MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES),
+                },
+              })}\n\n`,
+              cadence: "payload",
+            }
+          : frame
+      ),
+    };
+    securityRenderState.override = (() => oversizedWire) as AnthropicRenderer;
+    const providerRuntime = runtime();
+
+    const response = await handler(providerRuntime)(messageRequest({ stream: true }), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    const serialized = await response.text();
+    expect(new TextEncoder().encode(serialized).byteLength).toBeLessThan(
+      MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES
+    );
+    expect(JSON.parse(serialized)).toMatchObject({
+      type: "error",
+      error: { type: "api_error" },
+      request_id: FIXED_IDENTITY.requestId,
+    });
     expect(providerRuntime.planMessage).toHaveBeenCalledTimes(1);
   });
 });

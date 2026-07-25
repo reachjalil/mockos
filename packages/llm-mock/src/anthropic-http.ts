@@ -15,6 +15,7 @@ import {
 } from "@mockos/contracts/mock-llm-server";
 import { renderAnthropicPlan } from "./anthropic";
 import { canonicalMockLlmJson } from "./canonical-json";
+import { prepareEdgeSseStream } from "./edge-stream";
 import { mockLlmPlanContainsSecret, mockLlmValueContainsSecret } from "./openai-http";
 
 export const MOCK_LLM_ANTHROPIC_VERSION = "2023-06-01";
@@ -46,7 +47,7 @@ export const mockLlmAnthropicProviderManifest = Object.freeze({
       id: "create_message",
       method: "POST",
       path: "/v1/messages",
-      streaming: false,
+      streaming: true,
     },
     {
       id: "list_models",
@@ -106,16 +107,13 @@ export type ParsedMockLlmAnthropicMessageRequest = {
   readonly request: Readonly<Record<string, JsonValue>>;
   readonly model: string;
   readonly turnIndex: number;
+  readonly stream: boolean;
   readonly fingerprint: Readonly<Record<string, JsonValue>>;
 };
 
 export class MockLlmAnthropicRequestError extends Error {
   constructor(
-    readonly code:
-      | "invalid_json"
-      | "invalid_request"
-      | "request_too_large"
-      | "streaming_not_supported",
+    readonly code: "invalid_json" | "invalid_request" | "request_too_large",
     readonly parameter?: string,
     options?: ErrorOptions
   ) {
@@ -162,14 +160,6 @@ const invalidRequest = (requestId: string): Response =>
   anthropicError({
     status: 400,
     message: "The request is not valid for this mock Anthropic endpoint.",
-    type: "invalid_request_error",
-    requestId,
-  });
-
-const streamingNotSupported = (requestId: string): Response =>
-  anthropicError({
-    status: 400,
-    message: "Streaming is not supported by this mock Anthropic endpoint.",
     type: "invalid_request_error",
     requestId,
   });
@@ -497,9 +487,7 @@ export const parseMockLlmAnthropicMessageRequest = (
   if (value.stream !== undefined && typeof value.stream !== "boolean") {
     throw new MockLlmAnthropicRequestError("invalid_request", "stream");
   }
-  if (value.stream === true) {
-    throw new MockLlmAnthropicRequestError("streaming_not_supported", "stream");
-  }
+  const stream = value.stream === true;
   if (!validAutoToolChoice(value.tool_choice)) {
     throw new MockLlmAnthropicRequestError("invalid_request", "tool_choice");
   }
@@ -524,6 +512,7 @@ export const parseMockLlmAnthropicMessageRequest = (
     request: Object.freeze(value),
     model: parsedModel.data,
     turnIndex,
+    stream,
     fingerprint: Object.freeze(fingerprint),
   });
 };
@@ -720,6 +709,7 @@ export type CreateMockLlmAnthropicFetchHandlerOptions = {
     readonly responseId: string;
   };
   readonly delay?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly now?: () => number;
 };
 
 export const createMockLlmAnthropicFetchHandler = (
@@ -868,12 +858,6 @@ export const createMockLlmAnthropicFetchHandler = (
       ) {
         return requestTooLarge(identity.requestId);
       }
-      if (
-        error instanceof MockLlmAnthropicRequestError &&
-        error.code === "streaming_not_supported"
-      ) {
-        return streamingNotSupported(identity.requestId);
-      }
       return invalidRequest(identity.requestId);
     }
     if (mockLlmValueContainsSecret(body, [credential, options.platformApiKey])) {
@@ -917,6 +901,47 @@ export const createMockLlmAnthropicFetchHandler = (
         return internalError(identity.requestId);
       }
     }
+    const wire = renderAnthropicPlan(plan, {
+      stream: parsed.stream,
+      requestId: identity.requestId,
+      responseId: identity.responseId,
+    });
+    if (mockLlmValueContainsSecret(wire, [credential, options.platformApiKey])) {
+      return internalError(identity.requestId);
+    }
+
+    if (wire.kind === "sse") {
+      if (plan.kind !== "response") return internalError(identity.requestId);
+      let prepared: ReturnType<typeof prepareEdgeSseStream>;
+      try {
+        prepared = prepareEdgeSseStream({
+          frames: wire.frames,
+          schedule: plan.cadence,
+          signal: request.signal,
+          maximumBytes: MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES,
+          ...(options.now ? { now: options.now } : {}),
+        });
+      } catch {
+        return internalError(identity.requestId);
+      }
+      try {
+        await prepared.waitForInitialDelay();
+      } catch {
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        return internalError(identity.requestId);
+      }
+      try {
+        return new Response(prepared.createReadableStream(), {
+          status: wire.status,
+          headers: wire.headers,
+        });
+      } catch {
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        return internalError(identity.requestId);
+      }
+    }
+
+    if (wire.kind !== "json") return internalError(identity.requestId);
     const initialDelayMilliseconds =
       plan.kind === "response"
         ? plan.cadence.initialDelayMilliseconds
@@ -925,15 +950,6 @@ export const createMockLlmAnthropicFetchHandler = (
       await delay(initialDelayMilliseconds, request.signal);
     } catch {
       if (request.signal.aborted) return new Response(null, { status: 499 });
-      return internalError(identity.requestId);
-    }
-    const wire = renderAnthropicPlan(plan, {
-      stream: false,
-      requestId: identity.requestId,
-      responseId: identity.responseId,
-    });
-    if (wire.kind !== "json") return internalError(identity.requestId);
-    if (mockLlmValueContainsSecret(wire.body, [credential, options.platformApiKey])) {
       return internalError(identity.requestId);
     }
     const serialized = JSON.stringify(wire.body);

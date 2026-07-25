@@ -129,7 +129,7 @@ describe("management OpenAPI generation", () => {
       },
       guide: "docs/mock-llm.md",
       providerDataPlane: {
-        status: "openai-streaming-and-anthropic-non-streaming-source-qualified",
+        status: "openai-and-anthropic-streaming-source-qualified",
         managementConfiguration: "MCP-only",
         manifests: [
           "docs/reference/mock-llm-openai.v1.json",
@@ -142,6 +142,31 @@ describe("management OpenAPI generation", () => {
         observationsAndAssertions: "unavailable",
       },
       deployedAcceptance: "unqualified",
+    });
+    expect(
+      catalog.future.mockLlmApis.providerDataPlane.anthropic.response.streaming
+    ).toEqual({
+      format: "server-sent-events",
+      framing: "named-event-and-json-data",
+      order:
+        "message-start-content-block-start-payload-content-block-stop-message-delta-message-stop",
+      doneSentinel: "none",
+      initialDelay: "pre-header",
+      pacedFrames: "text-delta-and-input-json-delta-only",
+      immediateFrames: "message-and-content-block-structural-events",
+      payloadEventsPerContentBlock: "zero-or-more",
+      maximumDuration: "absolute-includes-initial-pacing-backpressure",
+      scheduleAdmissibility: "initial+max(payload-count-minus-one,zero)*delay<maximum",
+      payloadFrameCount:
+        "unicode-code-point-chunks-of-text-and-canonical-tool-input-json",
+      deadlineEquality: "rejected",
+      bodySizing: "entire-precomputed-sse-utf8",
+      preflightFailure: "generic-json-before-200",
+      cancellationOrDeadline: "truncate-without-fabricated-message-stop",
+      messageDeltaUsage: "cumulative",
+      mockEmittedPing: "none-clients-should-tolerate-upstream",
+      configuredError: "provider-json-before-200-even-when-stream-requested",
+      configuredMidstreamErrors: "unsupported",
     });
     expect(catalog.future.codeMode.status).toBe("unavailable");
     expect(Object.values(catalog.placeholders)).toEqual([

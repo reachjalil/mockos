@@ -25,10 +25,10 @@
 > experimental activation remain pending. F2 now adds four source-implemented,
 > MCP-only mock-LLM definition operations with environment-local schema-v7 persistence
 > and write-only provider keys plus bounded OpenAI Chat Completions JSON/SSE and
-> Anthropic Messages/model non-streaming data planes. Package tests and local Worker
+> Anthropic Messages/model JSON/SSE data planes. Package tests and local Worker
 > integrations through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify
 > that bounded source slice. Configured midstream errors, the OpenAI Responses API,
-> Anthropic streaming/betas, conversation state, observations/assertions, and complete
+> Anthropic betas, conversation state, observations/assertions, and complete
 > F2 remain unavailable. The guarded GitHub promotion
 > workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
@@ -65,9 +65,9 @@ configuration operations remain part of management MCP. Start with the
 [mock-LLM definition operations](./docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
 list/retrieve and Chat Completions as JSON or bounded SSE plus Anthropic model
-list/retrieve and non-streaming Messages at environment routes through pinned official
-SDKs. Configured midstream errors, the OpenAI Responses API, Anthropic
-streaming/betas, conversation state, LLM observations/assertions, script execution,
+list/retrieve and Messages as JSON or named-event bounded SSE at environment routes
+through pinned official SDKs. Configured midstream errors, the OpenAI Responses API,
+Anthropic betas, conversation state, LLM observations/assertions, script execution,
 enforced scoped keys, Cloud integration, and deployment remain unavailable. Start with
 the [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md), and use the
@@ -148,10 +148,14 @@ private control plane, licensing, billing, or a hosted mockOS account.
   operations, schema-v7 environment persistence, mandatory revision
   compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
   request adapters. Local Worker integrations configure through MCP and exercise
-  official SDK model list/retrieve, JSON text/tool/error calls, bounded OpenAI SSE
-  usage/obfuscation/cancellation, provider-specific authentication/versioning,
-  isolation, rotation, and fresh transport identity. Configured midstream errors,
-  OpenAI Responses, Anthropic streaming/betas, runtime/conversation state, reset, LLM
+  official SDK model list/retrieve, JSON text/tool/error calls, bounded OpenAI and
+  Anthropic SSE ordering/tools/cancellation, OpenAI usage/obfuscation,
+  provider-specific authentication/versioning, isolation, rotation, and fresh
+  transport identity. Both streams perform a complete 2 MiB UTF-8/schedule preflight,
+  pace payload deltas only, and enforce one absolute initial-wait/pacing/backpressure
+  deadline. Anthropic uses named events ending in `message_stop`, with no `[DONE]`.
+  Configured midstream errors, OpenAI Responses, Anthropic betas,
+  runtime/conversation state, reset, LLM
   observation/assertion, Wrangler-network or deployed conformance, and Cloud pinning
   remain unavailable
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
@@ -219,7 +223,7 @@ control and identity-protocol routes. The
 [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) configures a mock LLM
 through MCP and calls its bounded provider data plane; the
 [Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md) does the same for the
-stable non-streaming Messages subset. Read
+stable JSON/SSE Messages subset. Read
 [self-hosting](./docs/self-hosting.md) before trying Wrangler and
 [known limitations](./docs/known-limitations.md) before choosing an SDK.
 The sanitized [M6 workers.dev smoke evidence](./docs/evidence/m6-workers-dev-smoke.md)

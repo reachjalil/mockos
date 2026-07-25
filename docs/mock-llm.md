@@ -1,6 +1,6 @@
 # MCP-managed mock OpenAI and Anthropic
 
-Status: Bounded OpenAI streaming and Anthropic non-streaming provider data planes source-qualified locally; F2 remains partial
+Status: Bounded OpenAI and Anthropic streaming provider data planes source-qualified locally; F2 remains partial
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first. Agents and automation create, inspect, replace, and delete mock
@@ -8,8 +8,8 @@ LLM definitions through management MCP. An application under test then calls a
 separate, environment-hosted OpenAI- or Anthropic-shaped data plane. Configuration
 never moves to provider HTTP, and application traffic never becomes a management API.
 
-The current source-qualified slice supports model list/retrieve, JSON and SSE OpenAI
-Chat Completions, and non-streaming Anthropic Messages through pinned official
+The current source-qualified slice supports model list/retrieve plus JSON and SSE
+OpenAI Chat Completions and Anthropic Messages through pinned official
 JavaScript SDKs. It is a pair of bounded compatibility subsets, not a general OpenAI or Anthropic API,
 deployed service, live-provider comparison, or complete F2 runtime.
 Start with the [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) or
@@ -73,18 +73,18 @@ It is not an alternative way to configure mockOS.
 | OpenAI Models | Ordered list and exact retrieve |
 | OpenAI Chat Completions | One JSON or SSE choice with text, function tool calls, optional stream usage, deterministic behavior, and provider-shaped configured errors |
 | Anthropic Models | Ordered single-page list and exact retrieve |
-| Anthropic Messages | One non-streaming message with text/custom `tool_use`, usage, deterministic behavior, and provider-shaped configured errors |
+| Anthropic Messages | One JSON or named-event SSE message with text/custom `tool_use`, usage, deterministic behavior, and provider-shaped configured errors before streaming starts |
 | Authentication | Provider-scoped Bearer for OpenAI and `x-api-key` for Anthropic in both `accept_any` and `strict` modes |
 | Version contract | Anthropic requires exactly `anthropic-version: 2023-06-01`; beta headers fail closed |
 | Hosting forms | Environment path mode and environment subdomain mode |
 | SDK evidence | Pinned `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0 through local Worker integrations using injected Fetch |
 | Runtime state | Stateless; the prior `assistant` message count selects the turn |
-| Timing | OpenAI pre-header initial delay, payload-only SSE pacing, absolute duration/backpressure deadline, and abort/cancel cleanup |
+| Timing | Shared pre-header initial delay, payload-only SSE pacing, absolute duration/backpressure deadline, 2 MiB preflight, and abort/cancel cleanup |
 | Evidence | Package and local Worker source qualification only |
 
-Anthropic streaming/betas, the OpenAI Responses API, configured mid-stream errors,
-conversation state, LLM observations/assertions, Cloud pinning, and deployment remain
-unavailable.
+Anthropic betas, the OpenAI Responses API, configured mid-stream errors,
+conversation state, LLM observations/assertions, Cloud pinning, and deployment
+remain unavailable or unqualified.
 
 ## Prerequisites
 
@@ -282,7 +282,7 @@ Only the six generated provider operations are supported:
 | OpenAI | `POST` | `/chat/completions` | One JSON or SSE Chat Completion |
 | Anthropic | `GET` | `/v1/models` | Ordered configured model list |
 | Anthropic | `GET` | `/v1/models/{model}` | One exact configured model |
-| Anthropic | `POST` | `/v1/messages` | One non-streaming Message |
+| Anthropic | `POST` | `/v1/messages` | One JSON or named-event SSE Message |
 
 Use each SDK base exactly as shown. OpenAI's base already ends in `/v1`; Anthropic's
 base intentionally does not because the SDK appends `/v1`.
@@ -477,12 +477,14 @@ Object after the current definition revision is rechecked and before the plan re
 to the edge. The current default remains stateless: `sequence` selection comes only
 from `turnIndex`, so this commit writes no conversation or evaluator cursor.
 
-For OpenAI, initial response or configured-error delay is honored before response
-headers with abort-aware waiting. An observed Fetch abort during that wait returns an
-empty `499`. For a successful SSE response, `chunkSize` splits text and canonical
-tool arguments by Unicode code point. `chunkDelayMilliseconds` paces only payload
-deltas; the opening role chunk, terminal chunk, optional usage chunk, and
-`data: [DONE]` are emitted without intentional delay.
+For either dialect, initial response or configured-error delay is honored before
+response headers with abort-aware waiting. An observed Fetch abort during that wait
+returns an empty `499`. For a successful SSE response, `chunkSize` splits text and
+canonical tool arguments/input JSON by Unicode code point.
+`chunkDelayMilliseconds` paces only payload deltas. OpenAI role, terminal, optional
+usage, and `data: [DONE]` frames are immediate. Anthropic message/content-block
+structural events are immediate; only `text_delta` and `input_json_delta` frames are
+paced.
 
 One absolute maximum duration, `maximumDurationMilliseconds`, covers the initial
 wait, payload pacing, and backpressure. A schedule is admissible only when
@@ -490,14 +492,19 @@ wait, payload pacing, and backpressure. A schedule is admissible only when
 is strictly less than `maximumDurationMilliseconds`; equality is rejected so the
 last planned payload does not race the deadline. The payload frame count is derived
 by Unicode code-point chunking of every text segment and canonical tool-argument
-string at `chunkSize`.
+string/tool-input JSON at `chunkSize`.
 
 Before returning HTTP `200`, the edge precomputes the whole SSE body, enforces the
 2,097,152-byte UTF-8 ceiling, and rejects an inadmissible schedule or other preflight
 failure with generic JSON. After `200`, client cancellation or expiry of that absolute
 deadline truncates the stream, clears pending work, and does not fabricate a terminal
-chunk, usage chunk, or `[DONE]` success sentinel. Anthropic remains non-streaming, so
-its chunk cadence metadata is inert.
+chunk, usage chunk, OpenAI `[DONE]`, or Anthropic `message_stop`.
+
+The Durable Object has already rechecked the definition and completed the selected
+plan commit before the edge receives the plan. In the current stateless slice that
+commit writes no conversation/evaluator cursor. A future stateful implementation
+must separately qualify plan reuse, retries, and abort semantics; post-header stream
+cancellation cannot roll back the already completed Durable Object commit.
 
 ### Stream OpenAI output
 
@@ -564,16 +571,16 @@ later request. Only the assistant message advances `turnIndex`.
 | `max_tokens` | Required safe integer from 1 through 1,000,000,000 |
 | `messages` | Required array of 1–256 bounded `user`/`assistant` messages |
 | `system` | Optional bounded string; an array of system blocks is rejected |
-| `stream` | Absent or `false` |
+| `stream` | Absent/`false` for JSON; `true` for named-event SSE |
 | `tools` | Optional array of at most 64 unique custom tool definitions |
 | `tool_choice` | Absent or exactly `{ "type": "auto" }` |
 
 Unknown top-level fields fail closed. Sampling controls, `stop_sequences`, `metadata`,
 `thinking`, service tiers, beta fields, and other broad Messages parameters are
-rejected rather than ignored. `stream: true` returns an Anthropic
-`400 invalid_request_error`. Required `max_tokens` enters the deterministic request
-fingerprint, but this first slice does not synthesize tokenization or truncate a
-configured plan: `max_tokens` does not truncate output.
+rejected rather than ignored. `stream` must be Boolean when present; this subset has
+no Anthropic `stream_options` field. Required `max_tokens` enters the deterministic
+request fingerprint, but this first slice does not synthesize tokenization or
+truncate a configured plan: `max_tokens` does not truncate output.
 
 Each message has exactly `role` and `content`. Content may be a bounded string or an
 array of 1–256 supported blocks:
@@ -609,8 +616,8 @@ api_error`.
 Anthropic uses the same whole-request limits as the OpenAI adapter: 262,144 UTF-8
 bytes, depth 24, 10,000 JSON nodes, 256 messages, 64 tools, and 65,536 UTF-8 bytes per
 text/tool value. Each tool value is additionally bounded to depth 16 and 2,000 nodes;
-each message or tool-result block array is capped at 256 blocks. Response JSON is
-capped at 2,097,152 UTF-8 bytes.
+each message or tool-result block array is capped at 256 blocks. Response JSON or the
+complete precomputed SSE body is capped at 2,097,152 UTF-8 bytes.
 
 A successful text plan returns a provider-shaped Message:
 
@@ -639,6 +646,29 @@ A successful text plan returns a provider-shaped Message:
 
 The complete exact response fields and limits are generated in the
 [Anthropic provider manifest](./reference/mock-llm-anthropic.v1.json).
+
+### Stream Anthropic output
+
+With `stream: true`, Anthropic uses named SSE events and JSON `data` values in this
+successful order:
+
+1. `message_start`;
+2. for each response segment, `content_block_start`, zero or more
+   `content_block_delta` payloads, and `content_block_stop`;
+3. `message_delta`; and
+4. `message_stop`.
+
+Text payloads use `delta.type: "text_delta"`. Tool-input payloads use
+`delta.type: "input_json_delta"` and carry a canonical JSON substring in
+`partial_json`; clients concatenate the substrings before parsing. There is no
+`[DONE]` sentinel on the Anthropic wire. The final `message_delta` reports cumulative
+usage. mockOS emits no `ping` event; clients intended to work against Anthropic
+upstream should still tolerate that upstream event.
+
+Only those two payload-delta kinds consume configured cadence. The named
+message/content-block structural events are immediate. The shared preflight, 2 MiB
+UTF-8 cap, absolute initial/pacing/backpressure deadline, and pre-header versus
+post-header failure boundary described above apply unchanged.
 
 ## Diagnose provider failures
 
@@ -675,10 +705,11 @@ material, runtime exceptions, or validation-library details.
 | `500 internal_error` | Runtime failed, definition changed repeatedly, output was invalid/oversized, a tool call was undeclared, or SSE preflight could not satisfy its byte/timing contract | Treat as failed source behavior and inspect non-secret local diagnostics |
 
 Configured neutral errors always remain provider-shaped JSON responses after their
-pre-header delay, even when the request asked for streaming. This slice cannot inject
+pre-header delay and before HTTP `200`, even when the request asked for streaming.
+This slice cannot inject
 a configured error after SSE has started. Post-`200` cancellation, deadline, or
-delivery failure is an incomplete stream without `[DONE]`, not a fabricated
-provider-error event or successful completion.
+delivery failure is an incomplete stream without OpenAI `[DONE]` or Anthropic
+`message_stop`, not a fabricated provider-error event or successful completion.
 
 Anthropic local failures use a bounded envelope and put the same fresh ID in the
 `request-id` header and `request_id` body field:
@@ -696,7 +727,7 @@ Anthropic local failures use a bounded envelope and put the same fresh ID in the
 
 | Status/type | Meaning | Recovery |
 | --- | --- | --- |
-| `400 invalid_request_error` | Version/beta header, media type, JSON, request field, role/block, tool, or streaming contract failed | Send only the exact stable non-streaming subset |
+| `400 invalid_request_error` | Version/beta header, media type, JSON, request field, role/block, tool, or streaming contract failed | Send only the exact stable JSON/SSE subset |
 | `401 authentication_error` | `x-api-key` syntax/policy/current verifier failed | Present the Anthropic-scoped Mock Credential; never substitute an Authorization or management key |
 | `404 not_found_error` | Server/dialect, model, or route is unavailable | Probe `/v1/models` and inspect the definition through MCP |
 | `405 invalid_request_error` | A known route used the wrong method | Follow the response `Allow` header |
@@ -759,7 +790,7 @@ After the management put:
 2. confirm strict auth appears only as `configured: true`;
 3. call OpenAI `GET /models` with Bearer or Anthropic `GET /v1/models` with
    `x-api-key` plus the exact stable version;
-4. run one JSON or SSE OpenAI completion, or one non-streaming Anthropic message, with
+4. run one JSON or SSE OpenAI completion or Anthropic message with
    SDK retries disabled;
 5. record only source evidence unless an exact deployment record exists; and
 6. delete the definition with the latest positive revision in `finally`.
@@ -780,8 +811,8 @@ This partial slice does not provide:
   embeddings, audio, images, or other OpenAI APIs;
 - Anthropic beta APIs, legacy Text Completions, Message Batches, token counting,
   Files, Skills, or other Anthropic APIs;
-- Anthropic SSE or timed chunk delivery, configured OpenAI mid-stream errors, or
-  guaranteed OpenAI usage/terminal events after cancellation;
+- configured OpenAI or Anthropic mid-stream error injection, or guaranteed provider
+  terminal events after cancellation;
 - multimodal messages, JSON response format, sampling/token-control parameters,
   parallel choice counts, named/required/no-tool selection, or general Chat
   Completions compatibility;
@@ -799,8 +830,8 @@ This partial slice does not provide:
 Do not call F2 complete. The strongest current wording is:
 
 > MCP-managed definitions plus bounded JSON/SSE OpenAI Chat Completions and
-> non-streaming Anthropic Messages are source-qualified locally through package tests
-> and pinned official SDK Worker integrations. Anthropic streaming/betas, configured
+> Anthropic Messages are source-qualified locally through package tests and pinned
+> official SDK Worker integrations. Anthropic betas, configured
 > mid-stream errors, state, observations, Cloud integration, deployment, and
 > live-provider parity remain unqualified or unavailable.
 
@@ -813,9 +844,10 @@ Do not call F2 complete. The strongest current wording is:
 | [`packages/core/src/mock-llm/repository.ts`](../packages/core/src/mock-llm/repository.ts) | Canonical definition persistence, revision allocation, replay, and compare-and-swap |
 | [`packages/llm-mock/src/planner.ts`](../packages/llm-mock/src/planner.ts) | Provider-neutral deterministic response planning |
 | [`packages/llm-mock/src/openai.ts`](../packages/llm-mock/src/openai.ts) | OpenAI JSON and pure SSE-frame projection |
-| [`packages/llm-mock/src/openai-http.ts`](../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, SSE preflight/pacing/cancellation, and transport IDs |
+| [`packages/llm-mock/src/openai-http.ts`](../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, edge-stream integration, and transport IDs |
 | [`packages/llm-mock/src/anthropic.ts`](../packages/llm-mock/src/anthropic.ts) | Anthropic JSON and pure SSE-frame projection |
-| [`packages/llm-mock/src/anthropic-http.ts`](../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, version/auth boundary, bounded Messages adapter, model projection, timing, and fresh transport IDs |
+| [`packages/llm-mock/src/anthropic-http.ts`](../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, version/auth boundary, bounded Messages adapter, model projection, edge-stream integration, and fresh transport IDs |
+| [`packages/llm-mock/src/edge-stream.ts`](../packages/llm-mock/src/edge-stream.ts) | Shared complete-body/schedule preflight, edge-owned cadence, backpressure/deadline enforcement, and cancellation cleanup |
 | [`packages/worker-kit/src/mock-llm-runtime.ts`](../packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition authentication, stateless planning, and revision recheck |
 | [`packages/worker-kit/src/edge-router.ts`](../packages/worker-kit/src/edge-router.ts) | Environment route composition and edge-owned provider response |
 | [`apps/worker/test/mock-llm.integration.test.ts`](../apps/worker/test/mock-llm.integration.test.ts) | MCP-to-Worker official OpenAI SDK source qualification |

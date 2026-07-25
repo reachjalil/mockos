@@ -14,9 +14,9 @@ implementation described in the
 CI/merge/deployment remain open. A
 [partial F2 slice](./f-series/f2-llm-kernel.md) now has strict definitions, four
 MCP-only operations, schema-v7 persistence, and bounded OpenAI model/JSON-or-SSE Chat
-Completions plus Anthropic model/non-streaming Messages data planes that are
+Completions plus Anthropic model/JSON-or-SSE Messages data planes that are
 source-qualified locally through official SDKs. Configured midstream errors, OpenAI
-Responses, Anthropic streaming/betas, conversation state, LLM-specific
+Responses, Anthropic betas, conversation state, LLM-specific
 observation/assertion, hosted qualification, Cloud consumption, deployment, and every
 F3-F9 phase remain open.
 
@@ -106,12 +106,15 @@ The source now serves exact OpenAI and Anthropic path/subdomain route prefixes. 
 requires Bearer and implements model list/retrieve plus JSON or bounded SSE Chat
 Completions. Anthropic requires `x-api-key` and exactly
 `anthropic-version: 2023-06-01`, rejects beta headers, and implements model
-list/retrieve plus non-streaming Messages. Both bounded surfaces are source-qualified
-locally through pinned official SDKs. The OpenAI stream performs initial delay before
-headers, paces payload deltas only, uses one absolute duration across initial wait,
-pacing, and backpressure, and truncates post-`200` cancellation/deadline without
-inventing success. The broader bullets below remain the complete F2 target:
-Anthropic streaming, configured midstream errors, conversation/sequence state,
+list/retrieve plus JSON or named-event SSE Messages. Both bounded surfaces are
+source-qualified locally through pinned official SDKs. Their shared stream scheduler
+performs initial delay before headers, preflights the complete body against 2 MiB,
+paces payload deltas only, uses one absolute duration across initial wait, pacing, and
+backpressure, and truncates post-`200` cancellation/deadline without inventing
+success. Anthropic streams end with `message_stop`, report cumulative
+`message_delta` usage, and emit neither `[DONE]` nor mock `ping` (clients should still
+tolerate upstream `ping`). The broader bullets below remain the complete F2 target:
+configured midstream errors, conversation/sequence state,
 LLM-specific observation and assertion, Wrangler/network qualification, deployment,
 and Cloud integration are still open.
 
@@ -284,16 +287,18 @@ This section describes the complete target. The current
 [F2 kernel](./f-series/f2-llm-kernel.md) instantiates a bounded stateless subset:
 `EnvironmentDO` resolves a definition and immutable response plan, and the edge
 validates the Bearer envelope and renders OpenAI JSON or bounded SSE with abort-aware
-pre-header initial delay. The Environment Durable Object applies the current
+pre-header initial delay; the corresponding exact Anthropic boundary uses
+`x-api-key` plus the stable version header and renders JSON or named-event SSE. The
+Environment Durable Object applies the current
 `accept_any` or strict-verifier policy, rechecks the definition revision, and invokes
 the plan commit before returning to the edge. Current turn selection remains
 stateless, so its synthetic state adapter discards the staged write. The slice
-implements payload-only OpenAI pacing and one absolute initial/pacing/backpressure
-duration, but not stateful conversation, configured midstream errors, Anthropic
-streaming, completion telemetry, or observation steps below.
+implements payload-only pacing for both dialects and one absolute
+initial/pacing/backpressure duration, but not stateful conversation, configured
+midstream errors, completion telemetry, or observation steps below.
 
-Current OpenAI preflight derives payload frame count from Unicode code-point chunks of
-text and canonical tool arguments, then requires
+Current shared preflight derives payload frame count from Unicode code-point chunks
+of text and canonical provider tool arguments/input JSON, then requires
 `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
 to be strictly less than `maximumDurationMilliseconds`. Equality is rejected to avoid
 a deadline race.
@@ -417,7 +422,7 @@ the open-core package.
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
 | F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, and complete repository gates are green. The July 28 version checkpoint and all hosted/deployed evidence remain open. |
-| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The current source slice includes MCP-managed definitions, bounded model discovery, OpenAI JSON/SSE Chat Completions, and non-streaming Anthropic Messages; the rest remains open. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
+| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The current source slice includes MCP-managed definitions, bounded model discovery, and OpenAI/Anthropic JSON/SSE Chat Completions/Messages; the rest remains open. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
 | F5 | Public blueprint core, export/import planner, hosted install integration | F1/F2 schema freeze; hosted apply also gates on F4 slugs/idempotency | Public no-secrets and deterministic hash corpus passes; hosted installs are idempotent and scripts remain disabled. |
@@ -439,9 +444,9 @@ environment-hosted mock-MCP runtime and five MCP-only management operations; it 
 not add HTTP management routes or activate Code Mode, scripts, or proxy. The partial
 F2 adds neutral schemas, behavior adaptation, MCP-only persisted definitions, and
 user-operable bounded OpenAI/Anthropic provider routes for model discovery and
-OpenAI JSON/SSE Chat Completions plus non-streaming Anthropic Messages. Local
+OpenAI JSON/SSE Chat Completions plus Anthropic JSON/SSE Messages. Local
 official-SDK evidence is source-qualified, not hosted, deployed, Cloud-integrated, or
-proof of Anthropic streaming, configured midstream errors, conversation state, or LLM
+proof of configured midstream errors, conversation state, or LLM
 observation support.
 Hosted CI, merge, package publication, private Cloud consumption, and deployment
 remain separate.
@@ -508,10 +513,10 @@ held back for hosted governance.
 
 ### Mock LLM
 
-The current F2 source satisfies the configuration prerequisite and a bounded local
-OpenAI JSON/SSE plus Anthropic JSON runtime subset. Its pinned official SDK tests
+The current F2 source satisfies the configuration prerequisite and bounded local
+OpenAI and Anthropic JSON/SSE runtime subsets. Its pinned official SDK tests
 consume pure JSON/SSE projections and local Worker routes through injected Fetch;
-edge-stream package tests separately qualify OpenAI pacing, deadline, backpressure,
+edge-stream package tests separately qualify shared pacing, deadline, backpressure,
 and cancellation mechanics. They do not run against Wrangler, a network endpoint, or
 the deployed exit gates below.
 
