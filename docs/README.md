@@ -1,6 +1,6 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: MCP-first public documentation through F1 plus the partial F2 source kernel
+Status: MCP-first public documentation through F1 and the management-only F2 source slice
 Last reviewed: 2026-07-25
 
 mockOS is an MCP-first, deterministic identity-platform and agent-dependency test
@@ -19,7 +19,8 @@ support, deployment, or provider-parity claim.
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
-| Understand the source-only mock-LLM response kernel | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
+| Define a future OpenAI/Anthropic mock safely through management MCP | [Mock LLM management definitions](./mock-llm.md) |
+| Understand the source-only mock-LLM plan/renderer architecture | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
 | Understand MCP, the console, CLI, HTTP, and provider endpoints | [Interface model](./concepts/interface-model.md) |
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
@@ -33,18 +34,22 @@ support, deployment, or provider-parity claim.
 - [MCP-first quickstart](./getting-started/mcp-first.md)
 - [Interface model](./concepts/interface-model.md)
 - [Management MCP behavior](./mcp.md)
-- [Generated 20-tool reference](./reference/management-tools.md)
+- [Generated 24-tool reference](./reference/management-tools.md)
 - [Machine-readable management catalog](./reference/management-operations.v1.json)
 - [Self-hosted HTTP reference](./reference/self-hosted-http.md)
 - [Source-built CLI](../packages/cli/README.md)
 - [Agent testing skill](./skill.md)
 
 The management MCP server at `/mcp` is the primary control interface. The current
-source exposes 20 tools. Five F1 tools configure mock MCP servers, but the direct
+source exposes 24 tools. Five F1 tools configure mock MCP servers and four F2 tools
+configure management-only mock-LLM definitions, but the direct
 self-hosted management HTTP surface still contains only five identity-management
 routes and must not be presented as equivalent. The configured mock endpoint is a
 separate data plane called by an agent under test. Its source behavior, wire sequence,
 server contract, and limits are in [Environment-hosted mock MCP](./mock-mcp.md).
+Mock-LLM definitions do not yet create a provider data plane; their exact
+compare-and-swap, credential, persistence, and unsupported boundaries are in
+[Mock LLM management definitions](./mock-llm.md).
 
 ## Provider behavior
 
@@ -72,18 +77,21 @@ Access Key.
 - [Requirements traceability](./requirements-traceability.md)
 - [F0 contract, client, and wrapper foundation](./f-series/f0-foundation.md)
 - [F1 mock-MCP source implementation](./f-series/f1-mcp-foundation.md)
-- [Partial F2 LLM response kernel](./f-series/f2-llm-kernel.md)
+- [F2 mock-LLM management guide](./mock-llm.md)
+- [Partial F2 LLM kernel and management slice](./f-series/f2-llm-kernel.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 
 The F-series roadmap is target design, not implementation evidence. F1 is locally
 source-qualified for its bounded implementation, while hosted CI, merge, package
 publication, private Cloud consumption, and deployed F1 acceptance remain open. The
-F2 source slice validates a neutral response plan, behavior adapter, pure
-OpenAI/Anthropic rendering, and in-process official-SDK deserialization. It adds no
-server definition, management MCP operation, route, authentication, persistence,
-network/timed streaming, observation, Worker, or Cloud integration, so mock LLM APIs
-remain unavailable as a product surface. Script execution, enforced scoped keys, and
-Code Mode also remain unavailable.
+F2 source now combines a neutral response plan, behavior adapter, pure
+OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
+server-definition contract, four MCP-only operations, schema-v7 environment
+persistence, mandatory revision compare-and-swap, and write-only provider Mock
+Credentials. It still adds no provider route/auth enforcement, model renderer,
+runtime/conversation state, reset, network/timed streaming, observation, Wrangler,
+deployment, or Cloud pin, so mock LLM APIs remain unavailable as a data plane.
+Script execution, enforced scoped keys, and Code Mode also remain unavailable.
 
 ## Accepted evidence
 

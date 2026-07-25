@@ -19,7 +19,7 @@ describe("management operation registry", () => {
     expect(new Set(entries.map(([, operation]) => operation.operationId)).size).toBe(
       entries.length
     );
-    expect(entries).toHaveLength(20);
+    expect(entries).toHaveLength(24);
   });
 
   it("describes only live self-hosted HTTP management routes", () => {
@@ -137,6 +137,94 @@ describe("management operation registry", () => {
         },
       });
     }
+  });
+
+  it("keeps mock-LLM server management MCP-only and credential-safe", () => {
+    const toolNames = [
+      "put_mock_llm_server",
+      "list_mock_llm_servers",
+      "get_mock_llm_server",
+      "delete_mock_llm_server",
+    ] as const;
+    for (const toolName of toolNames) {
+      expect("http" in mockosManagementOperations[toolName]).toBe(false);
+      expect(mockosManagementOperations[toolName].mcp.annotations.openWorldHint).toBe(
+        false
+      );
+    }
+
+    expect(mockosManagementOperations.put_mock_llm_server).toMatchObject({
+      requiredScopes: ["env:rw"],
+      effect: "mutation",
+      retry: "idempotent",
+      requestSecrets: "redact",
+      responseSecrets: "none",
+      mcp: {
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        },
+      },
+    });
+    const putInputJsonSchema = JSON.stringify(
+      z.toJSONSchema(mockosManagementOperations.put_mock_llm_server.mcp.inputSchema, {
+        io: "input",
+      })
+    );
+    expect(putInputJsonSchema).toContain('"expectedRevision"');
+    expect(putInputJsonSchema).toContain('"apiKey"');
+    expect(putInputJsonSchema).not.toContain("apiKeySha256");
+
+    for (const toolName of ["put_mock_llm_server", "get_mock_llm_server"] as const) {
+      const outputJsonSchema = JSON.stringify(
+        z.toJSONSchema(mockosManagementOperations[toolName].mcp.outputSchema, {
+          io: "output",
+        })
+      );
+      expect(outputJsonSchema).not.toContain("apiKeySha256");
+      expect(outputJsonSchema).not.toContain('"apiKey"');
+      expect(outputJsonSchema).toContain('"configured"');
+    }
+    const listOutputJsonSchema = JSON.stringify(
+      z.toJSONSchema(
+        mockosManagementOperations.list_mock_llm_servers.mcp.outputSchema,
+        { io: "output" }
+      )
+    );
+    expect(listOutputJsonSchema).not.toContain("apiKeySha256");
+    expect(listOutputJsonSchema).not.toContain('"apiKey"');
+
+    for (const toolName of ["list_mock_llm_servers", "get_mock_llm_server"] as const) {
+      expect(mockosManagementOperations[toolName]).toMatchObject({
+        requiredScopes: ["env:ro"],
+        effect: "read",
+        retry: "safe",
+        requestSecrets: "none",
+        responseSecrets: "none",
+        mcp: {
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+          },
+        },
+      });
+    }
+    expect(mockosManagementOperations.delete_mock_llm_server).toMatchObject({
+      requiredScopes: ["env:rw"],
+      effect: "destructive",
+      retry: "idempotent",
+      requestSecrets: "none",
+      responseSecrets: "none",
+      mcp: {
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+        },
+      },
+    });
   });
 
   it("uses known scopes and safe origin-relative path templates", () => {

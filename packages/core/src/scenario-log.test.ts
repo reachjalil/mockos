@@ -123,8 +123,8 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(6);
-    expect(getSchemaVersion(store)).toBe(6);
+    expect(applyMigrations(store)).toBe(7);
+    expect(getSchemaVersion(store)).toBe(7);
     const service = new ScenarioService({
       store,
       seed: "upgrade",

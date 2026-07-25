@@ -1,7 +1,7 @@
 # MCP-first quickstart
 
-Status: Current 20-tool management workflow; package publication remains unavailable
-Last reviewed: 2026-07-24
+Status: Current 24-tool management workflow; package publication remains unavailable
+Last reviewed: 2026-07-25
 
 Use management MCP to create a deterministic identity environment, obtain its
 provider-shaped endpoints, exercise your application, assert what it sent, and remove
@@ -52,9 +52,10 @@ back to the legacy HTTP+SSE transport.
 
 Call `tools/list` before any mutation. Require only the tools needed by the planned
 workflow and tolerate additional tools from a newer compatible server. The current
-source exposes exactly 20 tools; use the
+source exposes exactly 24 tools; use the
 [generated management-tool reference](../reference/management-tools.md) instead of a
-copied list. Five F1 tools configure environment-hosted mock MCP dependencies.
+copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
+four F2 tools persist management-only mock-LLM definitions.
 
 Stop before creating state when:
 
@@ -132,9 +133,11 @@ minimum safe request evidence.
 
 This identity workflow does not configure the source-qualified F1 mock MCP server.
 Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for that task.
-It also does not enable:
+It also does not configure the F2 definition substrate; use the
+[mock LLM management guide](../mock-llm.md) for its explicit revision, credential,
+persistence, and cleanup contract. Neither workflow enables:
 
-- mock OpenAI or Anthropic APIs (F2);
+- mock OpenAI or Anthropic provider APIs (the F2 data plane remains unavailable);
 - user-script execution or Worker Loader (F3);
 - enforced `env:ro` or `env:rw` key scopes (F4);
 - Code Mode `search` and `execute` (F6); or

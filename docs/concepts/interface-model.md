@@ -1,6 +1,6 @@
 # Interface model
 
-Status: Current interface taxonomy including locally source-qualified F1
+Status: Current interface taxonomy including F1 and management-only F2
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
@@ -12,8 +12,10 @@ surface are supporting interfaces, not separate sources of product behavior.
 
 | Interface | Job | Current status |
 | --- | --- | --- |
-| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 20 classic tools in the current source |
+| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
+| Mock LLM definitions | Persist future OpenAI/Anthropic mock models, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; management only |
+| Environment-hosted mock LLM | Simulate OpenAI/Anthropic provider APIs for an application or agent SDK under test | Unavailable; no provider route/data plane |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](../README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -29,7 +31,7 @@ shows the smaller HTTP subset.
 
 Two MCP roles exist in the product direction and must not be conflated:
 
-1. **Management MCP** controls mockOS. It is available at `/mcp` and exposes 20
+1. **Management MCP** controls mockOS. It is available at `/mcp` and exposes 24
    management tools in this source.
 2. **Environment mock MCP** lets an agent under test connect to configured synthetic
    tools, resources, resource templates, and prompts inside an environment. The
@@ -42,6 +44,12 @@ returned from `/e/{environmentId}/mcp-mock/{slug}` or
 traffic that mockOS captures and asserts. The five F1 management tools define that
 dependency; they are not the dependency's own tools and do not have invented HTTP
 management routes.
+
+The four F2 management tools similarly define future mock-LLM dependencies but do not
+make an OpenAI or Anthropic endpoint callable. They have no HTTP management
+projection. Use [Mock LLM management definitions](../mock-llm.md) for mandatory
+revision compare-and-swap, write-only provider keys, schema-v7 persistence, and the
+complete unsupported boundary.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
@@ -66,7 +74,7 @@ An operation without HTTP metadata is MCP-only. An HTTP-looking path in a design
 type is not an implemented route. `set_current_environment`, for example, is an MCP
 session convenience and has no HTTP equivalent.
 
-The registry currently labels all 20 operations with `env:ro` and `env:rw`, but those
+The registry currently labels all 24 operations with `env:ro` and `env:rw`, but those
 values are metadata until F4 implements and verifies shared scoped authorization.
 Current authentication and environment ownership checks remain real; the future
 scope vocabulary must not be marketed as enforced key permissions.
@@ -79,14 +87,19 @@ different:
 - `/mcp` and self-hosted management HTTP require the configured management key;
 - a mock MCP server accepts no credential or its own write-only Bearer Mock
   Credential, according to its definition;
+- a mock-LLM definition accepts provider-scoped OpenAI/Anthropic Mock Credentials only
+  on its management write; no current provider route evaluates them;
 - SCIM and Graph-shaped paths accept a non-empty synthetic Bearer value;
 - Okta directory-shaped paths accept a non-empty synthetic SSWS value; and
 - Okta Classic Authn is a public synthetic sign-in boundary.
 
 Never send a management key to a provider-shaped or environment mock MCP endpoint.
-The public Worker rejects an exact active platform key when defining a mock-MCP Bearer
-credential. Mock credentials exercise synthetic protocol behavior; they are not real
-provider authorization.
+The public Worker rejects the active platform key as a substring of a mock-MCP Bearer
+credential and anywhere in a bounded mock-LLM definition's JSON keys or string values.
+Mock credentials exercise synthetic protocol behavior; they are not real provider
+authorization. A mock-LLM safe-view `configured: true` marker is read-only; a
+full-definition replacement must resupply or rotate every enabled strict provider key
+from caller-owned secret storage.
 
 ## Evidence vocabulary
 

@@ -13,10 +13,17 @@ import {
   type LifecycleResult,
   type MintedToken,
   type MintTokenRequest,
+  type MockLlmExpectedRevision,
+  type MockLlmRevision,
+  type MockLlmServerSummary,
+  type MockLlmServerView,
+  type MockLlmServerWrite,
   type MockMcpServerSummary,
   type MockMcpServerView,
   type MockMcpServerWrite,
   type MockosMcpToolName,
+  mockLlmServerListSchema,
+  mockLlmServerViewSchema,
   type Problem,
   type ProvisioningRun,
   problemSchema,
@@ -137,6 +144,27 @@ export type MockosToolDependencies = {
     slug: string,
     context: MockosToolRequestContext
   ): Promise<number>;
+  putMockLlmServer(
+    environmentId: string,
+    server: MockLlmServerWrite,
+    expectedRevision: MockLlmExpectedRevision,
+    context: MockosToolRequestContext
+  ): Promise<MockLlmServerView>;
+  listMockLlmServers(
+    environmentId: string,
+    context: MockosToolRequestContext
+  ): Promise<MockLlmServerSummary[]>;
+  getMockLlmServer(
+    environmentId: string,
+    slug: string,
+    context: MockosToolRequestContext
+  ): Promise<MockLlmServerView>;
+  deleteMockLlmServer(
+    environmentId: string,
+    slug: string,
+    expectedRevision: MockLlmRevision,
+    context: MockosToolRequestContext
+  ): Promise<boolean>;
   getCurrentEnvironmentId(context: MockosToolRequestContext): Promise<string | null>;
   setCurrentEnvironmentId(
     environmentId: string | null,
@@ -216,8 +244,14 @@ const errorResult = (problem: Problem): CallToolResult => ({
 });
 
 const redactProblem = (problem: Problem, secrets: readonly string[]): Problem => {
+  const orderedSecrets = [
+    ...new Set(secrets.filter((secret) => secret.length > 0)),
+  ].sort(
+    (left, right) =>
+      right.length - left.length || (left < right ? -1 : left > right ? 1 : 0)
+  );
   const redact = (value: string): string => {
-    return secrets.reduce(
+    return orderedSecrets.reduce(
       (result, secret) => result.replaceAll(secret, "[REDACTED]"),
       value
     );
@@ -689,6 +723,123 @@ export const registerMockosTools = (
     }
   );
 
+  const putMockLlmServer = server.registerTool(
+    "put_mock_llm_server",
+    {
+      title: mockosManagementOperations.put_mock_llm_server.title,
+      description: mockosManagementOperations.put_mock_llm_server.description,
+      ...mockosManagementOperations.put_mock_llm_server.mcp,
+    },
+    async ({ environmentId, expectedRevision, server: mockServer }, extra) => {
+      const context = requestContext(dependencies, extra);
+      const secrets = (
+        [mockServer.dialects.openai, mockServer.dialects.anthropic] as const
+      ).flatMap((dialect) =>
+        dialect.enabled &&
+        dialect.authentication.mode === "strict" &&
+        "apiKey" in dialect.authentication
+          ? [dialect.authentication.apiKey]
+          : []
+      );
+      return execute(
+        context,
+        async () => {
+          const resolvedId = await requireEnvironmentId(
+            environmentId,
+            dependencies,
+            context
+          );
+          const view = mockLlmServerViewSchema.parse(
+            await dependencies.putMockLlmServer(
+              resolvedId,
+              mockServer,
+              expectedRevision,
+              context
+            )
+          );
+          const serializedView = JSON.stringify(view);
+          if (secrets.some((secret) => serializedView.includes(secret))) {
+            throw new Error("A mock LLM safe view contained write-only material.");
+          }
+          return view;
+        },
+        secrets
+      );
+    }
+  );
+
+  const listMockLlmServers = server.registerTool(
+    "list_mock_llm_servers",
+    {
+      title: mockosManagementOperations.list_mock_llm_servers.title,
+      description: mockosManagementOperations.list_mock_llm_servers.description,
+      ...mockosManagementOperations.list_mock_llm_servers.mcp,
+    },
+    async ({ environmentId }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return mockLlmServerListSchema.parse({
+          servers: await dependencies.listMockLlmServers(resolvedId, context),
+        });
+      });
+    }
+  );
+
+  const getMockLlmServer = server.registerTool(
+    "get_mock_llm_server",
+    {
+      title: mockosManagementOperations.get_mock_llm_server.title,
+      description: mockosManagementOperations.get_mock_llm_server.description,
+      ...mockosManagementOperations.get_mock_llm_server.mcp,
+    },
+    async ({ environmentId, slug }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return mockLlmServerViewSchema.parse(
+          await dependencies.getMockLlmServer(resolvedId, slug, context)
+        );
+      });
+    }
+  );
+
+  const deleteMockLlmServer = server.registerTool(
+    "delete_mock_llm_server",
+    {
+      title: mockosManagementOperations.delete_mock_llm_server.title,
+      description: mockosManagementOperations.delete_mock_llm_server.description,
+      ...mockosManagementOperations.delete_mock_llm_server.mcp,
+    },
+    async ({ environmentId, slug, expectedRevision }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return {
+          slug,
+          deleted: await dependencies.deleteMockLlmServer(
+            resolvedId,
+            slug,
+            expectedRevision,
+            context
+          ),
+        };
+      });
+    }
+  );
+
   return {
     create_environment: createEnvironment,
     list_environments: listEnvironments,
@@ -710,6 +861,10 @@ export const registerMockosTools = (
     get_mock_mcp_server: getMockMcpServer,
     delete_mock_mcp_server: deleteMockMcpServer,
     reset_mock_mcp_state: resetMockMcpState,
+    put_mock_llm_server: putMockLlmServer,
+    list_mock_llm_servers: listMockLlmServers,
+    get_mock_llm_server: getMockLlmServer,
+    delete_mock_llm_server: deleteMockLlmServer,
   };
 };
 

@@ -5,9 +5,9 @@ import {
   CORE_MIGRATIONS,
   createTenantId,
   decodeJwt,
-  encodeManagementListCursor,
   Engine,
   type EngineConfig,
+  encodeManagementListCursor,
   FixedClock,
   generateSigningKey,
   getSchemaVersion,
@@ -86,11 +86,13 @@ afterEach(() => {
 describe("core substrate", () => {
   it("applies ordered PRAGMA user_version migrations idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(6);
-    expect(getSchemaVersion(store)).toBe(6);
-    expect(applyMigrations(store)).toBe(6);
+    expect(applyMigrations(store)).toBe(7);
+    expect(getSchemaVersion(store)).toBe(7);
+    expect(applyMigrations(store)).toBe(7);
     expect(
       store.get<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"
@@ -129,6 +131,73 @@ describe("core substrate", () => {
          FROM mock_mcp_revision_allocator`
       )
     ).toEqual({ count: 1, last_revision: 0 });
+    expect(
+      store.get<{ count: number; last_revision: number }>(
+        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
+         FROM mock_llm_revision_allocator`
+      )
+    ).toEqual({ count: 1, last_revision: 0 });
+  });
+
+  it("makes an older v6 bundle refuse a database already touched by schema v7", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store)).toBe(7);
+
+    expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 6))).toThrow(
+      "Database schema version 7 is newer than supported version 6."
+    );
+    expect(getSchemaVersion(store)).toBe(7);
+  });
+
+  it("upgrades a v6 database with isolated mock LLM persistence", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 6))).toBe(6);
+    store.run(
+      `INSERT INTO mock_mcp_servers (
+        slug, revision, spec_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?)`,
+      "existing",
+      4,
+      "{}",
+      "2026-07-25T12:00:00.000Z",
+      "2026-07-25T12:00:00.000Z"
+    );
+    store.run(
+      `UPDATE mock_mcp_revision_allocator
+       SET last_revision = 4
+       WHERE singleton = 1`
+    );
+
+    expect(applyMigrations(store)).toBe(7);
+    expect(
+      store.get<{ revision: number }>(
+        "SELECT revision FROM mock_mcp_servers WHERE slug = ?",
+        "existing"
+      )
+    ).toEqual({ revision: 4 });
+    expect(
+      store.get<{ last_revision: number }>(
+        "SELECT last_revision FROM mock_mcp_revision_allocator WHERE singleton = 1"
+      )
+    ).toEqual({ last_revision: 4 });
+    expect(
+      store.get<{ name: string }>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'table' AND name = 'mock_llm_servers'`
+      )
+    ).toEqual({ name: "mock_llm_servers" });
+    expect(
+      store.get<{ name: string }>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'index' AND name = 'mock_llm_servers_updated_idx'`
+      )
+    ).toEqual({ name: "mock_llm_servers_updated_idx" });
+    expect(
+      store.get<{ count: number; last_revision: number }>(
+        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
+         FROM mock_llm_revision_allocator`
+      )
+    ).toEqual({ count: 1, last_revision: 0 });
   });
 
   it("upgrades a v4 database to provisioning persistence schema without rewriting runs", () => {
@@ -146,7 +215,7 @@ describe("core substrate", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(6);
+    expect(applyMigrations(store)).toBe(7);
     expect(
       store.get<{ status: string; target_ref: string | null }>(
         "SELECT status, target_ref FROM provisioning_runs WHERE id = ?",

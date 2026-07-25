@@ -36,10 +36,11 @@ Repository path: `README.md`
 > are locally source-qualified in the revision carrying this document: their focused
 > suites and the complete repository `pnpm check` gate are green. Hosted CI/merge, F1
 > deployment, private Cloud consumption, served F2-F9 runtimes, and all experimental
-> activation remain pending. A partial F2 source kernel now covers neutral response
-> plans, behavior adaptation, pure OpenAI/Anthropic JSON/SSE-frame rendering, and
-> in-process official-SDK deserialization; it is not an endpoint or complete F2
-> runtime. The guarded GitHub promotion workflows remain unqualified. This is not yet
+> activation remain pending. F2 now adds four source-implemented, MCP-only mock-LLM
+> definition operations with environment-local schema-v7 persistence and write-only
+> provider keys to the partial neutral response kernel. There is still no callable
+> OpenAI/Anthropic endpoint or complete F2 runtime. The guarded GitHub promotion
+> workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](docs/IMPLEMENTATION_STATUS.md).
 
@@ -51,10 +52,11 @@ randomness, and SQLite seams make failures reproducible.
 ## MCP first
 
 The management MCP server at `/mcp` is the primary control interface for agents and
-automation. Its current 20 tools create and configure environments, seed synthetic
+automation. Its current 24 tools create and configure environments, seed synthetic
 identities, register applications, drive lifecycle and provisioning, inject
-deterministic scenarios, configure environment-hosted mock MCP servers, inspect
-captured traffic, and clean up. Start with the
+deterministic scenarios, configure environment-hosted mock MCP servers and
+management-only mock-LLM definitions, inspect captured traffic, and clean up. Start
+with the
 [MCP-first quickstart](docs/getting-started/mcp-first.md) and use the
 [generated tool reference](docs/reference/management-tools.md) for the exact
 registry in this source.
@@ -69,7 +71,9 @@ Environment-hosted mock MCP servers have a different product role: they simulate
 tools, resources, resource templates, and prompts for an agent under test. The bounded
 F1 source implements that data plane at an environment route while the five
 configuration operations remain part of management MCP. Start with the
-[mock MCP guide](docs/mock-mcp.md). Mock LLM APIs, script execution, enforced scoped
+[mock MCP guide](docs/mock-mcp.md). Four
+[mock-LLM definition operations](docs/mock-llm.md) are source-implemented through
+management MCP, but the OpenAI/Anthropic data plane, script execution, enforced scoped
 keys, and Code Mode remain unavailable. The
 [partial F2 LLM kernel](docs/f-series/f2-llm-kernel.md) is source architecture for a
 future provider data plane, not a server an application can call.
@@ -123,9 +127,9 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
-- An accepted authenticated Agents SDK management MCP server whose F1 source registry
-  now contains 20 tools: the accepted M5 tool set plus five MCP-only mock-MCP
-  definition/state operations
+- An accepted authenticated Agents SDK management MCP server whose current source
+  registry contains 24 tools: the accepted 15-tool M5 set, five MCP-only F1 mock-MCP
+  definition/state operations, and four MCP-only F2 mock-LLM definition operations
 - A bounded F1 source runtime for deterministic environment-hosted tools, resources,
   safe Level-1 resource templates, and prompts over MCP `2025-11-25`; definitions are
   revisioned, Bearer Mock Credentials and transport sessions are stored hash-only,
@@ -133,20 +137,22 @@ private control plane, licensing, billing, or a hosted mockOS account.
   argument evidence joins the existing request log and assertions. GET streaming,
   `listChanged`, scripts, proxy/record-replay, hosted qualification, and deployment
   remain open
-- A source-complete local F0 foundation: one 20-operation metadata registry consumed
+- A source-complete local F0 foundation: one 24-operation metadata registry consumed
   by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
   control routes, generated human/machine management references and agent indexes, a
   fetch-based `@mockos/client` workspace skeleton, all six locked version-one behavior
   contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
-  deliberately do not appear in HTTP/OpenAPI/client projections, and the new packages
+  deliberately do not appear in HTTP/OpenAPI/client projections, nor do the four F2
+  operations; the new packages
   are not yet distribution-qualified
-- A partial F2 source kernel with bounded provider-neutral response-plan schemas,
+- A partial F2 source slice with bounded provider-neutral response-plan schemas,
   behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
-  JSON/SSE-frame renderers, and pinned official-SDK consumption through
-  injected in-process Fetch. It adds no server definition, management MCP operation,
-  route, auth, persistence, network edge stream/pacing, observation, Worker, Cloud
-  integration, or Wrangler/deployed conformance; model list/retrieve exists only as a
-  hand-supplied SDK test fixture, not a renderer or catalog
+  JSON/SSE-frame renderers, pinned official-SDK consumption through injected
+  in-process Fetch, strict server-definition contracts, four MCP-only management
+  operations, schema-v7 environment persistence, mandatory revision
+  compare-and-swap, and safe credential views. It still adds no provider route or auth
+  enforcement, model renderer/catalog, runtime/conversation state, reset, network
+  pacing, observation, Wrangler/deployed conformance, or Cloud pin
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -162,9 +168,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 Management and protocol credentials are deliberately separate: MCP requires the
 configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values and
 the Okta API accepts a non-empty synthetic SSWS value. An environment-hosted mock MCP
-server accepts no credential or its own write-only Bearer Mock Credential. Those are
-synthetic protocol boundaries, not production authorization; never forward the
-management key to them.
+server accepts no credential or its own write-only Bearer Mock Credential. A mock-LLM
+definition independently configures write-only OpenAI and Anthropic Mock Credentials,
+but no provider route enforces them yet. Those are synthetic protocol boundaries, not
+production authorization; never forward the management key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
@@ -230,8 +237,9 @@ and never persisted.
 ## Documentation
 
 Start at the [documentation index](docs/README.md). It routes agents and humans by
-task, distinguishes the 20-tool management MCP interface, the environment-hosted mock
-MCP data plane, and the five-route HTTP subset, and
+task, distinguishes the 24-tool management MCP interface, the environment-hosted mock
+MCP data plane, the management-only mock-LLM definition slice, and the five-route HTTP
+subset, and
 links support claims to their evidence. Use
 [requirements traceability](docs/requirements-traceability.md) and the
 [parity matrix](docs/conformance/parity-matrix.md) to distinguish targets from
@@ -255,8 +263,8 @@ Repository path: `docs/getting-started/mcp-first.md`
 
 # MCP-first quickstart
 
-Status: Current 20-tool management workflow; package publication remains unavailable
-Last reviewed: 2026-07-24
+Status: Current 24-tool management workflow; package publication remains unavailable
+Last reviewed: 2026-07-25
 
 Use management MCP to create a deterministic identity environment, obtain its
 provider-shaped endpoints, exercise your application, assert what it sent, and remove
@@ -307,9 +315,10 @@ back to the legacy HTTP+SSE transport.
 
 Call `tools/list` before any mutation. Require only the tools needed by the planned
 workflow and tolerate additional tools from a newer compatible server. The current
-source exposes exactly 20 tools; use the
+source exposes exactly 24 tools; use the
 [generated management-tool reference](docs/reference/management-tools.md) instead of a
-copied list. Five F1 tools configure environment-hosted mock MCP dependencies.
+copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
+four F2 tools persist management-only mock-LLM definitions.
 
 Stop before creating state when:
 
@@ -387,9 +396,11 @@ minimum safe request evidence.
 
 This identity workflow does not configure the source-qualified F1 mock MCP server.
 Use the separate [environment-hosted mock MCP guide](docs/mock-mcp.md) for that task.
-It also does not enable:
+It also does not configure the F2 definition substrate; use the
+[mock LLM management guide](docs/mock-llm.md) for its explicit revision, credential,
+persistence, and cleanup contract. Neither workflow enables:
 
-- mock OpenAI or Anthropic APIs (F2);
+- mock OpenAI or Anthropic provider APIs (the F2 data plane remains unavailable);
 - user-script execution or Worker Loader (F3);
 - enforced `env:ro` or `env:rw` key scopes (F4);
 - Code Mode `search` and `execute` (F6); or
@@ -407,7 +418,7 @@ Repository path: `docs/concepts/interface-model.md`
 
 # Interface model
 
-Status: Current interface taxonomy including locally source-qualified F1
+Status: Current interface taxonomy including F1 and management-only F2
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
@@ -419,8 +430,10 @@ surface are supporting interfaces, not separate sources of product behavior.
 
 | Interface | Job | Current status |
 | --- | --- | --- |
-| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 20 classic tools in the current source |
+| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
+| Mock LLM definitions | Persist future OpenAI/Anthropic mock models, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; management only |
+| Environment-hosted mock LLM | Simulate OpenAI/Anthropic provider APIs for an application or agent SDK under test | Unavailable; no provider route/data plane |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](docs/README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -436,7 +449,7 @@ shows the smaller HTTP subset.
 
 Two MCP roles exist in the product direction and must not be conflated:
 
-1. **Management MCP** controls mockOS. It is available at `/mcp` and exposes 20
+1. **Management MCP** controls mockOS. It is available at `/mcp` and exposes 24
    management tools in this source.
 2. **Environment mock MCP** lets an agent under test connect to configured synthetic
    tools, resources, resource templates, and prompts inside an environment. The
@@ -449,6 +462,12 @@ returned from `/e/{environmentId}/mcp-mock/{slug}` or
 traffic that mockOS captures and asserts. The five F1 management tools define that
 dependency; they are not the dependency's own tools and do not have invented HTTP
 management routes.
+
+The four F2 management tools similarly define future mock-LLM dependencies but do not
+make an OpenAI or Anthropic endpoint callable. They have no HTTP management
+projection. Use [Mock LLM management definitions](docs/mock-llm.md) for mandatory
+revision compare-and-swap, write-only provider keys, schema-v7 persistence, and the
+complete unsupported boundary.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
@@ -473,7 +492,7 @@ An operation without HTTP metadata is MCP-only. An HTTP-looking path in a design
 type is not an implemented route. `set_current_environment`, for example, is an MCP
 session convenience and has no HTTP equivalent.
 
-The registry currently labels all 20 operations with `env:ro` and `env:rw`, but those
+The registry currently labels all 24 operations with `env:ro` and `env:rw`, but those
 values are metadata until F4 implements and verifies shared scoped authorization.
 Current authentication and environment ownership checks remain real; the future
 scope vocabulary must not be marketed as enforced key permissions.
@@ -486,14 +505,19 @@ different:
 - `/mcp` and self-hosted management HTTP require the configured management key;
 - a mock MCP server accepts no credential or its own write-only Bearer Mock
   Credential, according to its definition;
+- a mock-LLM definition accepts provider-scoped OpenAI/Anthropic Mock Credentials only
+  on its management write; no current provider route evaluates them;
 - SCIM and Graph-shaped paths accept a non-empty synthetic Bearer value;
 - Okta directory-shaped paths accept a non-empty synthetic SSWS value; and
 - Okta Classic Authn is a public synthetic sign-in boundary.
 
 Never send a management key to a provider-shaped or environment mock MCP endpoint.
-The public Worker rejects an exact active platform key when defining a mock-MCP Bearer
-credential. Mock credentials exercise synthetic protocol behavior; they are not real
-provider authorization.
+The public Worker rejects the active platform key as a substring of a mock-MCP Bearer
+credential and anywhere in a bounded mock-LLM definition's JSON keys or string values.
+Mock credentials exercise synthetic protocol behavior; they are not real provider
+authorization. A mock-LLM safe-view `configured: true` marker is read-only; a
+full-definition replacement must resupply or rotate every enabled strict provider key
+from caller-owned secret storage.
 
 ## Evidence vocabulary
 
@@ -519,7 +543,7 @@ Repository path: `docs/reference/management-tools.md`
 
 # Management MCP tool reference
 
-Status: Generated from the implemented 20-tool management registry; F1 mock MCP is source-qualified locally
+Status: Generated from the implemented 24-tool management registry; F1 mock MCP is source-qualified locally; F2 mock-LLM definitions are management-only
 Last reviewed: 2026-07-25
 
 <!-- Generated by scripts/generate-f0-artifacts.ts. Do not edit. -->
@@ -530,7 +554,7 @@ Change the canonical schemas or metadata, run `pnpm f0:generate`, and commit the
 result. The [machine-readable catalog](docs/reference/management-operations.v1.json) contains
 the same metadata and JSON Schemas.
 
-The current management MCP server exposes **20 tools**.
+The current management MCP server exposes **24 tools**.
 Exactly **5** of those operations also have an
 implemented self-hosted HTTP route. An MCP-only tool must not be called through an
 invented HTTP path.
@@ -562,6 +586,10 @@ invented HTTP path.
 | [`get_mock_mcp_server`](#get_mock_mcp_server) | read | safe | none | MCP only |
 | [`delete_mock_mcp_server`](#delete_mock_mcp_server) | destructive | idempotent | none | MCP only |
 | [`reset_mock_mcp_state`](#reset_mock_mcp_state) | destructive | idempotent | none | MCP only |
+| [`put_mock_llm_server`](#put_mock_llm_server) | mutation | idempotent | request redact | MCP only |
+| [`list_mock_llm_servers`](#list_mock_llm_servers) | read | safe | none | MCP only |
+| [`get_mock_llm_server`](#get_mock_llm_server) | read | safe | none | MCP only |
+| [`delete_mock_llm_server`](#delete_mock_llm_server) | destructive | idempotent | none | MCP only |
 
 ## Transport and result contract
 
@@ -6620,6 +6648,2575 @@ invented HTTP path.
 
 </details>
 
+<a id="put_mock_llm_server"></a>
+
+### `put_mock_llm_server`
+
+**Create or replace a mock LLM server.** Creates or compare-and-swap replaces one environment-local mock LLM server. Strict provider Mock Credentials are accepted only in this write operation and are never returned.
+
+- Scope metadata: `env:rw`
+- Effect: `mutation`
+- Retry policy: `idempotent`
+- Secret handling: request redact
+- HTTP: MCP only
+- MCP annotations: read-only `false`, destructive `false`, idempotent `true`, open-world `false`
+
+<details>
+<summary>Input JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "static",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/definitions/__schema1"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": {
+                "$ref": "#/definitions/__schema1"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "template": {
+              "maxLength": 64000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "template",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "template"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "mode": {
+              "default": "hold_last",
+              "enum": [
+                "once",
+                "hold_last",
+                "loop"
+              ],
+              "type": "string"
+            },
+            "steps": {
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "sequence",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "steps"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cases": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "when": {
+                    "additionalProperties": {
+                      "$ref": "#/definitions/__schema1"
+                    },
+                    "propertyNames": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "when",
+                  "behavior"
+                ],
+                "type": "object"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            },
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "match",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "cases"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema1"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "message": {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "maximum": 599,
+              "minimum": 400,
+              "type": "integer"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "onFailure": {
+              "default": "propagate",
+              "enum": [
+                "propagate",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            "script": {
+              "additionalProperties": false,
+              "properties": {
+                "scriptId": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "scriptId",
+                "version",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "script",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "script"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "environmentId": {
+      "maxLength": 64,
+      "minLength": 8,
+      "pattern": "^[a-z0-9][a-z0-9_-]+$",
+      "type": "string"
+    },
+    "expectedRevision": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      ]
+    },
+    "server": {
+      "additionalProperties": false,
+      "properties": {
+        "defaultCadence": {
+          "additionalProperties": false,
+          "default": {
+            "chunkDelayMilliseconds": 0,
+            "chunkSize": 256,
+            "maximumDurationMilliseconds": 60000
+          },
+          "properties": {
+            "chunkDelayMilliseconds": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "chunkSize": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maximumDurationMilliseconds": {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "chunkDelayMilliseconds",
+            "chunkSize",
+            "maximumDurationMilliseconds"
+          ],
+          "type": "object"
+        },
+        "defaultUsage": {
+          "additionalProperties": false,
+          "default": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "properties": {
+            "inputTokens": {
+              "maximum": 1000000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "outputTokens": {
+              "maximum": 1000000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "inputTokens",
+            "outputTokens"
+          ],
+          "type": "object"
+        },
+        "dialects": {
+          "additionalProperties": false,
+          "properties": {
+            "anthropic": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "const": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authentication": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "mode": {
+                              "const": "accept_any",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "apiKey": {
+                              "maxLength": 1024,
+                              "minLength": 16,
+                              "pattern": "^[A-Za-z0-9\\-._~+/]+=*$",
+                              "type": "string"
+                            },
+                            "mode": {
+                              "const": "strict",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "apiKey"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "enabled": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "authentication"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "openai": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "const": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authentication": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "mode": {
+                              "const": "accept_any",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "apiKey": {
+                              "maxLength": 1024,
+                              "minLength": 16,
+                              "pattern": "^[A-Za-z0-9\\-._~+/]+=*$",
+                              "type": "string"
+                            },
+                            "mode": {
+                              "const": "strict",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "apiKey"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "enabled": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "authentication"
+                  ],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "required": [
+            "openai",
+            "anthropic"
+          ],
+          "type": "object"
+        },
+        "models": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "behavior": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "createdAtEpochSeconds": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "displayName": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "displayName",
+              "createdAtEpochSeconds",
+              "behavior"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "slug": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+          "type": "string"
+        },
+        "version": {
+          "const": 1,
+          "type": "number"
+        }
+      },
+      "required": [
+        "version",
+        "slug",
+        "name",
+        "models",
+        "dialects"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "expectedRevision",
+    "server"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<details>
+<summary>Structured result JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "static",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/definitions/__schema1"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": {
+                "$ref": "#/definitions/__schema1"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "template": {
+              "maxLength": 64000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "template",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "template"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "mode": {
+              "default": "hold_last",
+              "enum": [
+                "once",
+                "hold_last",
+                "loop"
+              ],
+              "type": "string"
+            },
+            "steps": {
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "sequence",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "steps",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cases": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "when": {
+                    "additionalProperties": {
+                      "$ref": "#/definitions/__schema1"
+                    },
+                    "propertyNames": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "when",
+                  "behavior"
+                ],
+                "type": "object"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            },
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "match",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "cases"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema1"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "message": {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "maximum": 599,
+              "minimum": 400,
+              "type": "integer"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "onFailure": {
+              "default": "propagate",
+              "enum": [
+                "propagate",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            "script": {
+              "additionalProperties": false,
+              "properties": {
+                "scriptId": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "scriptId",
+                "version",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "script",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "script",
+            "onFailure"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAt": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "spec": {
+          "additionalProperties": false,
+          "properties": {
+            "defaultCadence": {
+              "additionalProperties": false,
+              "default": {
+                "chunkDelayMilliseconds": 0,
+                "chunkSize": 256,
+                "maximumDurationMilliseconds": 60000
+              },
+              "properties": {
+                "chunkDelayMilliseconds": {
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "chunkSize": {
+                  "maximum": 4096,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "maximumDurationMilliseconds": {
+                  "maximum": 60000,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "chunkDelayMilliseconds",
+                "chunkSize",
+                "maximumDurationMilliseconds"
+              ],
+              "type": "object"
+            },
+            "defaultUsage": {
+              "additionalProperties": false,
+              "default": {
+                "inputTokens": 0,
+                "outputTokens": 0
+              },
+              "properties": {
+                "inputTokens": {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "outputTokens": {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "inputTokens",
+                "outputTokens"
+              ],
+              "type": "object"
+            },
+            "dialects": {
+              "additionalProperties": false,
+              "properties": {
+                "anthropic": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authentication": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "mode": {
+                                  "const": "accept_any",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "configured": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "mode": {
+                                  "const": "strict",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "configured"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "authentication"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "openai": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authentication": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "mode": {
+                                  "const": "accept_any",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "configured": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "mode": {
+                                  "const": "strict",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "configured"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "authentication"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "openai",
+                "anthropic"
+              ],
+              "type": "object"
+            },
+            "models": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "createdAtEpochSeconds": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "displayName": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "id": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "pattern": "^[\\x21-\\x7e]+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "displayName",
+                  "createdAtEpochSeconds",
+                  "behavior"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            "name": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "slug": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "slug",
+            "name",
+            "models",
+            "defaultUsage",
+            "defaultCadence",
+            "dialects"
+          ],
+          "type": "object"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "spec",
+        "revision",
+        "createdAt",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "meta": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "data",
+    "meta"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<a id="list_mock_llm_servers"></a>
+
+### `list_mock_llm_servers`
+
+**List mock LLM servers.** Lists safe summaries of the mock LLM server definitions in the current or named environment.
+
+- Scope metadata: `env:ro`
+- Effect: `read`
+- Retry policy: `safe`
+- Secret handling: none
+- HTTP: MCP only
+- MCP annotations: read-only `true`, destructive `false`, idempotent `true`, open-world `false`
+
+<details>
+<summary>Input JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "environmentId": {
+      "maxLength": 64,
+      "minLength": 8,
+      "pattern": "^[a-z0-9][a-z0-9_-]+$",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+</details>
+
+<details>
+<summary>Structured result JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "enabledDialects": {
+                "items": {
+                  "enum": [
+                    "openai",
+                    "anthropic"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              "modelCount": {
+                "maximum": 64,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "name": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "slug": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "name",
+              "revision",
+              "modelCount",
+              "enabledDialects",
+              "updatedAt"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "servers"
+      ],
+      "type": "object"
+    },
+    "meta": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "data",
+    "meta"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<a id="get_mock_llm_server"></a>
+
+### `get_mock_llm_server`
+
+**Get mock LLM server.** Returns a mock LLM server definition without provider Mock Credentials or their verifiers.
+
+- Scope metadata: `env:ro`
+- Effect: `read`
+- Retry policy: `safe`
+- Secret handling: none
+- HTTP: MCP only
+- MCP annotations: read-only `true`, destructive `false`, idempotent `true`, open-world `false`
+
+<details>
+<summary>Input JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "environmentId": {
+      "maxLength": 64,
+      "minLength": 8,
+      "pattern": "^[a-z0-9][a-z0-9_-]+$",
+      "type": "string"
+    },
+    "slug": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<details>
+<summary>Structured result JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "static",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/definitions/__schema1"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": {
+                "$ref": "#/definitions/__schema1"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "template": {
+              "maxLength": 64000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "template",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "template"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "mode": {
+              "default": "hold_last",
+              "enum": [
+                "once",
+                "hold_last",
+                "loop"
+              ],
+              "type": "string"
+            },
+            "steps": {
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "sequence",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "steps",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cases": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "when": {
+                    "additionalProperties": {
+                      "$ref": "#/definitions/__schema1"
+                    },
+                    "propertyNames": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "when",
+                  "behavior"
+                ],
+                "type": "object"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            },
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "match",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "cases"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema1"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "message": {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "maximum": 599,
+              "minimum": 400,
+              "type": "integer"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fallback": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema0"
+                }
+              ]
+            },
+            "latency": {
+              "additionalProperties": false,
+              "properties": {
+                "maximumMilliseconds": {
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minimumMilliseconds": {
+                  "default": 0,
+                  "maximum": 30000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seed": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "minimumMilliseconds",
+                "maximumMilliseconds",
+                "seed"
+              ],
+              "type": "object"
+            },
+            "onFailure": {
+              "default": "propagate",
+              "enum": [
+                "propagate",
+                "fallback"
+              ],
+              "type": "string"
+            },
+            "script": {
+              "additionalProperties": false,
+              "properties": {
+                "scriptId": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "version": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "scriptId",
+                "version",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "script",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "type",
+            "script",
+            "onFailure"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAt": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "spec": {
+          "additionalProperties": false,
+          "properties": {
+            "defaultCadence": {
+              "additionalProperties": false,
+              "default": {
+                "chunkDelayMilliseconds": 0,
+                "chunkSize": 256,
+                "maximumDurationMilliseconds": 60000
+              },
+              "properties": {
+                "chunkDelayMilliseconds": {
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "chunkSize": {
+                  "maximum": 4096,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "maximumDurationMilliseconds": {
+                  "maximum": 60000,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "chunkDelayMilliseconds",
+                "chunkSize",
+                "maximumDurationMilliseconds"
+              ],
+              "type": "object"
+            },
+            "defaultUsage": {
+              "additionalProperties": false,
+              "default": {
+                "inputTokens": 0,
+                "outputTokens": 0
+              },
+              "properties": {
+                "inputTokens": {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "outputTokens": {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "inputTokens",
+                "outputTokens"
+              ],
+              "type": "object"
+            },
+            "dialects": {
+              "additionalProperties": false,
+              "properties": {
+                "anthropic": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authentication": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "mode": {
+                                  "const": "accept_any",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "configured": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "mode": {
+                                  "const": "strict",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "configured"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "authentication"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "openai": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "const": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authentication": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "mode": {
+                                  "const": "accept_any",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "configured": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "mode": {
+                                  "const": "strict",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "configured"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "authentication"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "openai",
+                "anthropic"
+              ],
+              "type": "object"
+            },
+            "models": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "createdAtEpochSeconds": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "displayName": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "id": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "pattern": "^[\\x21-\\x7e]+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "displayName",
+                  "createdAtEpochSeconds",
+                  "behavior"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            "name": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "slug": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "type": "string"
+            },
+            "version": {
+              "const": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "version",
+            "slug",
+            "name",
+            "models",
+            "defaultUsage",
+            "defaultCadence",
+            "dialects"
+          ],
+          "type": "object"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "spec",
+        "revision",
+        "createdAt",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "meta": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "data",
+    "meta"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<a id="delete_mock_llm_server"></a>
+
+### `delete_mock_llm_server`
+
+**Delete mock LLM server.** Deletes one mock LLM server definition only when expectedRevision still matches. This management-only slice has no conversation, response-plan, or evaluator-state rows.
+
+- Scope metadata: `env:rw`
+- Effect: `destructive`
+- Retry policy: `idempotent`
+- Secret handling: none
+- HTTP: MCP only
+- MCP annotations: read-only `false`, destructive `true`, idempotent `true`, open-world `false`
+
+<details>
+<summary>Input JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "environmentId": {
+      "maxLength": 64,
+      "minLength": 8,
+      "pattern": "^[a-z0-9][a-z0-9_-]+$",
+      "type": "string"
+    },
+    "expectedRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "slug": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug",
+    "expectedRevision"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
+<details>
+<summary>Structured result JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        },
+        "slug": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](docs/reference/?:[a-z0-9-]{0,62}[a-z0-9])?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "deleted"
+      ],
+      "type": "object"
+    },
+    "meta": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "data",
+    "meta"
+  ],
+  "type": "object"
+}
+```
+
+</details>
+
 ## Environment-hosted mock MCP
 
 - The five F1 management operations configure source-qualified mock MCP servers
@@ -6633,9 +9230,41 @@ invented HTTP path.
 - Deployed acceptance is `unqualified`;
   this generated source catalog is not hosted evidence.
 
+## Mock LLM server definitions (management only)
+
+- Four F2 source operations create, list, inspect, and delete environment-local
+  mock-LLM definitions: `put_mock_llm_server`, `list_mock_llm_servers`,
+  `get_mock_llm_server`, and `delete_mock_llm_server`.
+- These operations are MCP-only. They add no self-hosted HTTP management route;
+  the HTTP projection remains exactly 5 routes.
+- `put_mock_llm_server` requires `expectedRevision`: use `null` for create-only
+  intent or the current positive revision for a changed replacement. A canonical
+  replay is idempotent even when that expectation has become stale.
+- Strict OpenAI and Anthropic Mock Credentials are provider-scoped, write-only
+  inputs. Source persistence stores SHA-256 verifiers; safe reads return only
+  `configured: true`.
+- A replacement is a full-definition write. `configured: true` is not a write
+  shape: reconstruct the desired definition and resupply or rotate the key for
+  every enabled strict provider from caller-owned secret storage.
+- `delete_mock_llm_server` requires the current positive `expectedRevision` and
+  deletes atomically only when it still matches. A mismatch is a typed `409`; a
+  missing or retried delete returns `deleted: false`.
+- Static behaviors pass bounded neutral-plan validation before persistence.
+  Unknown top-level put arguments fail with a secret-safe generic issue, and any
+  definition JSON key or string value containing the platform Access Key as a
+  substring is rejected at both Worker ingress and the Environment Durable Object.
+- Schema v7 upgrades v6 stores; an older v6 bundle explicitly refuses a store
+  already touched by the newer schema v7, so rollback requires forward recovery.
+- This is a configuration plane, not an LLM service. The OpenAI/Anthropic
+  provider data plane remains `unavailable`,
+  and deployed acceptance remains `unqualified`.
+- Use [the mock LLM guide](docs/mock-llm.md) for the exact definition, revision,
+  credential, schema-migration, cleanup, evidence, and unsupported boundaries.
+
 ## Unavailable MCP surfaces
 
-- Mock OpenAI and Anthropic APIs are planned for F2 and do not exist in this source.
+- Mock OpenAI and Anthropic provider APIs remain unavailable even though their
+  MCP-only server-definition operations are source-implemented.
 - Code Mode `search` and `execute` are planned for F6 and remain disabled.
 
 Use [implementation status](docs/IMPLEMENTATION_STATUS.md) for evidence and the
@@ -6657,7 +9286,7 @@ Last reviewed: 2026-07-25
 
 The public Worker exposes a deliberately narrow management HTTP surface under
 `/__mockos/v1`. It is a supporting interface, not an HTTP
-copy of the 20-tool management MCP server.
+copy of the 24-tool management MCP server.
 
 Exactly **5 routes** are implemented:
 
@@ -6702,6 +9331,8 @@ environment-hosted mock MCP, or outbound target requests.
   or selecting a session cursor.
 - The five F1 mock-MCP definition/state operations are MCP-only. The configured
   environment endpoint is a data plane, not an HTTP management route.
+- The four F2 mock-LLM definition operations are also MCP-only. They persist
+  configuration but do not make an OpenAI or Anthropic provider route available.
 - The HTTP `get_environment_discovery` operation returns an OIDC discovery document;
   the MCP `get_wellknown_urls` tool returns a broader endpoint summary.
 - HTTP routes always require an explicit environment ID.
@@ -6720,7 +9351,7 @@ Repository path: `docs/mcp.md`
 
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 registry is locally source-qualified
+Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry
 Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -6733,12 +9364,14 @@ the exact tested slice: public revision
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
 
-The current source appends five F1 management tools without changing that historical
-acceptance claim. Management MCP controls mockOS; it is not a simulated MCP workload.
+The current source appends five F1 and four F2 management tools without changing that
+historical acceptance claim. Management MCP controls mockOS; it is not a simulated
+MCP workload.
 Environment-hosted mock MCP servers are separate dependencies for an agent under
 test. See the [interface model](docs/concepts/interface-model.md), begin identity
 workflows with the [MCP-first quickstart](docs/getting-started/mcp-first.md), and use the
-[mock MCP guide](docs/mock-mcp.md) for F1.
+[mock MCP guide](docs/mock-mcp.md) for F1. Use the
+[mock LLM guide](docs/mock-llm.md) for the F2 management-only definition boundary.
 
 ## Authentication fails closed
 
@@ -6775,19 +9408,32 @@ cursor does not cross sessions.
 
 ## Exact current tool registry
 
-The current source exposes 20 tools: the accepted 15-tool M5 set plus five F1
-operations for creating/replacing, listing, reading, deleting, and resetting
-environment-hosted mock MCP servers. Their IDs, descriptions, input/output JSON
-Schemas, MCP annotations, effects, retry policies, secret policies, and exact HTTP
-availability are generated from the canonical registry in the
+The current source exposes 24 tools: the accepted 15-tool M5 set, five F1 operations
+for creating/replacing, listing, reading, deleting, and resetting environment-hosted
+mock MCP servers, and four F2 operations for creating/replacing, listing, reading, and
+deleting mock-LLM definitions. Their IDs, descriptions, input/output JSON Schemas, MCP
+annotations, effects, retry policies, secret policies, and exact HTTP availability
+are generated from the canonical registry in the
 [management-tool reference](docs/reference/management-tools.md). The corresponding
 [JSON catalog](docs/reference/management-operations.v1.json) is intended for machine
 readers.
 
-All five F1 operations are MCP-only. The self-hosted HTTP surface remains exactly five
-routes, and the OpenAPI/typed client projections remain limited to those routes.
+All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
+remains exactly five routes, and the OpenAPI/typed client projections remain limited
+to those routes.
 `put_mock_mcp_server` is the only F1 operation that accepts a Bearer Mock Credential;
 the handler redacts it and every read view omits both token and verifier.
+`put_mock_llm_server` requires explicit `expectedRevision` compare-and-swap intent and
+accepts independent strict OpenAI/Anthropic Mock Credentials as write-only fields.
+They are hashed before persistence; safe put/get views expose only `configured: true`,
+while list summaries omit authentication. That marker is read-only, not a write
+shape. Every changed full-definition put must resupply or rotate the raw key for each
+enabled strict provider from caller-owned secret storage. Canonical replay is an
+idempotent success even when the supplied revision is stale.
+`delete_mock_llm_server` requires a positive current `expectedRevision`, deletes
+atomically on a match, returns the typed revision-conflict `409` on a stale/ABA
+revision, and returns `deleted: false` when the row is already absent. There is no LLM
+reset operation because there is no response, conversation, or evaluator state.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -6813,6 +9459,8 @@ These are deliberately separate trust boundaries:
 - `/mcp` requires the configured management Access Key.
 - `/mcp-mock/{slug}` under an environment accepts no credential or its configured
   server-specific Bearer Mock Credential.
+- No OpenAI/Anthropic mock-LLM provider route exists. Provider keys in an F2
+  definition currently authenticate no data-plane request.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
@@ -6823,7 +9471,8 @@ These are deliberately separate trust boundaries:
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
 authorization. Never reuse or forward the MCP Access Key as a directory or mock-MCP
-credential.
+credential. For mock-LLM puts, any definition JSON key or string value containing the
+complete active platform key as a substring is rejected before persistence.
 The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
 ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
 PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct
@@ -7062,7 +9711,7 @@ API.
 
 ## Configure through management MCP
 
-The management registry contains 20 tools. The five F1 tools are appended after the
+The management registry now contains 24 tools. The five F1 tools remain appended after the
 15 accepted identity-management tools:
 
 | Tool | Effect | Exact result data | State semantics |
@@ -7799,13 +10448,392 @@ boundary.
 
 ---
 
+# Source: Mock LLM management definitions
+
+Repository path: `docs/mock-llm.md`
+
+# Mock LLM management definitions
+
+Status: Four management-only F2 operations are source-implemented; the provider data plane remains unavailable
+Last reviewed: 2026-07-25
+
+mockOS is MCP-first. The current source can create, list, inspect, and delete a
+bounded mock LLM server definition inside an environment through management MCP.
+This is the configuration plane for a future OpenAI- and Anthropic-shaped test
+dependency. It is not yet a mock LLM service, and no application or SDK can call the
+definition.
+
+Use this guide to understand the exact source contract, safe credential handling,
+revision rules, persistence boundary, cleanup, and remaining work. Use the
+[F2 kernel record](docs/f-series/f2-llm-kernel.md) for the neutral plan and pure renderer
+architecture, and [implementation status](docs/IMPLEMENTATION_STATUS.md) before making
+an evidence or deployment claim.
+
+## Capability boundary
+
+```text
+agent or automation
+       │
+       │ management Access Key
+       ▼
+management MCP /mcp
+       │
+       ├── put_mock_llm_server
+       ├── list_mock_llm_servers
+       ├── get_mock_llm_server
+       └── delete_mock_llm_server
+                │
+                ▼
+        Environment Durable Object
+                │
+                ▼
+    schema-v7 definition + revision rows
+
+application or official SDK
+       │
+       └── OpenAI/Anthropic provider route ── unavailable
+```
+
+The management registry contains **24 MCP tools**. The four operations on this page
+are MCP-only, so the self-hosted HTTP projection remains exactly **five routes**. Do
+not invent a management HTTP path for them. The machine-readable catalog deliberately
+keeps `future.mockLlmApis.status` and `providerDataPlane` set to `unavailable` while
+recording the four source-implemented definition operations.
+
+## Prerequisites
+
+You need:
+
+- a source build containing the four operations;
+- a Streamable HTTP MCP client connected to `/mcp`;
+- the configured management Access Key;
+- an existing environment ID; and
+- only synthetic definition material and Mock Credentials.
+
+Run `tools/list` and require the exact operations before creating state. Pass
+`environmentId` explicitly in automation. If it is omitted, the MCP transport
+session's current-environment cursor is used; when neither exists, the tool returns
+`400 CURRENT_ENVIRONMENT_REQUIRED`.
+
+The placeholders `$MOCKOS_OPENAI_MOCK_CREDENTIAL` and
+`$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL` mean “load a synthetic provider-specific value
+from the caller's secret store.” They are not valid on-wire credentials and must not
+be copied literally into tool arguments. A real tool call contains the resolved
+synthetic value, such as the obviously inert examples below.
+
+## Management operations
+
+| Tool | Input | Result | Effect and retry |
+| --- | --- | --- | --- |
+| `put_mock_llm_server` | Optional `environmentId`, mandatory `expectedRevision`, and `server` | Safe `{ spec, revision, createdAt, updatedAt }` view | `env:rw`; idempotent mutation |
+| `list_mock_llm_servers` | Optional `environmentId` | `{ servers }` summaries | `env:ro`; safe read |
+| `get_mock_llm_server` | Optional `environmentId` and `slug` | Safe full definition view | `env:ro`; safe read |
+| `delete_mock_llm_server` | Optional `environmentId`, `slug`, and mandatory positive `expectedRevision` | `{ slug, deleted }` | `env:rw`; idempotent atomic-CAS delete |
+
+`env:ro` and `env:rw` are contract metadata until F4 supplies and qualifies shared
+scoped-key enforcement. Current management authentication and environment-existence
+checks still apply.
+
+There is no reset operation. This slice persists definitions and a revision
+allocator, but it has no conversation, response-plan, sequence, or evaluator-state
+rows to reset.
+
+## Create a definition
+
+Call `put_mock_llm_server` with `expectedRevision: null` to state create-only intent:
+
+```json
+{
+  "environmentId": "env_test01",
+  "expectedRevision": null,
+  "server": {
+    "version": 1,
+    "slug": "agent-tests",
+    "name": "Agent integration tests",
+    "dialects": {
+      "openai": {
+        "enabled": true,
+        "authentication": {
+          "mode": "strict",
+          "apiKey": "synthetic-openai-mock-credential"
+        }
+      },
+      "anthropic": {
+        "enabled": true,
+        "authentication": {
+          "mode": "strict",
+          "apiKey": "synthetic-anthropic-mock-credential"
+        }
+      }
+    },
+    "models": [
+      {
+        "id": "mock-agent-1",
+        "displayName": "Mock agent model",
+        "createdAtEpochSeconds": 0,
+        "behavior": {
+          "version": 1,
+          "type": "static",
+          "value": "This response is deterministic."
+        }
+      }
+    ],
+    "defaultUsage": {
+      "inputTokens": 0,
+      "outputTokens": 0
+    },
+    "defaultCadence": {
+      "chunkDelayMilliseconds": 0,
+      "chunkSize": 256,
+      "maximumDurationMilliseconds": 60000
+    }
+  }
+}
+```
+
+A successful result returns revision `1` for the first changed definition in a new
+environment, or another positive safe integer when the environment's LLM revision
+allocator has already advanced. Success means only that the definition was validated
+and persisted. It does not create a provider route.
+
+Both dialect properties are mandatory, and at least one must be enabled. An enabled
+dialect chooses either:
+
+- `accept_any`, which stores no provider key; or
+- `strict`, which accepts a provider-scoped Mock Credential only on the write.
+
+Because provider auth enforcement does not exist yet, neither mode affects incoming
+traffic in this tranche. Define distinct synthetic OpenAI and Anthropic credentials
+now so future route tests do not accidentally blur their trust boundaries.
+
+## Compare-and-swap replacement and retry
+
+`expectedRevision` is mandatory on every put:
+
+- use `null` only when the slug must not exist;
+- use the current positive revision when changing an existing definition; and
+- never infer or auto-increment a revision in the client.
+
+Read the current safe view, reconstruct the full desired definition, then send that
+returned revision. A changed replacement atomically compares the revision and consumes
+the next environment-wide monotonic LLM revision. A create/delete/recreate sequence
+never reuses an earlier revision.
+
+Replacement is not a patch. The safe view deliberately is not round-trippable:
+`configured: true` is not a write shape, and there is no preserve-existing sentinel
+or credential-recovery operation. For every enabled provider that should remain
+`strict`, the caller must resupply or rotate its complete `apiKey` from caller-owned
+secret storage. Reconstruct the replacement as follows:
+
+1. read the safe view and retain its revision;
+2. construct the full desired version-one server, including every model, behavior,
+   default, and both provider dialects;
+3. replace each strict safe-view marker with
+   `{ "mode": "strict", "apiKey": "<resolved synthetic value>" }` loaded from the
+   caller's secret store;
+4. use `{ "mode": "accept_any" }` only when intentionally removing strict checking,
+   or `{ "enabled": false }` when intentionally disabling that provider; and
+5. call `put_mock_llm_server` with the complete server and the revision read in step
+   one.
+
+Sending a get result back unchanged fails schema validation. Omitting an enabled
+strict provider's key is not interpreted as “keep the old key.” Resupplying the same
+key retains the same stored verifier; rotating it is a real definition change and
+consumes a new revision.
+
+The repository checks a canonical replay before compare-and-swap. Retrying the exact
+same normalized definition is therefore an idempotent success, even when the supplied
+expectation is now stale; it returns the existing record and consumes no revision.
+This canonical replay rule makes a timed-out successful write safe to retry.
+
+A different definition with a missing or stale expectation fails with:
+
+- status `409`;
+- code `MOCK_LLM_SERVER_REVISION_CONFLICT`; and
+- recovery guidance to read the current revision and retry the changed mutation
+  against it.
+
+Do not blindly overwrite after this conflict. Compare the current definition with
+the intended change and resolve concurrent edits explicitly.
+
+Deletion requires the current positive `expectedRevision`.
+Delete uses atomic compare-and-swap. A different current revision returns
+`409 MOCK_LLM_SERVER_REVISION_CONFLICT` without deleting anything. A matching
+revision returns `deleted: true`. A missing or retried delete returns
+`deleted: false`, which makes retry after a successful deletion safe. If the slug was
+deleted and recreated at a newer revision, retrying an old delete conflicts instead
+of removing the replacement.
+
+For example, after a get returns revision `7`, delete with:
+
+```json
+{
+  "environmentId": "env_test01",
+  "slug": "agent-tests",
+  "expectedRevision": 7
+}
+```
+
+## Safe credential views
+
+The management Access Key authenticates `/mcp`; it is never a provider Mock
+Credential. The public Worker rejects any bounded submitted mock-LLM definition that
+contains the full active platform Access Key as a substring. It scans JSON keys or string values,
+including either strict provider-key field or behavior/model material.
+The Environment Durable Object repeats that whole-definition defense after parsing and
+before persistence. A value such as `prefix-<active-key>-suffix` is rejected; this is
+broader than exact equality.
+
+For each enabled strict dialect:
+
+1. `put_mock_llm_server` accepts `apiKey` as a write-only request field;
+2. the Environment Durable Object computes SHA-256 before calling the repository;
+3. only `apiKeySha256` is present in the private persisted definition; and
+4. put/get results expose neither plaintext nor verifier, only
+   `authentication: { mode: "strict", configured: true }`; list summaries omit
+   authentication entirely.
+
+Strict keys and their verifiers are also rejected if copied into names, model
+metadata, behaviors, or other returned definition material. Request-secret metadata
+marks the put arguments for redaction. Treat all synthetic provider traffic as
+potentially observable test data anyway and never use a real OpenAI, Anthropic,
+mockOS, or customer credential.
+
+Put accepts only the top-level `environmentId`, `expectedRevision`, and `server`
+fields. Unknown top-level fields receive one generic, secret-safe validation issue;
+their names and values are not reflected. Nested server objects are strict too.
+Focused MCP tests place a strict credential in duplicate model IDs, malformed nested
+objects, and an unknown top-level JSON key and prove the pre-handler error never
+serializes it.
+
+## Definition contract and bounds
+
+| Area | Source contract |
+| --- | --- |
+| Servers | At most 64 definitions per environment; slug is 1–64 lowercase letters, digits, or internal hyphens |
+| Whole definition | Version exactly `1`; at most 256 KiB UTF-8, depth 24, and 10,000 JSON nodes |
+| Dialects | Exact `openai` and `anthropic` properties; at least one enabled |
+| Strict Mock Credential | 16–1,024 RFC 6750 `b64token` characters |
+| Models | 1–64 models with unique 1–256-character visible-ASCII IDs |
+| Model metadata | Trimmed display name of 1–128 characters and a non-negative safe-integer creation time |
+| Defaults | Usage defaults to zero input/output tokens; cadence defaults to 0 ms chunk delay, 256 code points, and 60 seconds maximum |
+| Behavior | Shared bounded `static`, `template`, `sequence`, `match`, `error`, or exact-version `script` contract |
+
+Every static definition goes through bounded neutral-plan validation before
+persistence. Static text or a neutral response directive must fit the neutral
+response-plan bounds. Configured errors use only neutral LLM error kinds and cannot
+contain provider-specific HTTP status/detail fields. Until F3 supplies a sandbox,
+`script` requires an explicit declarative fallback. These validation rules make stored
+definitions compatible with the pure F2 planner seam; they do not execute a request.
+
+## Persistence and rollback warning
+
+Opening the current Environment Durable Object applies append-only **schema v7**.
+That migration adds:
+
+- `mock_llm_servers`, holding canonical definition JSON, revision, and timestamps;
+- an updated-time index; and
+- `mock_llm_revision_allocator`, holding the monotonic environment-wide counter.
+
+The migration adds no provider-response, conversation, observation, or evaluator-state
+table. Writes are transactional and accepted definitions are serialized canonically.
+Persisted rows and the allocator fail closed when their identity, canonical JSON,
+parsed contract/bounds, or monotonicity are inconsistent.
+
+Schema version is a runtime compatibility boundary. Focused migration tests prove a
+v6 store upgrades to v7 without changing its F1 mock-MCP rows. They also prove an
+older v6 bundle refuses a store already touched by the newer schema v7 with “database
+schema version 7 is newer than supported version 6,” while leaving the store at v7.
+The safe operational posture is forward-recovery: roll forward to a v7-aware build or
+use a separately reviewed migration/export bridge. Do not assume a source rollback
+can downgrade SQLite state, and do not cite a local migration test as hosted rollback
+evidence.
+
+## Diagnose failures
+
+| Symptom | Meaning | Safe response |
+| --- | --- | --- |
+| `400 CURRENT_ENVIRONMENT_REQUIRED` | No explicit environment and no valid session cursor | Pass the intended `environmentId` |
+| SDK input-schema error | Missing `expectedRevision`, a safe-view `configured` marker was sent as a write, an unknown top-level argument was rejected secret-safely, or a slug/key/model/behavior/bound is invalid | Reconstruct the full strict write shape and correct arguments before handler entry |
+| `404 MOCK_LLM_SERVER_NOT_FOUND` | `get_mock_llm_server` cannot find that slug | Re-list the selected environment; do not guess |
+| `409 MOCK_LLM_SERVER_REVISION_CONFLICT` | Create-only intent found a row, a changed replacement used a stale revision, or delete no longer matches the current revision | Read, compare, and retry the intended mutation with the current revision |
+| `409 MOCK_LLM_SERVER_LIMIT` | The environment already has 64 definitions | Delete an unused definition before creating another |
+| `409 MOCK_LLM_SERVER_REVISION_LIMIT` | The safe-integer revision allocator is exhausted | Stop mutations and recover the environment deliberately |
+| `deleted: false` | The positive-revision delete found no row, normally because it was already completed | Treat cleanup as complete after confirming the environment; a recreated row would conflict |
+
+An authenticated connected source build is still not deployment evidence. If the four
+tools are absent, do not route around capability negotiation with SQL, an invented
+HTTP endpoint, or a console-only operation.
+
+## Verify and clean up
+
+After a put:
+
+1. call `get_mock_llm_server` with the same explicit environment and slug;
+2. confirm the intended model/dialects and returned revision;
+3. confirm every strict dialect reads as `configured: true`;
+4. confirm no plaintext credential or SHA-256 verifier appears in the result; and
+5. record only the minimum non-secret source evidence needed by the test.
+
+When finished, retain the revision returned by get/put and call
+`delete_mock_llm_server` with that positive `expectedRevision`. On a conflict, re-read
+before deciding whether the newer definition should be deleted. Deleting the whole
+environment also removes its Durable Object state through the existing environment
+lifecycle. There is no reset operation because no LLM runtime state exists.
+
+## What remains unavailable
+
+The `mockLlmApis` data plane remains unavailable. The current management-only slice
+has:
+
+- no provider route for OpenAI Chat Completions, OpenAI Models, Anthropic Messages,
+  or Anthropic Models;
+- no provider request parser, version-header validation, or auth enforcement;
+- no model renderer or model catalog;
+- no state/reset operation, no conversation handle, and no persisted plan or
+  evaluator state;
+- no observation or LLM-specific request assertion;
+- no paced stream, network timer, abort cleanup, or edge duration enforcement;
+- no Wrangler round trip or official SDK client connected to a real local URL;
+- no hosted CI qualification for this tranche, no deployment, and no production
+  acceptance; and
+- no Cloud pin or private hosted integration.
+
+The pure kernel can render selected JSON and immediate SSE frame arrays in process.
+That is source architecture, not a listener. Do not configure the roadmap route
+`/e/{environmentId}/llm-mock/{slug}/{provider}/v1`, report that OpenAI or Anthropic
+SDKs can connect, or call F2 complete.
+
+## Source ownership and next work
+
+| Source | Responsibility |
+| --- | --- |
+| [`packages/contracts/src/mock-llm-server.ts`](packages/contracts/src/mock-llm-server.ts) | Strict write/persisted/safe-view server contracts and bounds |
+| [`packages/contracts/src/operations/management.ts`](packages/contracts/src/operations/management.ts) | Four MCP-only operation contracts and secret/effect/retry metadata |
+| [`packages/mcp/src/index.ts`](packages/mcp/src/index.ts) | Handler-agnostic tool registration, cursor selection, and safe output parsing |
+| [`packages/core/src/mock-llm/repository.ts`](packages/core/src/mock-llm/repository.ts) | Canonical writes, mandatory put/delete compare-and-swap, replay, list/get/delete, limits, and monotonic revisions |
+| [`packages/core/src/store/migrations.ts`](packages/core/src/store/migrations.ts) | Append-only schema-v7 tables and rollback compatibility check |
+| [`packages/worker-kit/src/environment-do.ts`](packages/worker-kit/src/environment-do.ts) | Platform-key separation, provider-key hashing, environment-local RPC composition, and safe views |
+| [`packages/worker-kit/src/mcp-agent.ts`](packages/worker-kit/src/mcp-agent.ts) | Environment ownership checks and stable MCP problem mapping |
+| [`apps/worker/src/app.ts`](apps/worker/src/app.ts) | Mounted management authentication, bounded secret scanning, and early platform-key-substring rejection |
+| [`packages/llm-mock`](packages/llm-mock) | Provider-neutral planner and pure provider projections; not a network service |
+
+The next public vertical slice is provider request parsing, provider-shaped Mock
+Credential enforcement, exact routing and Worker composition, model rendering,
+edge-paced streaming/cancellation, observation/assertion support, and real official
+SDK clients against Wrangler. Cloud may pin only a merged, independently qualified
+public revision; private account, entitlement, quota, console, and go-to-market policy
+stay private.
+
+---
+
 # Source: Known limitations
 
 Repository path: `docs/known-limitations.md`
 
 # Known limitations
 
-Status: Accepted M3/M5, sampled M6, source-only M7, partial F2 kernel, and locally qualified F0/F1
+Status: Accepted M3/M5, sampled M6, source-only M7, management-only F2, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -7920,6 +10948,9 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   runtime rather than those standalone credentials.
   F1 appends five locally source-qualified tools for environment-hosted mock MCP
   definitions and state. Those five have no inherited M5 hosted/deployed acceptance.
+  F2 appends four source-implemented tools for mock-LLM definitions, bringing the
+  current source registry to 24. Those four likewise inherit no hosted/deployed
+  evidence.
 - The locally source-qualified F1 implementation supports only MCP `2025-11-25` over POST-only Streamable
   HTTP. `GET` returns `405`; there are no `listChanged` notifications, JSON-RPC
   batches, legacy HTTP+SSE fallback, or second protocol-version adapter. The route is
@@ -7937,18 +10968,22 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   declarative fallback or fail closed because no executor is installed. `proxy`
   record/replay is rejected. Served mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
-- The partial F2 source slice is a pure response kernel, not a mock LLM service.
-  Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI Chat
-  Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
-  consumption through injected in-process Fetch are source-tested. There is no
-  LLM server definition, management MCP operation, public route, request parser,
-  authentication, persistence or persisted server sequence/conversation owner,
-  edge-paced SSE network stream, observation/assertion support, Worker or Durable
-  Object composition, private Cloud pin, Wrangler round trip, hosted CI, deployment,
-  or verified-live comparison. The official-SDK harness hand-supplies
-  model-list/retrieve fixtures; there is no model renderer or catalog. No listener
-  emits the serialized SSE frames. The 20-tool management registry is unchanged. Do
-  not configure either planned
+- The partial F2 source slice has a management-only configuration plane, not a mock
+  LLM service. Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI
+  Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
+  consumption through injected in-process Fetch are joined by strict definitions,
+  four MCP-only management operations, schema-v7 persistence, mandatory changed-write
+  revision CAS, canonical replay, atomic revision-bound delete, and write-only
+  provider-key views. Safe `configured` markers are not write shapes: every changed
+  full-definition put must resupply or rotate each enabled strict provider key from
+  caller-owned storage. Bounded definition JSON keys/string values containing the
+  complete platform key as a substring fail closed. There is no
+  provider route/request parser/auth enforcement, model renderer/catalog,
+  response/evaluator state, reset, conversation owner, edge-paced SSE network stream,
+  observation/assertion support, Wrangler round trip, private Cloud pin, hosted CI
+  qualification for this tranche, deployment, or verified-live comparison. The
+  official-SDK harness hand-supplies model-list/retrieve fixtures. No listener emits
+  the serialized SSE frames. Do not configure either planned
   `/e/{environmentId}/llm-mock/{slug}/{provider}/v1` route because neither exists.
   Pure fixtures reuse content-derived plan IDs for deterministic provider/request
   correlation, not unique invocation IDs, and omit Anthropic organization identity
@@ -7956,8 +10991,8 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   stream cadence are bounded inert metadata; no renderer sleeps or paces a network
   response.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
-  control routes; the other 15 management MCP operations, including all five F1
-  operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
+  control routes; the other 19 management MCP operations, including all five F1 and
+  all four F2 operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
   contract metadata until F4 implements scoped-key/role/ACL enforcement. Code Mode has
   no Worker import, flag, `LOADER`, or `worker_loaders` binding, and `NoSandbox` always
   rejects JavaScript. The client, Code Mode, sandbox, and mock-MCP packages remain
@@ -8077,7 +11112,7 @@ Repository path: `docs/IMPLEMENTATION_STATUS.md`
 
 # Implementation status
 
-Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; F2 partial
+Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; F2 management-only source slice
 Last reviewed: 2026-07-25
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
@@ -8105,14 +11140,16 @@ layer suites and complete repository `pnpm check` gate are green in the revision
 carrying this document. Hosted CI, merge, package publication, deployment, private
 Cloud consumption, and broader ecosystem compatibility remain separate claims until
 recorded.
-The [partial F2 LLM kernel](docs/f-series/f2-llm-kernel.md) adds provider-neutral
+The [partial F2 LLM slice](docs/f-series/f2-llm-kernel.md) combines provider-neutral
 response-plan schemas, a behavior-to-plan adapter, pure OpenAI/Anthropic
-JSON/SSE-frame renderers, and in-process consumption tests with pinned official SDKs.
-That focused source evidence does not add an LLM server definition, management MCP
-tool, HTTP/provider route, authentication, persistence, edge pacing, observation,
-Worker composition, private Cloud integration, or Wrangler/deployed conformance. F2
-therefore remains incomplete and mock LLM APIs remain unavailable as an operable
-product surface.
+JSON/SSE-frame renderers, and in-process pinned-SDK consumption with strict
+server-definition contracts, four MCP-only operations, schema-v7 environment
+persistence, mandatory revision compare-and-swap, and write-only provider-key views.
+The [task guide](docs/mock-llm.md) records the exact management contract. There is still
+no provider route/auth enforcement, model renderer/catalog, runtime/conversation
+state or reset, edge pacing, observation, Wrangler/deployed conformance, or private
+Cloud pin. F2 therefore remains incomplete and mock LLM APIs remain unavailable as an
+operable data plane.
 
 Evidence tiers are intentionally separate. **Source** means exact-revision local or
 hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
@@ -8124,9 +11161,9 @@ organization. No current fixture or milestone is verified-live.
 | --- | --- | --- |
 | M0 workspace substrate | Complete locally and in hosted CI through M3 | The repository-wide format, types, tests, build, Wrangler-shape, and production/staging dry-run gates pass at exact M3 candidate `8645f405d5e3b922c30d51339b8b27f9fe30d93e`; see [CI run 29886610480](https://github.com/reachjalil/mockos/actions/runs/29886610480). |
 | Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
-| F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 20 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine catalog](docs/reference/management-operations.v1.json), self-hosted HTTP reference, and agent-readable indexes with exact-count, link, drift, and inert-secret checks. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
+| F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 24 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine catalog](docs/reference/management-operations.v1.json), self-hosted HTTP reference, and agent-readable indexes with exact-count, link, drift, and inert-secret checks. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
 | F1 environment-hosted mock MCP | Locally source-qualified; hosted CI/merge/deployment unqualified | Strict [mock-MCP contracts](packages/contracts/src/mock-mcp.ts), bounded JSON Schema/templates/results, [declarative evaluation](packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/hash-only-session tables, the atomic [repository](packages/core/src/mock-mcp/repository.ts), five MCP-only management operations, and the hand-written [`@mockos/mcp-mock`](packages/mcp-mock) `2025-11-25` adapter pass their focused suites and the complete repository gate. The [path-mode Worker integration](apps/worker/test/mock-mcp.integration.test.ts) configures through management MCP and exercises the routed official SDK, separate credential/session boundary, pagination and all capability kinds, reset, idempotent/revision-changing writes, delete, and redacted MCP observations; host-resolver tests separately cover both endpoint forms. State is capped per value and at 256 rows/2 MiB in aggregate. Identical writes preserve revision/state/sessions; changed replacements and in-flight revision checks prevent stale results; result validation and HTTP-abort handling during configured latency happen before staged sequence commit; scripts fail closed. Resource-template reverse matching is bounded/linear and deterministic for empty, percent-encoded, and adjacent-variable captures. Message-level `notifications/cancelled` remains deliberately unenforced. The [F1 guide](docs/mock-mcp.md) records exact limits and gaps. Hosted CI, merge, package publication, deployment, wildcard TLS, private hosted integration, GET/list-change streaming, a second protocol version, scripts, proxy, and broader client/ecosystem conformance remain unqualified or unavailable. |
-| F2 provider-neutral LLM response kernel | Partial local source evidence; no service/runtime qualification | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen mock-LLM plan, staged behavior adapter, pure OpenAI Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK in-process tests. Its focused suites and complete forced repository gate are green locally. The injected Fetch harness alone supplies model-list/retrieve fixtures; there is no model renderer or catalog. No listener, route, parser, auth check, Worker, Durable Object, persistence, network edge stream/pacing, request observation, management MCP operation, or Cloud consumer participates. This is not Wrangler or deployed conformance, does not increase the 20-tool management registry, and does not satisfy the F2 exit gate. |
+| F2 mock-LLM kernel and management definitions | Partial source implementation; no provider-data-plane qualification | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, staged behavior adapter, pure OpenAI Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK in-process tests. The [management guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v7 persistence with canonical writes, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply on replacement, provider-key hashing, secret-safe validation, bounded static-plan checks, platform-key-substring rejection, and non-round-trippable safe views. Focused migration tests prove v6-to-v7 upgrade and older-v6 refusal of a v7 store. The current registry is 24 tools and HTTP remains five routes. The injected Fetch harness alone supplies model-list/retrieve fixtures; there is no provider listener/route/parser/auth enforcement, model renderer/catalog, runtime/conversation state, reset, network pacing, request observation, Wrangler qualification, Cloud pin, or deployment. This does not satisfy the F2 exit gate. |
 | Synchronous SQL store | Accepted through the tested M5 slice | The Node [adapter](packages/testkit/src/sql-store.ts) and [unit test](packages/testkit/src/testkit.test.ts) share the synchronous store contract exercised through SQLite Durable Object Worker integrations. M5 adds append-only provisioning target, staged-run target, run/step, and watermark state, including one active run per app/target; local gates and the controlled-target hosted run passed. |
 | Core migrations and directory repositories | Accepted through M5; bounded M6 source suite and deployed sample green | The accepted [core substrate](packages/core/src/core.test.ts), [directory/lifecycle](packages/core/src/directory-lifecycle.test.ts), [Okta OAuth](packages/core/src/okta.test.ts), and [scenario/log](packages/core/src/scenario-log.test.ts) cover the M3 engine. The M5 [provisioning planner/interpreter](packages/core/src/provisioning) passed focused/full and controlled-target gates. M6 focused tests cover the bounded [Classic Authn service](packages/core/src/authn/okta-authn.ts), deterministic broken-token mutations, active/successor key handling, private-key scrubbing, bounded retention, and stale-instance/sign-rotate races. Authn state retrieval uses a sliding five-minute expiry while session capabilities retain their fixed five-minute issuance expiry. Each table is capped at 10,000 retained rows and each User at 32 retained rows per kind; ordered oldest-expiry eviction and a 256-row-per-table issuance GC pass are index-backed without advancing schema v5, preserving rollback compatibility. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises the externally observable slices, not every source-only retention/concurrency/security assertion. |
 | Deterministic test seams | Complete through M3; bounded M6 token/key paths accepted | The [clock/RNG](packages/testkit/src/determinism.ts) and persisted [scenario service](packages/core/src/scenario/scenario-service.ts) have deterministic unit coverage. The M6 token stream adds exact-only rotation and claim-skew actions with fixed broken-token mutations; the deployed sample exercised rotation, skew, and every mutation. Production signing-key material remains cryptographically generated, and deeper deterministic assertions remain source evidence. |
@@ -8136,7 +11173,7 @@ organization. No current fixture or milestone is verified-live.
 | Okta runtime | Accepted M3 implementation plus bounded M6 Classic Authn deployed sample | Existing [core](packages/core/src/okta.test.ts), [HTTP adapter](packages/engine-http/src/okta.test.ts), and [Worker integration](apps/worker/test/okta.integration.test.ts) cover the M3 OAuth/device/directory slice. M6 adds core/HTTP/Worker coverage for `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, explicit `LOCKED_OUT`, state retrieval/cancellation, hash-only capabilities, replay denial, lifecycle and SCIM-password-change revocation, and issuance-race denial. Successful retrieval slides state expiry; session expiry remains fixed. The HTTP shape uses singular `_embedded.factor` (an array), omits `passwordChanged`, permits same-origin CORS only for `POST` with `accept`/`content-type`, emits no credentialed-CORS allowance, and returns `403` cross-origin. Request/response bodies are recursively secret-redacted, malformed bodies are wholly redacted, and sensitive Authn headers are redacted. The [M6 smoke](docs/evidence/m6-workers-dev-smoke.md) samples initial states, state retrieval, CORS, privacy, and redaction; factor verification, cancellation/replay and revocation details not sampled there, verified-live comparison, and the rest of the Classic machine remain open or source-only as stated. |
 | Scenario injection and request log | Accepted through the tested M5 assertion slice; M6 actions sampled in deployment | Accepted M3 [scenario/log tests](packages/core/src/scenario-log.test.ts) cover deterministic scenarios, filtering, retention, and assertions. M5 response-body predicates, repeated non-overlapping ordered counts, Worker capture/redaction, local process e2e, and both hosted four-request assertions passed. M6 key rotation and clock skew are restricted to exact internal `token.before_sign` evaluation rather than the generic catch-all; both were sampled by the exact-version M6 deployed smoke. |
 | M7 application/scenario management reads | Source-complete; hosted CI, rollout, and console acceptance pending | Strict [contracts](packages/contracts/src/index.ts) cap management pages at 25 records and bind cursors to the application or scenario resource kind. [Core](packages/core/src/directory/applications.ts) and [scenario](packages/core/src/scenario/scenario-service.ts) keyset pagination is covered by focused tests, and the [Durable Object integration](apps/worker/test/management-rpc.integration.test.ts) exercises the additive `listApplications`/`listScenarios` RPCs. Application summaries are constructed field-by-field and exclude both the creation-only plaintext `clientSecret` and the persisted hash. No MCP tool, public HTTP route, CLI command, schema migration, hosted deployment, or private-console result is claimed by this source slice. |
-| MCP runtime | Accepted 15-tool M5 hosted slice; 20-tool F1 registry source-qualified locally | The handler-agnostic [registry and tests](packages/mcp/src/index.test.ts) preserve `run_provisioning_cycle` as tool 15 and append five locally source-qualified F1 management operations. Authenticated mounted Worker tests, the built-CLI process e2e, and staging/production hosted starts passed for the historical M5 set only. No F1 tool inherits that deployed evidence, and npm distribution remains open. |
+| MCP runtime | Accepted 15-tool M5 hosted slice; 20-tool F1 registry locally qualified; 24-tool F2 source registry | The handler-agnostic [registry and tests](packages/mcp/src/index.test.ts) preserve `run_provisioning_cycle` as tool 15, append five locally source-qualified F1 operations, and append four source-implemented F2 definition operations. Authenticated mounted Worker tests, the built-CLI process e2e, and staging/production hosted starts passed for the historical M5 set only. No F1/F2 addition inherits that deployed evidence, and npm distribution remains open. |
 | CLI Stage A | Accepted M5 source command; unpublished | The unpublished `@mockos/cli` 0.1.0 source includes secret-safe `provision run` and capability negotiation for `run_provisioning_cycle`; all 19 CLI tests and the built-CLI process e2e are green. Package publication and a complete deployed CLI command matrix remain open. |
 | Cloudflare Worker / Durable Object | Bounded M6 exact-version deployment sample accepted | Exact M6 public revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed the full local gate and [CI run 29966667984](https://github.com/reachjalil/mockos/actions/runs/29966667984). Its staging version `9ea22805-e38e-4a1b-807f-f80646cbe298` and production version `0695adab-d162-4f01-a3cf-da9c1640acdc` were manually deployed with the existing Access Keys preserved, confirmed 100% active, and passed source-locked exact-serving-version smoke. See the [M6 deployment record](docs/evidence/m6-workers-dev-smoke.md). The guarded Cloudflare-credential promotion workflow and verified-live parity remain unqualified. |
 | SCIM inbound and lifecycle APIs | Accepted for bounded M3; M6 edges sampled in deployment | Portable contracts, bounded filter/PATCH logic, versioned persistence/service behavior, the `/scim/v2` HTTP/Worker composition, provider dialects, Graph/Okta directory adapters, and lifecycle policy have focused local and hosted coverage. All 113 accepted SCIM fixtures execute green against the HTTP composition; Worker SCIM and lifecycle-cascade suites qualify the mounted runtime. The M6 corpus separately covers an injection-locked `409` conflict with no partial mutation, a soft-delete race with tombstone-only effects, and two exact malformed-PATCH tolerances (`missing_schemas` and `singleton_operations`) that leave strict parsing and all unrelated defects unchanged. Those central paths passed the M6 deployed sample; the full eight-case M6 fixture corpus, all 113 accepted fixtures, and verified-live comparison did not run remotely. |
@@ -8222,11 +11259,11 @@ is green. Hosted CI, merge, deployment, package publication, Worker Loader evide
 and F-series runtime activation remain pending.
 
 The bounded F1 transport/runtime is locally source-qualified in the revision carrying
-this document: the focused suites and complete repository gate are green. The partial
-F2 response kernel adds focused source tests only; it is not a routed or hosted
-runtime. Hosted CI, merge, package publication, deployment, private Cloud integration,
-the remaining F2 service, F3 runtime, F4 authorization/audit, broader
-client/ecosystem conformance, and F6 Code Mode activation remain pending.
+this document: the focused suites and complete repository gate are green. F2 adds
+focused kernel tests plus MCP-only persisted server definitions; it is not a routed or
+hosted provider runtime. Hosted CI, merge, package publication, deployment, private
+Cloud integration, the remaining F2 data plane, F3 runtime, F4 authorization/audit,
+broader client/ecosystem conformance, and F6 Code Mode activation remain pending.
 
 ---
 
@@ -8236,8 +11273,8 @@ Repository path: `docs/security/threat-model.md`
 
 # Threat model
 
-Status: M3/M5 accepted, bounded M6 deployed, and F1 controls source-only
-Last reviewed: 2026-07-24
+Status: M3/M5 accepted, bounded M6 deployed, and F1/F2 controls source-only
+Last reviewed: 2026-07-25
 
 ## Assets and trust boundaries
 
@@ -8246,6 +11283,8 @@ authority, hashed application secrets and OAuth tokens, signing keys, and isolat
 between mock environments. F1 adds mock-MCP Bearer verifiers, opaque transport
 sessions, revision-bound behavior state, and captured agent traffic. Provider and
 environment mock-MCP protocol surfaces are intentionally attacker-controllable.
+F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
+and a schema-v7 definition store; it does not add an LLM provider surface.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
 boundary.
 
@@ -8273,6 +11312,13 @@ metadata, platform-key confusion with a mock Bearer value, raw session disclosur
   replacement or delete/recreate, pathological JSON Schema and URI-template input,
   prototype traversal, configured error-map ambiguity, sequence-state races, aborted
   latency that commits state, and secret reflection through observations.
+F2 definition threats add platform-key confusion with either provider key, plaintext
+or verifier reflection through safe reads/behavior material, cross-environment
+definition access, lost updates, delete/recreate revision reuse, canonicalization
+ambiguity, malformed persisted rows/allocator regression, definition-size denial, and
+unsafe rollback after a schema-v7 store has been opened. A safe-view marker mistakenly
+reused as a write also risks an ambiguous credential update, so it must fail rather
+than imply preservation.
 
 ## Implemented controls and evidence boundaries
 
@@ -8282,6 +11328,38 @@ metadata, platform-key confusion with a mock Bearer value, raw session disclosur
   platform key before persistence. The write credential is hashed; list/get views
   return only `configured: true`, and their strict schemas cannot contain token or
   verifier material.
+- `put_mock_llm_server` independently rejects the complete active self-host platform
+  key as a substring anywhere in a bounded submitted definition's JSON keys or string
+  values at Worker ingress and again inside the Environment Durable Object. Each
+  strict provider key is write-only and hashed before repository entry. Put/get views
+  represent it only as `configured: true`; list summaries omit authentication
+  entirely, and neither plaintext nor verifier can be copied into other definition
+  material.
+- Every mock-LLM put requires explicit compare-and-swap intent. `null` is create-only,
+  a changed replacement must name the current positive revision, and every changed
+  write consumes one environment-wide monotonic safe-integer revision. Canonically
+  identical replay is checked first and returns the existing record without consuming
+  a revision, making an ambiguous successful retry safe. Replacement is a complete
+  write: safe-view `configured` markers are rejected, and every enabled strict
+  provider key must be resupplied or rotated from caller-owned secret storage. Server
+  count, model count, byte/depth/node, slug, credential, and behavior bounds fail
+  before persistence.
+- Unknown top-level put arguments collapse to one secret-safe generic validation issue
+  rather than reflecting their key or value. Static text/directives additionally pass
+  bounded neutral response-plan validation before persistence. Focused MCP tests put a
+  strict key into duplicate IDs, malformed nested input, and an unknown top-level key
+  and prove it is absent from serialized pre-handler failures.
+- Mock-LLM delete also requires a positive expected revision. The repository validates
+  and deletes in one transaction with both slug and revision in the final predicate.
+  A stale or delete/recreate ABA revision returns the typed `409` without mutation;
+  an absent row or a retry after successful delete returns `deleted: false`.
+- Schema v7 creates only the definition and monotonic allocator tables. New writes
+  use canonical JSON; persisted reads validate the contract, slug identity, and
+  canonical byte form. Transactional parsing verifies the allocator's monotonicity.
+  Focused tests prove v6 upgrades to v7 while preserving F1 rows and prove an older v6
+  bundle explicitly refuses a v7-touched database as newer than supported. This fails
+  closed but means source rollback cannot downgrade the store; recovery must roll
+  forward or use a separately reviewed bridge.
 - Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
   persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
   revision, negotiated version, initialization state, expiry, and termination.
@@ -8433,6 +11511,15 @@ management key, while a mock MCP Bearer value is a synthetic per-server credenti
 not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 work.
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
+
+The F2 definition controls likewise have source evidence only. They are not hosted
+rollback, multi-tenant, deployment, or provider-authentication evidence. `accept_any`
+and `strict` are persisted future data-plane policy; because no OpenAI/Anthropic route
+exists, neither mode currently authorizes a request. There is no model renderer,
+conversation/response state, reset, observation, paced stream, Wrangler qualification,
+deployment, or private Cloud pin. The absence of a data plane is a capability
+boundary, not permission to expose the definition store or treat its provider Mock
+Credentials as production secrets.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment

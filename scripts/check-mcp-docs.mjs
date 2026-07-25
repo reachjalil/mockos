@@ -24,6 +24,10 @@ const expectedTools = [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "put_mock_llm_server",
+  "list_mock_llm_servers",
+  "get_mock_llm_server",
+  "delete_mock_llm_server",
 ];
 
 const expectedHttpOperations = [
@@ -41,8 +45,8 @@ const failures = [];
 
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-if (catalog.managementMcp?.toolCount !== 20) {
-  failures.push("the generated management catalog must report exactly 20 MCP tools");
+if (catalog.managementMcp?.toolCount !== 24) {
+  failures.push("the generated management catalog must report exactly 24 MCP tools");
 }
 const actualTools = catalog.managementMcp?.tools?.map(({ operationId }) => operationId);
 if (!equal(actualTools, expectedTools)) {
@@ -76,10 +80,89 @@ if (
     "F1 mock MCP must remain source-qualified at its exact endpoints and unqualified for deployment"
   );
 }
+const expectedMockLlmManagementTools = [
+  "put_mock_llm_server",
+  "list_mock_llm_servers",
+  "get_mock_llm_server",
+  "delete_mock_llm_server",
+];
+if (
+  catalog.future?.mockLlmApis?.status !== "unavailable" ||
+  catalog.future?.mockLlmApis?.phase !== "F2" ||
+  catalog.future?.mockLlmApis?.providerDataPlane !== "unavailable" ||
+  catalog.future?.mockLlmApis?.deployedAcceptance !== "unqualified" ||
+  catalog.future?.mockLlmApis?.guide !== "docs/mock-llm.md" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.status !== "source-implemented" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.interface !== "MCP-only" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.persistence !==
+    "environment-schema-v7" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.strictCredentials !==
+    "write-only-provider-scoped" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.putContract?.expectedRevision !==
+    "required-null-create-or-positive-replace" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.putContract?.replacement !==
+    "full-definition" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.putContract
+    ?.strictCredentialReplacement !== "resupply-or-rotate-every-enabled-provider" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.putContract
+    ?.safeViewWriteShape !== "unsupported" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.deleteContract
+    ?.expectedRevision !== "required-positive" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.deleteContract?.behavior !==
+    "atomic-cas" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.deleteContract
+    ?.missingOrReplay !== "deleted-false" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.deleteContract
+    ?.revisionMismatch !== "typed-409" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.validation?.staticBehavior !==
+    "bounded-neutral-plan" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.validation?.topLevelArguments !==
+    "strict-secret-safe" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.validation?.platformAccessKey !==
+    "reject-substring-in-definition-keys-and-string-values" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.schemaCompatibility?.upgrade !==
+    "v6-to-v7" ||
+  catalog.future?.mockLlmApis?.managementDefinitions?.schemaCompatibility?.rollback !==
+    "v6-refuses-v7" ||
+  !equal(
+    catalog.future?.mockLlmApis?.managementDefinitions?.toolIds,
+    expectedMockLlmManagementTools
+  )
+) {
+  failures.push(
+    "F2 must expose exactly four source-implemented MCP-only definition tools while its provider data plane and deployed acceptance remain unavailable"
+  );
+}
+const putMockLlmTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "put_mock_llm_server"
+);
+if (
+  putMockLlmTool?.mcp?.inputSchema?.additionalProperties !== false ||
+  !putMockLlmTool.mcp.inputSchema.required?.includes("expectedRevision") ||
+  !putMockLlmTool.mcp.inputSchema.required?.includes("server")
+) {
+  failures.push(
+    "put_mock_llm_server must retain strict, mandatory top-level write arguments"
+  );
+}
+const deleteMockLlmTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "delete_mock_llm_server"
+);
+if (
+  deleteMockLlmTool?.mcp?.inputSchema?.additionalProperties !== false ||
+  !deleteMockLlmTool.mcp.inputSchema.required?.includes("expectedRevision") ||
+  deleteMockLlmTool.mcp.inputSchema.properties?.expectedRevision?.minimum !== 1
+) {
+  failures.push(
+    "delete_mock_llm_server must require a positive expectedRevision for atomic CAS"
+  );
+}
 
 const expectedPlaceholders = {
+  anthropicMockCredential: "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL",
   managementAccessKey: "$MOCKOS_API_KEY",
   mcpEndpoint: "$MOCKOS_MCP_ENDPOINT",
+  openAiMockCredential: "$MOCKOS_OPENAI_MOCK_CREDENTIAL",
   protocolMockCredential: "$MOCKOS_SYNTHETIC_CREDENTIAL",
 };
 if (!equal(catalog.placeholders, expectedPlaceholders)) {
@@ -92,7 +175,9 @@ const publicMcpFiles = [
   "docs/getting-started/mcp-first.md",
   "docs/concepts/interface-model.md",
   "docs/mock-mcp.md",
+  "docs/mock-llm.md",
   "docs/f-series/f1-mcp-foundation.md",
+  "docs/f-series/f2-llm-kernel.md",
   "docs/reference/management-tools.md",
   "docs/reference/self-hosted-http.md",
   catalogPath,
@@ -115,6 +200,10 @@ const forbiddenPatterns = [
   {
     label: "a JWT-shaped bearer value",
     pattern: /Bearer\s+eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/,
+  },
+  {
+    label: "a plausible plaintext provider API key",
+    pattern: /\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}\b/,
   },
 ];
 
@@ -193,6 +282,55 @@ if (mockMcpGuide?.includes("POST /__mockos/v1") && mockMcpGuide.includes("mock M
   );
 }
 
+const mockLlmGuide = contents.find(([path]) => path === "docs/mock-llm.md")?.[1];
+for (const required of [
+  "management-only",
+  "put_mock_llm_server",
+  "list_mock_llm_servers",
+  "get_mock_llm_server",
+  "delete_mock_llm_server",
+  "expectedRevision",
+  "canonical replay",
+  "full desired definition",
+  "resupply or rotate",
+  "`configured: true` is not a write shape",
+  "atomic compare-and-swap",
+  "missing or retried delete",
+  "MOCK_LLM_SERVER_REVISION_CONFLICT",
+  "write-only",
+  "configured: true",
+  "secret-safe",
+  "bounded neutral-plan validation",
+  "platform Access Key as a substring",
+  "JSON keys or string values",
+  "schema v7",
+  "older v6 bundle",
+  "newer schema v7",
+  "forward-recovery",
+  "mockLlmApis",
+  "data plane remains unavailable",
+  "no reset operation",
+  "no provider route",
+  "no model renderer",
+  "no conversation",
+  "no observation",
+  "no paced stream",
+  "no Wrangler",
+  "no deployment",
+  "no Cloud pin",
+  "$MOCKOS_OPENAI_MOCK_CREDENTIAL",
+  "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL",
+]) {
+  if (!mockLlmGuide?.includes(required)) {
+    failures.push(`docs/mock-llm.md must describe ${required}`);
+  }
+}
+if (mockLlmGuide?.includes("POST /__mockos/v1")) {
+  failures.push(
+    "docs/mock-llm.md must not invent a self-hosted HTTP management route for F2"
+  );
+}
+
 if (failures.length > 0) {
   throw new Error(
     `MCP-first documentation safety check failed:\n${failures
@@ -202,5 +340,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 20 tools, five HTTP routes, source-qualified F1, and inert secrets\n"
+  "PASS  MCP-first docs preserve 24 tools, five HTTP routes, source-qualified F1, management-only F2, and inert secrets\n"
 );

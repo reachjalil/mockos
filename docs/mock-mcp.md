@@ -30,7 +30,7 @@ API.
 
 ## Configure through management MCP
 
-The management registry contains 20 tools. The five F1 tools are appended after the
+The management registry now contains 24 tools. The five F1 tools remain appended after the
 15 accepted identity-management tools:
 
 | Tool | Effect | Exact result data | State semantics |

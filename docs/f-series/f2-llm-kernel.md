@@ -1,12 +1,16 @@
 # F2 LLM response-kernel source slice
 
-Status: Partial source implementation; no mock-LLM service or F2 qualification
+Status: Partial source implementation with management-only definitions; no mock-LLM data plane or F2 qualification
 Last reviewed: 2026-07-25
 
-This slice establishes a provider-neutral seam for deterministic mock LLM responses.
-It proves that one normalized behavior result can become one validated response plan
-and then provider-shaped OpenAI or Anthropic JSON/immediate SSE frames. It does
-**not** make a mock LLM endpoint available to an application, agent, or SDK.
+This slice establishes both a provider-neutral seam for deterministic mock LLM
+responses and an MCP-first configuration substrate for future environment-hosted
+servers. It proves that one normalized behavior result can become one validated
+response plan and then provider-shaped OpenAI or Anthropic JSON/immediate SSE frames.
+It also source-implements strict server definitions, four MCP-only operations,
+environment-local schema-v7 persistence, mandatory revision compare-and-swap, and
+write-only provider credential views. It does **not** make a mock LLM endpoint
+available to an application, agent, or SDK.
 
 Read this page as a source-architecture and evidence record. The complete F2 target
 remains in the [F-series roadmap](../F_SERIES_ROADMAP.md), and the current negative
@@ -22,17 +26,25 @@ product boundary remains in [known limitations](../known-limitations.md).
   Anthropic Messages JSON or immediate SSE-frame shapes.
 - Pinned official `openai` and `@anthropic-ai/sdk` clients deserialize those rendered
   objects through an in-process injected Fetch seam.
+- Strict, bounded server-definition contracts join models, provider dialect policy,
+  shared declarative behavior, usage defaults, and cadence defaults without exposing
+  persisted credential verifiers.
+- Four management MCP operations create/list/get/delete definitions inside a named or
+  session-selected environment.
+- Schema v7 persists canonical definitions and monotonic revisions transactionally;
+  changed replacements require the current revision while canonical retries are
+  idempotent. Replacement is full-definition and requires every enabled strict key to
+  be resupplied or rotated; delete requires positive revision CAS.
 
 Those are focused local source tests. They are not Wrangler, network, hosted-CI,
 deployed, production, or live-provider evidence.
 
 ## What is not available
 
-There is no mock LLM server definition, management MCP operation, management HTTP
-route, CLI command, public provider route, request parser, Mock Credential check,
-database migration, persistence repository, conversation state, stream timer,
-observation entry, assertion matcher, Worker composition, Cloud integration, or
-deployed endpoint in this slice.
+There is no management HTTP route, CLI command, public provider route, provider
+request parser or authentication enforcement, model renderer/catalog, conversation
+or evaluator state, reset operation, stream timer, observation entry, assertion
+matcher, Wrangler round trip, Cloud pin, or deployed endpoint in this slice.
 
 In particular:
 
@@ -40,12 +52,14 @@ In particular:
   this source;
 - `/e/{environmentId}/llm-mock/{slug}/anthropic/v1` is a target route, not a route in
   this source;
-- management MCP remains at 20 tools and has no LLM-server operation;
-- no Access Key or provider-shaped Mock Credential is accepted or evaluated here;
+- management MCP contains 24 tools, including four MCP-only LLM-definition
+  operations; self-hosted management HTTP remains at five routes;
+- the Access Key authenticates management MCP, and strict provider Mock Credentials
+  are hashed before definition persistence, but no provider route evaluates them;
 - no listener emits Server-Sent Events and cadence metadata does not cause a timer;
 - the planner has an injectable staged-state seam and a stateless turn-index default,
-  but no durable owner proves persistence, contention, retry, or conversation
-  semantics; and
+  but no response/conversation-state owner proves runtime contention, retry, or
+  conversation semantics; and
 - official-SDK deserialization does not prove an SDK can connect to a real URL.
 
 ## Responsibility graph
@@ -65,21 +79,34 @@ normalized request + BehaviorSpec
           └───┬───┘
               ▼
  official SDK deserialization tests
+
+management agent
+       │
+       ▼
+ four MCP-only definition tools
+       │
+       ▼
+ schema-v7 definition repository
 ```
 
-The arrows above are pure function and in-process test boundaries. There is no
-network listener, edge router, Durable Object, database, or management plane in this
-graph.
+The response arrows above remain pure function and in-process test boundaries. The
+management branch is composed through the Environment Durable Object and persists
+configuration, not responses. There is no provider network listener or edge streamer.
 
 ## Source ownership
 
 | Source | Responsibility | Deliberately absent |
 | --- | --- | --- |
 | [`packages/contracts/src/mock-llm.ts`](../../packages/contracts/src/mock-llm.ts) | Provider-neutral segment, stop, usage, cadence, error, and response-plan validation | Provider JSON, request parsing, routing, storage, or private policy |
+| [`packages/contracts/src/mock-llm-server.ts`](../../packages/contracts/src/mock-llm-server.ts) | Strict write/persisted/safe-view server definitions, model/dialect bounds, and provider-key separation | Provider routing or runtime auth enforcement |
+| [`packages/contracts/src/operations/management.ts`](../../packages/contracts/src/operations/management.ts) | Four MCP-only definition operations and exact effect/retry/secret metadata | Self-hosted HTTP routes |
 | [`packages/core/src/behavior/evaluator.ts`](../../packages/core/src/behavior/evaluator.ts) | Deterministic `BehaviorSpec` evaluation and staged sequence semantics | LLM dialect decisions |
+| [`packages/core/src/mock-llm/repository.ts`](../../packages/core/src/mock-llm/repository.ts) | Canonical definition writes, monotonic revision allocation, compare-and-swap, replay, and limits | Conversation, response-plan, or evaluator state |
+| [`packages/core/src/store/migrations.ts`](../../packages/core/src/store/migrations.ts) | Append-only schema-v7 definition and revision tables | A rollback/downgrade migration |
 | [`packages/llm-mock/src/planner.ts`](../../packages/llm-mock/src/planner.ts) | Convert credential-free normalized request material and a behavior result into a validated neutral plan | Persistence ownership or request authentication |
 | [`packages/llm-mock/src/openai.ts`](../../packages/llm-mock/src/openai.ts) | Pure Chat Completions JSON/error rendering and immediate SSE-frame serialization | HTTP request parsing, authentication, a network stream, or edge timing |
 | [`packages/llm-mock/src/anthropic.ts`](../../packages/llm-mock/src/anthropic.ts) | Pure Messages JSON/error rendering and immediate SSE-frame serialization | Version-header enforcement, authentication, a network stream, or edge timing |
+| [`packages/mcp/src/index.ts`](../../packages/mcp/src/index.ts) and [`packages/worker-kit`](../../packages/worker-kit) | Management registration, environment ownership, provider-key hashing, safe views, and stable problem mapping | Provider data-plane request handling |
 | Official-SDK source tests | Exercise client deserialization through injected Fetch using inert test credentials | Wrangler routing, real sockets, remote provider calls, or broad SDK conformance |
 
 The public repository owns these reusable contracts and pure provider dialects. The
@@ -164,8 +191,10 @@ By default, sequence selection is stateless: `turnIndex` acts as the sequence cu
 and the synthetic state adapter discards its staged write. A caller can inject the
 shared behavior-state interface; focused tests prove validation happens before that
 explicit commit and that calling the commit twice does not advance twice. No
-repository, revision, transaction owner, retry record, or conversation handle exists,
-so this is a compositional seam rather than durable state qualification.
+response-plan/evaluator-state repository, runtime transaction owner, retry record, or
+conversation handle exists, so this remains a compositional seam rather than durable
+response-state qualification. The separate definition repository does not advance or
+persist a turn.
 
 ## Pure provider projections
 
@@ -245,16 +274,18 @@ header.
 
 ## MCP-first integration boundary
 
-mockOS management remains MCP-first. A future operable LLM mock must first gain a
-strict public server-definition contract and management MCP operations for
-configuration, inspection, reset, and deletion. Console or HTTP companions may then
-project the same capability where a human or browser workflow needs them.
+mockOS management remains MCP-first. The current source adds
+`put_mock_llm_server`, `list_mock_llm_servers`, `get_mock_llm_server`, and
+`delete_mock_llm_server` to the management registry. They are MCP-only and operate on
+environment-local definitions. The [task guide](../mock-llm.md) documents their exact
+inputs, full strict-key resupply, put replay, atomic delete compare-and-swap, safe
+reads, secret-safe validation, platform-key-substring rejection, schema-v7 rollback
+warning, cleanup, and failures.
 
-This kernel intentionally adds no management operation because it has no persisted
-resource to manage. It must not be presented as a console-only or hidden HTTP
-configuration path. Applications under test will eventually call the separate
-provider-shaped LLM data plane; they must never send the management Access Key to
-that endpoint.
+There is no reset operation because this slice has no LLM runtime state. It must not
+be presented as a console-only or hidden HTTP configuration path. Applications under
+test will eventually call a separate provider-shaped LLM data plane; they must never
+send the management Access Key to that endpoint.
 
 ## Provider reference baseline
 
@@ -279,37 +310,38 @@ versions when the HTTP and streaming adapters are implemented.
 | Evidence | What it establishes | What it does not establish |
 | --- | --- | --- |
 | Contract parsing tests | Neutral plan fields and invalid-shape rejection | Persistence or wire behavior |
+| Server-definition contract tests | Strict write/persisted/safe views, provider-key non-reflection, secret-safe top-level rejection, bounded static-plan compatibility, and mandatory put/delete revisions | A provider route or runtime auth enforcement |
+| Repository and migration tests | Schema-v7 persistence, canonical put replay, put/delete CAS including ABA denial, monotonic revisions, limits, corruption failure, v6 upgrade, and older-v6 refusal of v7 | Hosted rollback or response/conversation state |
+| Management MCP/Worker tests | Four tools, environment selection/ownership, full strict-key writes, hashing/safe views, stable conflicts, and platform-key-substring rejection in definition keys/values | HTTP management projection or provider data plane |
 | Planner tests | Behavior-to-plan adaptation, deterministic identifiers/metadata, stateless turns, and validation-before-explicit staged-interface commit | Durable/revision-bound state, runtime transaction ownership, retries, or conversations |
 | Pure renderer tests | Selected provider success/error JSON and immediate text/tool/usage SSE-frame sequences | Request parsing, version-header/auth enforcement, timed streaming, or network behavior |
 | Official SDK tests | Pinned clients deserialize the selected in-process responses | Connectability, Wrangler compatibility, cancellation, or ecosystem-wide compatibility |
 | Repository checks | Formatting, links, types, focused tests, and builds for the candidate when recorded green | Hosted CI, merge, publication, Cloud consumption, or deployment |
 
-The focused source snapshot is 47 passing `@mockos/contracts` tests and 37 passing
-`@mockos/llm-mock` tests, with both package type checks green. The latter count
-includes the pinned official SDK clients. The complete forced, cache-bypassed
-`pnpm check` repository gate also passed locally on 2026-07-25, including formatting,
-lint, documentation/link/drift/guard checks, all workspace types/tests/builds, Worker
-integration tests, Worker dry-run build, and Wrangler configuration checks. This is
-still local source evidence: hosted CI, merge, publication, Cloud consumption, and
-deployment are not implied.
+The original response-kernel candidate passed its focused contract/LLM package suites
+and a complete forced repository gate locally on 2026-07-25. The management-definition
+tranche adds focused contract, repository/migration, MCP, worker-kit, and Worker
+coverage; its strongest exact candidate evidence belongs in the implementation ledger
+only after the complete changed-worktree gate is recorded. Neither tranche implies
+hosted CI, merge, publication, Cloud consumption, or deployment.
 
 ## Required next vertical slice
 
-Before any user-facing F2 claim, the public implementation still needs:
+Before any provider-data-plane F2 claim, the public implementation still needs:
 
-1. a bounded server-definition and safe-read contract;
-2. MCP-first management operations and deterministic persistence;
-3. provider request parsing, explicit authentication policy, and provider-shaped
+1. provider request parsing, explicit authentication policy, and provider-shaped
    request errors;
-4. exact environment routing and Worker/Durable Object composition;
-5. edge-owned SSE cadence, abort behavior, and stream-duration/resource limits;
-6. request observation and LLM-specific assertions;
-7. real official SDK clients against Wrangler for normal, error, usage, tool-call,
+2. model list/retrieve rendering and a bounded model catalog projection;
+3. exact environment routing and Worker/Durable Object composition;
+4. edge-owned SSE cadence, abort behavior, and stream-duration/resource limits;
+5. request observation and LLM-specific assertions;
+6. real official SDK clients against Wrangler for normal, error, usage, tool-call,
    streaming, and cancellation cases;
-8. Cloud pinning only after the public candidate is merged and independently
+7. Cloud pinning only after the public candidate is merged and independently
    qualified; and
-9. exact-revision hosted CI, staging, production, and documentation evidence kept as
+8. exact-revision hosted CI, staging, production, and documentation evidence kept as
    separate gates.
 
-Until those steps pass, say “partial F2 response kernel is source-tested,” not “mockOS
-supports mock OpenAI/Anthropic APIs” and not “F2 is complete.”
+Until those steps pass, say “F2 definitions are source-implemented through management
+MCP and the response kernel is source-tested,” not “mockOS supports mock
+OpenAI/Anthropic APIs” and not “F2 is complete.”

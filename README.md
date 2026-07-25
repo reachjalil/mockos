@@ -22,10 +22,11 @@
 > are locally source-qualified in the revision carrying this document: their focused
 > suites and the complete repository `pnpm check` gate are green. Hosted CI/merge, F1
 > deployment, private Cloud consumption, served F2-F9 runtimes, and all experimental
-> activation remain pending. A partial F2 source kernel now covers neutral response
-> plans, behavior adaptation, pure OpenAI/Anthropic JSON/SSE-frame rendering, and
-> in-process official-SDK deserialization; it is not an endpoint or complete F2
-> runtime. The guarded GitHub promotion workflows remain unqualified. This is not yet
+> activation remain pending. F2 now adds four source-implemented, MCP-only mock-LLM
+> definition operations with environment-local schema-v7 persistence and write-only
+> provider keys to the partial neutral response kernel. There is still no callable
+> OpenAI/Anthropic endpoint or complete F2 runtime. The guarded GitHub promotion
+> workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
@@ -37,10 +38,11 @@ randomness, and SQLite seams make failures reproducible.
 ## MCP first
 
 The management MCP server at `/mcp` is the primary control interface for agents and
-automation. Its current 20 tools create and configure environments, seed synthetic
+automation. Its current 24 tools create and configure environments, seed synthetic
 identities, register applications, drive lifecycle and provisioning, inject
-deterministic scenarios, configure environment-hosted mock MCP servers, inspect
-captured traffic, and clean up. Start with the
+deterministic scenarios, configure environment-hosted mock MCP servers and
+management-only mock-LLM definitions, inspect captured traffic, and clean up. Start
+with the
 [MCP-first quickstart](./docs/getting-started/mcp-first.md) and use the
 [generated tool reference](./docs/reference/management-tools.md) for the exact
 registry in this source.
@@ -55,7 +57,9 @@ Environment-hosted mock MCP servers have a different product role: they simulate
 tools, resources, resource templates, and prompts for an agent under test. The bounded
 F1 source implements that data plane at an environment route while the five
 configuration operations remain part of management MCP. Start with the
-[mock MCP guide](./docs/mock-mcp.md). Mock LLM APIs, script execution, enforced scoped
+[mock MCP guide](./docs/mock-mcp.md). Four
+[mock-LLM definition operations](./docs/mock-llm.md) are source-implemented through
+management MCP, but the OpenAI/Anthropic data plane, script execution, enforced scoped
 keys, and Code Mode remain unavailable. The
 [partial F2 LLM kernel](./docs/f-series/f2-llm-kernel.md) is source architecture for a
 future provider data plane, not a server an application can call.
@@ -109,9 +113,9 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
-- An accepted authenticated Agents SDK management MCP server whose F1 source registry
-  now contains 20 tools: the accepted M5 tool set plus five MCP-only mock-MCP
-  definition/state operations
+- An accepted authenticated Agents SDK management MCP server whose current source
+  registry contains 24 tools: the accepted 15-tool M5 set, five MCP-only F1 mock-MCP
+  definition/state operations, and four MCP-only F2 mock-LLM definition operations
 - A bounded F1 source runtime for deterministic environment-hosted tools, resources,
   safe Level-1 resource templates, and prompts over MCP `2025-11-25`; definitions are
   revisioned, Bearer Mock Credentials and transport sessions are stored hash-only,
@@ -119,20 +123,22 @@ private control plane, licensing, billing, or a hosted mockOS account.
   argument evidence joins the existing request log and assertions. GET streaming,
   `listChanged`, scripts, proxy/record-replay, hosted qualification, and deployment
   remain open
-- A source-complete local F0 foundation: one 20-operation metadata registry consumed
+- A source-complete local F0 foundation: one 24-operation metadata registry consumed
   by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
   control routes, generated human/machine management references and agent indexes, a
   fetch-based `@mockos/client` workspace skeleton, all six locked version-one behavior
   contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
-  deliberately do not appear in HTTP/OpenAPI/client projections, and the new packages
+  deliberately do not appear in HTTP/OpenAPI/client projections, nor do the four F2
+  operations; the new packages
   are not yet distribution-qualified
-- A partial F2 source kernel with bounded provider-neutral response-plan schemas,
+- A partial F2 source slice with bounded provider-neutral response-plan schemas,
   behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
-  JSON/SSE-frame renderers, and pinned official-SDK consumption through
-  injected in-process Fetch. It adds no server definition, management MCP operation,
-  route, auth, persistence, network edge stream/pacing, observation, Worker, Cloud
-  integration, or Wrangler/deployed conformance; model list/retrieve exists only as a
-  hand-supplied SDK test fixture, not a renderer or catalog
+  JSON/SSE-frame renderers, pinned official-SDK consumption through injected
+  in-process Fetch, strict server-definition contracts, four MCP-only management
+  operations, schema-v7 environment persistence, mandatory revision
+  compare-and-swap, and safe credential views. It still adds no provider route or auth
+  enforcement, model renderer/catalog, runtime/conversation state, reset, network
+  pacing, observation, Wrangler/deployed conformance, or Cloud pin
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -148,9 +154,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 Management and protocol credentials are deliberately separate: MCP requires the
 configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values and
 the Okta API accepts a non-empty synthetic SSWS value. An environment-hosted mock MCP
-server accepts no credential or its own write-only Bearer Mock Credential. Those are
-synthetic protocol boundaries, not production authorization; never forward the
-management key to them.
+server accepts no credential or its own write-only Bearer Mock Credential. A mock-LLM
+definition independently configures write-only OpenAI and Anthropic Mock Credentials,
+but no provider route enforces them yet. Those are synthetic protocol boundaries, not
+production authorization; never forward the management key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
@@ -216,8 +223,9 @@ and never persisted.
 ## Documentation
 
 Start at the [documentation index](./docs/README.md). It routes agents and humans by
-task, distinguishes the 20-tool management MCP interface, the environment-hosted mock
-MCP data plane, and the five-route HTTP subset, and
+task, distinguishes the 24-tool management MCP interface, the environment-hosted mock
+MCP data plane, the management-only mock-LLM definition slice, and the five-route HTTP
+subset, and
 links support claims to their evidence. Use
 [requirements traceability](./docs/requirements-traceability.md) and the
 [parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from
