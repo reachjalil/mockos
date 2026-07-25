@@ -120,8 +120,8 @@ These are deliberately separate trust boundaries:
   only model list/retrieve and bounded JSON/SSE Chat Completions.
 - `/llm-mock/{slug}/anthropic` under an environment requires a syntactically valid
   provider `x-api-key` Mock Credential plus exactly
-  `anthropic-version: 2023-06-01`. It supports model list/retrieve and non-streaming
-  Messages; authorization aliases, beta headers, and streaming fail closed.
+  `anthropic-version: 2023-06-01`. It supports model list/retrieve and bounded
+  JSON/named-event SSE Messages; authorization aliases and beta headers fail closed.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.

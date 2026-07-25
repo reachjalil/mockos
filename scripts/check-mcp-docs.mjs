@@ -173,6 +173,9 @@ if (
 const openAiCapability = (capabilities ?? []).find(
   ({ id }) => id === "mock-llm.openai"
 );
+const anthropicCapability = (capabilities ?? []).find(
+  ({ id }) => id === "mock-llm.anthropic"
+);
 if (
   !openAiCapability?.provenance?.executableAuthorities?.some(
     ({ path, export: exportedName }) =>
@@ -188,6 +191,23 @@ if (
 ) {
   failures.push(
     "the OpenAI capability must trace streaming policy to the edge-stream authority/test and its configured-midstream limitation"
+  );
+}
+if (
+  !anthropicCapability?.provenance?.executableAuthorities?.some(
+    ({ path, export: exportedName }) =>
+      path === "packages/llm-mock/src/edge-stream.ts" &&
+      exportedName === "prepareEdgeSseStream"
+  ) ||
+  !anthropicCapability?.evidence?.source?.proofRefs?.includes(
+    "packages/llm-mock/src/edge-stream.test.ts"
+  ) ||
+  !anthropicCapability?.limitationRefs?.includes(
+    "docs/reference/mock-llm-anthropic.v1.json#/response/streaming/configuredMidstreamErrors"
+  )
+) {
+  failures.push(
+    "the Anthropic capability must trace streaming policy to the edge-stream authority/test and its configured-midstream limitation"
   );
 }
 
@@ -510,7 +530,7 @@ if (
   catalog.future?.mockLlmApis?.status !== "partial-source-qualified" ||
   catalog.future?.mockLlmApis?.phase !== "F2" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.status !==
-    "openai-streaming-and-anthropic-non-streaming-source-qualified" ||
+    "openai-and-anthropic-streaming-source-qualified" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.managementConfiguration !==
     "MCP-only" ||
   !equal(catalog.future?.mockLlmApis?.providerDataPlane?.manifests, [
@@ -569,7 +589,7 @@ if (
   )
 ) {
   failures.push(
-    "F2 must expose exactly four MCP-only definition tools plus generated bounded streaming OpenAI and non-streaming Anthropic data-plane contracts while deployment remains unqualified"
+    "F2 must expose exactly four MCP-only definition tools plus generated bounded streaming OpenAI and Anthropic data-plane contracts while deployment remains unqualified"
   );
 }
 if (
@@ -724,7 +744,7 @@ if (
   mockLlmAnthropicProvider?.request?.turnAlternation !== "not-validated" ||
   mockLlmAnthropicProvider?.request?.toolUseResultCorrelation !== "not-validated" ||
   mockLlmAnthropicProvider?.request?.toolChoice !== "absent-or-auto" ||
-  mockLlmAnthropicProvider?.request?.streaming !== "rejected" ||
+  mockLlmAnthropicProvider?.request?.streaming !== "absent-or-false-json-true-sse" ||
   mockLlmAnthropicProvider?.request?.multimodal !== "unsupported" ||
   mockLlmAnthropicProvider?.request?.betaFeatures !== "unsupported" ||
   mockLlmAnthropicProvider?.request?.unknownTopLevelFields !== "rejected" ||
@@ -735,11 +755,50 @@ if (
   mockLlmAnthropicProvider?.response?.messageIdPrefix !== "msg_" ||
   mockLlmAnthropicProvider?.response?.transportIds !== "fresh-per-invocation" ||
   mockLlmAnthropicProvider?.response?.deterministicPlanIdExposure !== "never" ||
+  mockLlmAnthropicProvider?.response?.streaming?.format !== "server-sent-events" ||
+  mockLlmAnthropicProvider?.response?.streaming?.framing !==
+    "named-event-and-json-data" ||
+  mockLlmAnthropicProvider?.response?.streaming?.order !==
+    "message-start-content-block-start-payload-content-block-stop-message-delta-message-stop" ||
+  mockLlmAnthropicProvider?.response?.streaming?.doneSentinel !== "none" ||
+  mockLlmAnthropicProvider?.response?.streaming?.initialDelay !== "pre-header" ||
+  mockLlmAnthropicProvider?.response?.streaming?.pacedFrames !==
+    "text-delta-and-input-json-delta-only" ||
+  mockLlmAnthropicProvider?.response?.streaming?.immediateFrames !==
+    "message-and-content-block-structural-events" ||
+  mockLlmAnthropicProvider?.response?.streaming?.payloadEventsPerContentBlock !==
+    "zero-or-more" ||
+  mockLlmAnthropicProvider?.response?.streaming?.maximumDuration !==
+    "absolute-includes-initial-pacing-backpressure" ||
+  mockLlmAnthropicProvider?.response?.streaming?.scheduleAdmissibility !==
+    "initial+max(payload-count-minus-one,zero)*delay<maximum" ||
+  mockLlmAnthropicProvider?.response?.streaming?.payloadFrameCount !==
+    "unicode-code-point-chunks-of-text-and-canonical-tool-input-json" ||
+  mockLlmAnthropicProvider?.response?.streaming?.deadlineEquality !== "rejected" ||
+  mockLlmAnthropicProvider?.response?.streaming?.bodySizing !==
+    "entire-precomputed-sse-utf8" ||
+  mockLlmAnthropicProvider?.response?.streaming?.preflightFailure !==
+    "generic-json-before-200" ||
+  mockLlmAnthropicProvider?.response?.streaming?.cancellationOrDeadline !==
+    "truncate-without-fabricated-message-stop" ||
+  mockLlmAnthropicProvider?.response?.streaming?.messageDeltaUsage !== "cumulative" ||
+  mockLlmAnthropicProvider?.response?.streaming?.mockEmittedPing !==
+    "none-clients-should-tolerate-upstream" ||
+  mockLlmAnthropicProvider?.response?.streaming?.configuredError !==
+    "provider-json-before-200-even-when-stream-requested" ||
+  mockLlmAnthropicProvider?.response?.streaming?.configuredMidstreamErrors !==
+    "unsupported" ||
   mockLlmAnthropicProvider?.planning?.conversationState !== "stateless" ||
   mockLlmAnthropicProvider?.planning?.turnIndex !== "prior-assistant-message-count" ||
-  mockLlmAnthropicProvider?.planning?.initialDelay !== "abort-aware" ||
+  mockLlmAnthropicProvider?.planning?.definitionRevision !==
+    "rechecked-before-plan-commit" ||
+  mockLlmAnthropicProvider?.planning?.stateCommit !==
+    "durable-object-before-edge-plan-return" ||
+  mockLlmAnthropicProvider?.planning?.initialDelay !== "abort-aware-pre-header" ||
+  mockLlmAnthropicProvider?.planning?.chunkCadence !== "payload-deltas-only" ||
   mockLlmAnthropicProvider?.security?.requestCredentialReflection !== "rejected" ||
-  mockLlmAnthropicProvider?.security?.responseCredentialReflection !== "rejected" ||
+  mockLlmAnthropicProvider?.security?.responseCredentialReflection !==
+    "rejected-before-header" ||
   mockLlmAnthropicProvider?.evidence?.officialSdkVersion !== "0.115.0" ||
   mockLlmAnthropicProvider?.evidence?.localWorkerOfficialAnthropicSdk !== "qualified" ||
   mockLlmAnthropicProvider?.evidence?.cloudPin !== "unqualified" ||
@@ -756,7 +815,7 @@ if (
         id: "create_message",
         method: "POST",
         path: "/v1/messages",
-        streaming: false,
+        streaming: true,
       },
       {
         id: "list_models",
@@ -984,6 +1043,11 @@ for (const required of [
   "pre-header",
   "2,097,152",
   "[DONE]",
+  "message_start",
+  "message_stop",
+  "input_json_delta",
+  "mockOS emits no `ping`",
+  "Configured neutral errors always remain provider-shaped JSON",
   "turnIndex",
   "abort-aware",
   "empty `499`",
@@ -1042,6 +1106,17 @@ for (const required of [
   "invalid_request_error",
   "beta headers",
   "stream: true",
+  "for await",
+  "message_start",
+  "message_stop",
+  "input_json_delta",
+  "cumulative usage",
+  "[DONE]",
+  "no `ping`",
+  "2,097,152",
+  "backpressure",
+  "Configured error plans",
+  "Environment Durable Object",
   "delete_mock_llm_server",
   "MOCK_LLM_SERVER_REVISION_CONFLICT",
   "source-qualified",
@@ -1073,6 +1148,15 @@ for (const [path, body] of [
     "strictly less than",
     "anthropic-version: 2023-06-01",
     "GET /v1/models",
+    "message_start",
+    "message_stop",
+    "input_json_delta",
+    "cumulative-usage",
+    "[DONE]",
+    "ping",
+    "2,097,152",
+    "configured midstream errors",
+    "Environment Durable Object",
     "delete_mock_llm_server",
     "source",
     "deployment",
@@ -1092,5 +1176,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded streaming OpenAI/non-streaming Anthropic F2, and inert secrets\n"
+  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded streaming OpenAI/Anthropic F2, and inert secrets\n"
 );

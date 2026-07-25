@@ -89,8 +89,23 @@ const handler = (
 const responseJson = async (response: Response) =>
   (await response.json()) as Record<string, unknown>;
 
+const anthropicEvents = (wire: string) =>
+  wire
+    .split("\n\n")
+    .filter(Boolean)
+    .map((frame) => {
+      const [eventLine, dataLine] = frame.split("\n");
+      if (!eventLine?.startsWith("event: ") || !dataLine?.startsWith("data: ")) {
+        throw new Error("Expected one named Anthropic SSE event.");
+      }
+      return {
+        event: eventLine.slice("event: ".length),
+        data: JSON.parse(dataLine.slice("data: ".length)) as Record<string, unknown>,
+      };
+    });
+
 describe("mock Anthropic provider manifest", () => {
-  it("freezes the exact non-streaming source operation table", () => {
+  it("freezes the exact source operation table", () => {
     expect(mockLlmAnthropicProviderManifest).toEqual({
       version: 1,
       dialect: "anthropic",
@@ -107,7 +122,7 @@ describe("mock Anthropic provider manifest", () => {
           id: "create_message",
           method: "POST",
           path: "/v1/messages",
-          streaming: false,
+          streaming: true,
         },
         {
           id: "list_models",
@@ -174,9 +189,17 @@ describe("bounded Anthropic Messages parsing", () => {
       stream: false,
       tool_choice: { type: "auto" },
     });
+    const streamed = parseMockLlmAnthropicMessageRequest({
+      ...omitted.request,
+      stream: true,
+    });
 
     expect(omitted.turnIndex).toBe(1);
+    expect(omitted.stream).toBe(false);
+    expect(explicit.stream).toBe(false);
+    expect(streamed.stream).toBe(true);
     expect(explicit.fingerprint).toEqual(omitted.fingerprint);
+    expect(streamed.fingerprint).toEqual(omitted.fingerprint);
     expect(omitted.fingerprint.toolNames).toEqual(["get_weather"]);
     expect(omitted.fingerprint).toMatchObject({
       dialect: "anthropic",
@@ -186,7 +209,7 @@ describe("bounded Anthropic Messages parsing", () => {
   });
 
   it.each([
-    [{ ...messageBody(), stream: true }, "streaming_not_supported", "stream"],
+    [{ ...messageBody(), stream: "yes" }, "invalid_request", "stream"],
     [{ ...messageBody(), temperature: 0 }, "invalid_request", undefined],
     [
       { ...messageBody(), tool_choice: { type: "any" } },
@@ -381,6 +404,138 @@ describe("mock Anthropic HTTP adapter", () => {
     });
   });
 
+  it("streams exact named text events with fresh transport identity", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const streamingPlan: MockLlmPlan = {
+      ...basePlan,
+      cadence: {
+        ...basePlan.cadence,
+        initialDelayMilliseconds: 0,
+        chunkDelayMilliseconds: 0,
+      },
+    };
+    const response = await handler(
+      runtime({
+        planMessage: vi.fn(async () => success(streamingPlan)),
+      })
+    )(jsonRequest(messageBody({ stream: true })), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    expect(response.headers.get("request-id")).toBe(FIXED_IDENTITY.requestId);
+    const raw = await response.text();
+    expect(raw).not.toContain(basePlan.planId);
+    const events = anthropicEvents(raw);
+    expect(events.map((event) => event.event)).toEqual([
+      "message_start",
+      "content_block_start",
+      "content_block_delta",
+      "content_block_delta",
+      "content_block_delta",
+      "content_block_delta",
+      "content_block_delta",
+      "content_block_delta",
+      "content_block_stop",
+      "message_delta",
+      "message_stop",
+    ]);
+    expect(events[0]?.data).toMatchObject({
+      type: "message_start",
+      message: {
+        id: FIXED_IDENTITY.responseId,
+        model: TEST_MODEL,
+        usage: { input_tokens: 11, output_tokens: 0 },
+      },
+    });
+    expect(
+      events
+        .filter((event) => event.event === "content_block_delta")
+        .map((event) => {
+          const delta = event.data.delta as { readonly text?: string };
+          return delta.text ?? "";
+        })
+        .join("")
+    ).toBe("Hello from mockOS.");
+    expect(events.at(-2)?.data).toMatchObject({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { input_tokens: 11, output_tokens: 5 },
+    });
+    expect(events.at(-1)?.data).toEqual({ type: "message_stop" });
+  });
+
+  it("streams reconstructable custom-tool input through named Anthropic events", async () => {
+    const basePlan = toolPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const streamingPlan: MockLlmPlan = {
+      ...basePlan,
+      cadence: {
+        ...basePlan.cadence,
+        initialDelayMilliseconds: 0,
+        chunkDelayMilliseconds: 0,
+      },
+    };
+    const response = await handler(
+      runtime({
+        planMessage: vi.fn(async () => success(streamingPlan)),
+      })
+    )(
+      jsonRequest(
+        messageBody({
+          stream: true,
+          tools: [
+            {
+              name: "get_weather",
+              input_schema: { type: "object" },
+            },
+          ],
+        })
+      ),
+      { slug: "demo", providerPath: "/v1/messages" }
+    );
+
+    expect(response.status).toBe(200);
+    const events = anthropicEvents(await response.text());
+    const toolStart = events.find(
+      (event) =>
+        event.event === "content_block_start" &&
+        (event.data.content_block as { readonly type?: string } | undefined)?.type ===
+          "tool_use"
+    );
+    expect(toolStart?.data).toMatchObject({
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "call_weather_1",
+        name: "get_weather",
+        input: {},
+      },
+    });
+    const partialJson = events
+      .filter(
+        (event) =>
+          event.event === "content_block_delta" &&
+          (event.data.delta as { readonly type?: string } | undefined)?.type ===
+            "input_json_delta"
+      )
+      .map(
+        (event) => (event.data.delta as { readonly partial_json: string }).partial_json
+      )
+      .join("");
+    expect(JSON.parse(partialJson)).toEqual({
+      location: "Berlin",
+      units: "celsius",
+    });
+    expect(events.at(-2)?.data).toMatchObject({
+      delta: { stop_reason: "tool_use" },
+    });
+    expect(events.at(-1)?.data).toEqual({ type: "message_stop" });
+  });
+
   it("requires a declared custom tool before returning tool_use", async () => {
     const fetch = handler(
       runtime({
@@ -422,11 +577,12 @@ describe("mock Anthropic HTTP adapter", () => {
   });
 
   it("maps configured provider errors while overriding transport identity", async () => {
-    const response = await handler(
+    const fetch = handler(
       runtime({
         planMessage: vi.fn(async () => success(errorPlan("rate_limit"))),
       })
-    )(jsonRequest(messageBody()), {
+    );
+    const response = await fetch(jsonRequest(messageBody()), {
       slug: "demo",
       providerPath: "/v1/messages",
     });
@@ -441,6 +597,21 @@ describe("mock Anthropic HTTP adapter", () => {
         message: "Synthetic rate limit.",
       },
       request_id: FIXED_IDENTITY.requestId,
+    });
+
+    const streamingRequestError = await fetch(
+      jsonRequest(messageBody({ stream: true })),
+      {
+        slug: "demo",
+        providerPath: "/v1/messages",
+      }
+    );
+    expect(streamingRequestError.status).toBe(429);
+    expect(streamingRequestError.headers.get("content-type")).toContain(
+      "application/json"
+    );
+    expect(await responseJson(streamingRequestError)).toMatchObject({
+      error: { type: "rate_limit_error" },
     });
   });
 
@@ -781,6 +952,66 @@ describe("mock Anthropic HTTP adapter", () => {
     expect(wrongMethod.headers.get("allow")).toBe("GET");
   });
 
+  it("truncates an accepted stream when the provider request is aborted", async () => {
+    const controller = new AbortController();
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const streamingPlan: MockLlmPlan = {
+      ...basePlan,
+      cadence: {
+        ...basePlan.cadence,
+        initialDelayMilliseconds: 0,
+        chunkDelayMilliseconds: 0,
+      },
+    };
+    const request = new Request(jsonRequest(messageBody({ stream: true })), {
+      signal: controller.signal,
+    });
+    const response = await handler(
+      runtime({
+        planMessage: vi.fn(async () => success(streamingPlan)),
+      })
+    )(request, {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Expected a streaming response body.");
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    const emitted = new TextDecoder().decode(first.value);
+    expect(emitted).toContain("event: message_start");
+    expect(emitted).not.toContain("event: message_stop");
+
+    controller.abort("client disconnected");
+    await expect(reader.read()).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("keeps a stream deadline failure on the generic pre-header error side", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const response = await handler(runtime(), {
+      now: vi.fn().mockReturnValueOnce(1_000).mockReturnValue(6_000),
+    })(jsonRequest(messageBody({ stream: true })), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(basePlan.cadence.maximumDurationMilliseconds).toBe(5_000);
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await responseJson(response)).toMatchObject({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: "The mock Anthropic request could not be completed.",
+      },
+      request_id: FIXED_IDENTITY.requestId,
+    });
+  });
+
   it("handles aborted and already-aborted initial delay locally", async () => {
     const controller = new AbortController();
     const basePlan = textPlan();
@@ -808,6 +1039,25 @@ describe("mock Anthropic HTTP adapter", () => {
       providerPath: "/v1/messages",
     });
     expect(aborted.status).toBe(499);
+
+    const streamingController = new AbortController();
+    const streamingFetch = handler(
+      runtime({
+        planMessage: vi.fn(async () => {
+          streamingController.abort("client disconnected");
+          return success(delayedPlan);
+        }),
+      })
+    );
+    const streamingRequest = new Request(jsonRequest(messageBody({ stream: true })), {
+      signal: streamingController.signal,
+    });
+    const abortedStream = await streamingFetch(streamingRequest, {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+    expect(abortedStream.status).toBe(499);
+    expect(await abortedStream.text()).toBe("");
 
     const alreadyAborted = new AbortController();
     alreadyAborted.abort("client disconnected");

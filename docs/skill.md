@@ -31,9 +31,9 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   checks, one bounded negative case, and revision-safe cleanup without confusing
   provider traffic for management;
 - MCP-managed Anthropic definitions, authenticated `GET /v1/models`, official
-  `@anthropic-ai/sdk` 0.115.0 non-streaming Messages with `maxRetries: 0`, exact
-  `anthropic-version: 2023-06-01`, one auth/version/stream negative, and the same
-  revision-safe cleanup;
+  `@anthropic-ai/sdk` 0.115.0 JSON and named-event SSE Messages with
+  `maxRetries: 0`, exact `anthropic-version: 2023-06-01`, stream ordering/tool/
+  cancellation checks, one auth/version negative, and the same revision-safe cleanup;
 - deterministic Entra- and Okta-shaped outbound SCIM planning through a durable
   Workflow, with User-before-Group execution, explicit 429 waits/retries, saved or run-
   scoped targets, and the disposable target application;
@@ -156,15 +156,29 @@ management interface; `/v1/messages` is the application-under-test data plane.
 3. Probe authenticated `GET /v1/models` with `x-api-key` and exactly
    `anthropic-version: 2023-06-01`.
 4. Point official `@anthropic-ai/sdk` 0.115.0 at the provider base without a trailing
-   `/v1`, set `maxRetries: 0`, and call model list/retrieve plus one non-streaming
-   Message.
-5. In `strict` mode, prove `401 authentication_error` for a wrong key. `accept_any`
+   `/v1`, set `maxRetries: 0`, and call model list/retrieve plus one JSON Message.
+5. Call Messages again with `stream: true` and consume it with `for await`. Require
+   named `message_start`, content-block, cumulative-usage `message_delta`, and
+   `message_stop` ordering. Each content block may contain zero or more
+   `content_block_delta` events. Text uses `text_delta`; canonical tool-input JSON
+   uses `input_json_delta`. Require no `[DONE]` and no mock-emitted `ping`, while
+   keeping the client tolerant of upstream `ping`. Cancel a separate stream after one
+   payload delta and do not require fabricated `message_stop`.
+6. In `strict` mode, prove `401 authentication_error` for a wrong key. `accept_any`
    accepts every syntactically valid `x-api-key` Mock Credential without verifier
    comparison. Alternatively, prove `400 invalid_request_error` for a version/beta
-   header or `stream: true`. Streaming is unsupported on this Anthropic route.
-6. Read the latest revision and call `delete_mock_llm_server` in `finally`; reconcile
+   header, unknown top-level field, or non-Boolean `stream`.
+7. Read the latest revision and call `delete_mock_llm_server` in `finally`; reconcile
    `MOCK_LLM_SERVER_REVISION_CONFLICT` rather than deleting another agent's
    replacement.
 
-The source contract does not qualify Anthropic betas, broad parameters, streaming,
-state, observations, deployment, or live-provider parity.
+Anthropic shares the 2,097,152-byte complete-SSE preflight, payload-only pacing,
+strict schedule inequality, absolute initial/pacing/backpressure deadline, and
+pre-header versus post-header failure boundary described for OpenAI. Configured
+errors remain provider JSON before HTTP `200` even when `stream: true`; configured midstream errors
+are unsupported. The selected plan is committed in the Environment
+Durable Object before edge streaming. Current state is stateless, and cancellation
+does not roll back that commit.
+
+The source contract does not qualify Anthropic betas, broad parameters, configured
+midstream errors, state, observations, deployment, or live-provider parity.

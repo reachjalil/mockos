@@ -168,7 +168,7 @@ slice has sampled H evidence, but no current fixture is V or P.
   strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
   Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
-  Completions as JSON or bounded SSE, and non-streaming Anthropic Messages. OpenAI
+  Completions and Anthropic Messages as JSON or bounded SSE. OpenAI
   requires Bearer and Anthropic requires `x-api-key` plus exactly
   `anthropic-version: 2023-06-01`; both auth modes require a valid provider Mock
   Credential. `accept_any` skips verifier comparison, while `strict` checks the
@@ -183,20 +183,26 @@ slice has sampled H evidence, but no current fixture is V or P.
   The runtime derives a stateless turn from prior assistant messages, commits the
   selected plan in the Environment Durable Object after the final definition-revision
   check and before returning it to the edge, and injects fresh request/completion IDs
-  while content-derived plan IDs stay internal. OpenAI initial delay is abort-aware
-  and occurs before response headers. Only payload deltas are cadence-paced; role,
-  terminal, optional usage, and `[DONE]` frames are immediate. One absolute maximum
+  while content-derived plan IDs stay internal. The current planner is stateless, so
+  the completed Durable Object commit writes no conversation/evaluator cursor; future
+  state cannot assume a post-header abort rolls that commit back. Shared initial delay
+  is abort-aware and occurs before response headers. Only payload deltas are
+  cadence-paced; provider structural/terminal frames are immediate. One absolute maximum
   duration includes initial wait, pacing, and response backpressure, and the complete
   precomputed SSE body is capped at 2,097,152 UTF-8 bytes. The schedule is accepted
   only when `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
   is strictly less than `maximumDurationMilliseconds`;
   equality is rejected. Payload frame count comes from Unicode code-point chunks of
-  text and canonical tool arguments. Preflight failures return a generic JSON error
+  text and canonical provider tool arguments/input JSON. Preflight failures return a generic JSON error
   before HTTP `200`; cancellation or deadline after HTTP `200` truncates the stream
-  without fabricating terminal success. Configured midstream errors are not
+  without fabricating terminal success. OpenAI ends with `[DONE]`; Anthropic uses
+  named message/content-block events, cumulative `message_delta` usage, and
+  `message_stop`, with neither `[DONE]` nor mock-emitted `ping`. Clients should still
+  tolerate upstream Anthropic `ping`. Configured errors stay provider JSON before
+  `200`, even when streaming is requested; configured midstream errors are not
   supported. The Anthropic parser accepts only bounded
   `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
-  streaming/betas/broad parameters, and deliberately does not enforce turn alternation
+  betas/broad parameters, and deliberately does not enforce turn alternation
   or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
   conversation/evaluator state, reset, retry deduplication, LLM-specific
   observation/assertion support, Wrangler-network qualification, hosted CI for this

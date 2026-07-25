@@ -299,7 +299,8 @@ production, or live OpenAI parity.
 This OpenAI workflow does not exercise the separately source-qualified bounded
 Anthropic route. The current F2 slice still has no Responses API, multimodal content,
 configured mid-stream errors, persisted conversation state, reset, LLM
-observations/assertions, or broad Chat Completions parameter support. Anthropic
-streaming also remains unavailable. Use the
+observations/assertions, or broad Chat Completions parameter support. Use the
+[Anthropic SDK quickstart](./anthropic-sdk.md) for its separately qualified JSON/SSE
+Messages surface, and use the
 [machine-readable provider manifest](../reference/mock-llm-openai.v1.json) instead of
 guessing from OpenAI's broader API.

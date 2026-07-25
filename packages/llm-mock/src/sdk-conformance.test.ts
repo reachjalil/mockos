@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { describe, expect, it } from "vitest";
-import { renderAnthropicPlan } from "./anthropic";
+import { createMockLlmAnthropicFetchHandler } from "./anthropic-http";
 import { renderOpenAiPlan } from "./openai";
 import { createMockLlmOpenAiFetchHandler } from "./openai-http";
 import {
@@ -34,22 +34,101 @@ const anthropicModel = {
   max_tokens: null,
 } as const;
 
-const jsonResponse = (
-  body: Readonly<Record<string, unknown>>,
-  requestHeader: "x-request-id" | "request-id"
-): Response =>
-  new Response(JSON.stringify(body), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      [requestHeader]: `llmp_${"D".repeat(43)}`,
+const createAnthropicSdkFixture = () => {
+  const paths: string[] = [];
+  const streamingContentTypes: (string | null)[] = [];
+  let identitySequence = 0;
+  let messageCalls = 0;
+  const immediatePlan = (plan: ReturnType<typeof textPlan>) =>
+    plan.kind === "response"
+      ? {
+          ...plan,
+          cadence: {
+            ...plan.cadence,
+            initialDelayMilliseconds: 0,
+            chunkDelayMilliseconds: 0,
+          },
+        }
+      : plan;
+  const providerFetch = createMockLlmAnthropicFetchHandler({
+    runtime: {
+      getCatalog: async () => ({
+        ok: true as const,
+        value: {
+          models: [
+            {
+              id: TEST_MODEL,
+              displayName: "mockOS Text 1",
+              createdAtEpochSeconds: TEST_CREATED_EPOCH_SECONDS,
+            },
+          ],
+        },
+      }),
+      planMessage: async ({ request }) => {
+        messageCalls += 1;
+        const serialized = JSON.stringify(request);
+        const hasTools =
+          request !== null &&
+          typeof request === "object" &&
+          !Array.isArray(request) &&
+          Array.isArray(request.tools);
+        return {
+          ok: true as const,
+          value: immediatePlan(
+            serialized.includes("Rate limit")
+              ? errorPlan("rate_limit")
+              : hasTools
+                ? toolPlan()
+                : textPlan()
+          ),
+        };
+      },
+    },
+    createIdentity: () => {
+      identitySequence += 1;
+      const suffix = identitySequence.toString(16).padStart(32, "0");
+      return {
+        requestId: `req_${suffix}`,
+        responseId: `msg_${suffix}`,
+      };
     },
   });
-
-const readJsonBody = async (
-  request: Request
-): Promise<Readonly<Record<string, unknown>>> =>
-  (await request.json()) as Readonly<Record<string, unknown>>;
+  const providerBasePath = new URL(ANTHROPIC_BASE_URL).pathname;
+  const fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const request = requestFromFetchInput(input, init);
+    const url = new URL(request.url);
+    paths.push(url.pathname);
+    expect(request.headers.get("x-api-key")).toBe("mock-anthropic-credential");
+    expect(request.headers.get("anthropic-version")).toBe("2023-06-01");
+    const body =
+      request.method === "POST" && url.pathname.endsWith("/v1/messages")
+        ? ((await request.clone().json()) as Readonly<Record<string, unknown>>)
+        : undefined;
+    const response = await providerFetch(request, {
+      slug: "demo",
+      providerPath: url.pathname.slice(providerBasePath.length),
+    });
+    if (body?.stream === true) {
+      streamingContentTypes.push(response.headers.get("content-type"));
+    }
+    return response;
+  };
+  const client = new Anthropic({
+    apiKey: "mock-anthropic-credential",
+    baseURL: ANTHROPIC_BASE_URL,
+    maxRetries: 0,
+    fetch,
+  });
+  return {
+    client,
+    messageCalls: () => messageCalls,
+    paths,
+    streamingContentTypes,
+  };
+};
 
 describe("official OpenAI SDK source conformance", () => {
   it("deserializes models, text, tools, usage, request IDs, and edge-owned SSE", async () => {
@@ -270,52 +349,14 @@ describe("official OpenAI SDK source conformance", () => {
 });
 
 describe("official Anthropic SDK source conformance", () => {
-  it("uses the dialect-root base URL and deserializes models, messages, tools, and SSE", async () => {
-    const paths: string[] = [];
-    const fetch = async (
-      input: RequestInfo | URL,
-      init?: RequestInit
-    ): Promise<Response> => {
-      const request = requestFromFetchInput(input, init);
-      const url = new URL(request.url);
-      paths.push(url.pathname);
-      expect(request.headers.get("x-api-key")).toBe("mock-anthropic-credential");
-      expect(request.headers.get("anthropic-version")).toBe("2023-06-01");
-
-      if (request.method === "GET" && url.pathname.endsWith("/models")) {
-        return jsonResponse(
-          {
-            data: [anthropicModel],
-            first_id: TEST_MODEL,
-            last_id: TEST_MODEL,
-            has_more: false,
-          },
-          "request-id"
-        );
-      }
-      if (request.method === "GET" && url.pathname.endsWith(`/models/${TEST_MODEL}`)) {
-        return jsonResponse(anthropicModel, "request-id");
-      }
-      const body = await readJsonBody(request);
-      const plan = Array.isArray(body.tools) ? toolPlan() : textPlan();
-      return wireToResponse(
-        renderAnthropicPlan(plan, {
-          stream: body.stream === true,
-        })
-      );
-    };
-    const client = new Anthropic({
-      apiKey: "mock-anthropic-credential",
-      baseURL: ANTHROPIC_BASE_URL,
-      maxRetries: 0,
-      fetch,
-    });
+  it("routes the pinned SDK through the handler for models, messages, raw named SSE, and accumulated tools", async () => {
+    const { client, paths } = createAnthropicSdkFixture();
 
     const models = await client.models.list();
     expect(models.data).toEqual([anthropicModel]);
     const model = await client.models.retrieve(TEST_MODEL);
     expect(model).toEqual(expect.objectContaining(anthropicModel));
-    expect(model._request_id).toBe(`llmp_${"D".repeat(43)}`);
+    expect(model._request_id).toMatch(/^req_[a-f0-9]{32}$/);
 
     const message = await client.messages.create({
       model: TEST_MODEL,
@@ -334,7 +375,7 @@ describe("official Anthropic SDK source conformance", () => {
       output_tokens: 5,
       service_tier: "standard",
     });
-    expect(message._request_id).toBe(`llmp_${"A".repeat(43)}`);
+    expect(message._request_id).toMatch(/^req_[a-f0-9]{32}$/);
 
     const toolMessage = await client.messages.create({
       model: TEST_MODEL,
@@ -359,14 +400,16 @@ describe("official Anthropic SDK source conformance", () => {
       input: { location: "Berlin", units: "celsius" },
     });
 
-    const stream = await client.messages.create({
-      model: TEST_MODEL,
-      max_tokens: 64,
-      messages: [{ role: "user", content: "Stream" }],
-      stream: true,
-    });
+    const rawText = await client.messages
+      .create({
+        model: TEST_MODEL,
+        max_tokens: 64,
+        messages: [{ role: "user", content: "Stream named events" }],
+        stream: true,
+      })
+      .withResponse();
     const events = [];
-    for await (const event of stream) events.push(event);
+    for await (const event of rawText.data) events.push(event);
     expect(events.map((event) => event.type)).toEqual([
       "message_start",
       "content_block_start",
@@ -386,6 +429,86 @@ describe("official Anthropic SDK source conformance", () => {
         .map((event) => (event.delta.type === "text_delta" ? event.delta.text : ""))
         .join("")
     ).toBe("Hello from mockOS.");
+    const textStart = events.find((event) => event.type === "message_start");
+    if (textStart?.type !== "message_start") {
+      throw new Error("Expected an Anthropic message_start event.");
+    }
+    expect(textStart.message).toMatchObject({
+      id: expect.stringMatching(/^msg_[a-f0-9]{32}$/),
+      stop_reason: null,
+      usage: {
+        input_tokens: 11,
+        output_tokens: 0,
+      },
+    });
+    const textDelta = events.find((event) => event.type === "message_delta");
+    if (textDelta?.type !== "message_delta") {
+      throw new Error("Expected an Anthropic message_delta event.");
+    }
+    expect(textDelta).toMatchObject({
+      delta: { stop_reason: "end_turn", stop_sequence: null },
+      usage: {
+        input_tokens: 11,
+        output_tokens: 5,
+      },
+    });
+    expect(rawText.request_id).toMatch(/^req_[a-f0-9]{32}$/);
+
+    const accumulatedToolStream = client.messages.stream({
+      model: TEST_MODEL,
+      max_tokens: 64,
+      messages: [{ role: "user", content: "Accumulate the Berlin tool stream" }],
+      tools: [
+        {
+          name: "get_weather",
+          description: "Return synthetic weather.",
+          input_schema: {
+            type: "object",
+            properties: { location: { type: "string" } },
+          },
+        },
+      ],
+    });
+    const accumulatedToolConnection = await accumulatedToolStream.withResponse();
+    const accumulatedTool = await accumulatedToolStream.finalMessage();
+    expect(accumulatedTool).toMatchObject({
+      id: expect.stringMatching(/^msg_[a-f0-9]{32}$/),
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 17,
+        output_tokens: 9,
+      },
+    });
+    expect(accumulatedTool.content).toContainEqual(
+      expect.objectContaining({
+        type: "tool_use",
+        id: "call_weather_1",
+        name: "get_weather",
+        input: { location: "Berlin", units: "celsius" },
+      })
+    );
+    expect(accumulatedToolConnection.request_id).toMatch(/^req_[a-f0-9]{32}$/);
+    expect(accumulatedToolConnection.request_id).not.toBe(rawText.request_id);
+    expect(accumulatedTool.id).not.toBe(textStart.message.id);
+
+    const cancellable = await client.messages.create({
+      model: TEST_MODEL,
+      max_tokens: 64,
+      messages: [{ role: "user", content: "Cancel before terminal success" }],
+      stream: true,
+    });
+    const cancellableIterator = cancellable[Symbol.asyncIterator]();
+    const firstCancellableEvent = await cancellableIterator.next();
+    expect(firstCancellableEvent).toMatchObject({
+      done: false,
+      value: { type: "message_start" },
+    });
+    const observedCancellableTypes = [firstCancellableEvent.value?.type];
+    cancellable.controller.abort();
+    await expect(cancellableIterator.next()).resolves.toMatchObject({ done: true });
+    expect(observedCancellableTypes).not.toContain("message_stop");
+
     expect(paths).toContain("/e/env_fixture/llm-mock/demo/anthropic/v1/messages");
     expect(paths).toEqual(
       expect.arrayContaining([
@@ -396,19 +519,8 @@ describe("official Anthropic SDK source conformance", () => {
     expect(paths.some((path) => path.includes("/v1/v1/"))).toBe(false);
   });
 
-  it("preserves provider errors and disables implicit retries", async () => {
-    let calls = 0;
-    const client = new Anthropic({
-      apiKey: "mock-anthropic-credential",
-      baseURL: ANTHROPIC_BASE_URL,
-      maxRetries: 0,
-      fetch: async () => {
-        calls += 1;
-        return wireToResponse(
-          renderAnthropicPlan(errorPlan("rate_limit"), { stream: false })
-        );
-      },
-    });
+  it("keeps a configured stream-request error as provider JSON without retrying", async () => {
+    const { client, messageCalls, streamingContentTypes } = createAnthropicSdkFixture();
 
     let caught: unknown;
     try {
@@ -416,6 +528,7 @@ describe("official Anthropic SDK source conformance", () => {
         model: TEST_MODEL,
         max_tokens: 64,
         messages: [{ role: "user", content: "Rate limit" }],
+        stream: true,
       });
     } catch (error) {
       caught = error;
@@ -423,7 +536,7 @@ describe("official Anthropic SDK source conformance", () => {
     expect(caught).toBeInstanceOf(Anthropic.APIError);
     expect(caught).toMatchObject({
       status: 429,
-      requestID: `llmp_${"C".repeat(43)}`,
+      requestID: expect.stringMatching(/^req_[a-f0-9]{32}$/),
       error: {
         type: "error",
         error: {
@@ -431,6 +544,13 @@ describe("official Anthropic SDK source conformance", () => {
         },
       },
     });
-    expect(calls).toBe(1);
+    if (!(caught instanceof Anthropic.APIError)) {
+      throw new Error("Expected an Anthropic APIError.");
+    }
+    expect(caught.headers?.get("content-type")).toContain("application/json");
+    expect(streamingContentTypes).toEqual([
+      expect.stringContaining("application/json"),
+    ]);
+    expect(messageCalls()).toBe(1);
   });
 });

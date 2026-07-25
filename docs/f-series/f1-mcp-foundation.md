@@ -192,7 +192,7 @@ production, private Cloud consumption, or broader ecosystem evidence.
 - script execution and Worker Loader enforcement;
 - `proxy` record/replay;
 - any LLM provider surface in this F1 mock-MCP runtime; bounded OpenAI and Anthropic
-  non-streaming routes are separate partial F2 capabilities;
+  JSON/SSE routes are separate partial F2 capabilities;
 - enforced shared Access Key scopes and team policy;
 - the final post-July-2026 MCP protocol checkpoint and a second version adapter;
 - npm distribution, hosted qualification, deployment, wildcard TLS, load/cost

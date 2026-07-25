@@ -4,14 +4,14 @@ description: >-
   Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic workflows
   through authenticated management MCP: create isolated Entra ID or Okta
   environments, seed identities, register OIDC clients, configure MCP-managed mock
-  LLM definitions, call model discovery, OpenAI JSON or bounded SSE Chat Completions,
-  and non-streaming Anthropic Messages, run
+  LLM definitions, call model discovery, run OpenAI Chat Completions and Anthropic
+  Messages as JSON or bounded SSE, exercise
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, and clean up. Use when wiring or testing an application's
   enterprise identity or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped
-  failures; do not claim unrecorded deployment qualification, Anthropic streaming/betas,
+  failures; do not claim unrecorded deployment qualification, Anthropic betas,
   configured midstream errors, the complete Okta Classic Authn transaction machine,
   or broad provider parity.
 ---
@@ -187,14 +187,29 @@ Read the [Anthropic SDK quickstart](../../docs/quickstarts/anthropic-sdk.md) and
 3. Probe `GET /v1/models` using `x-api-key` and exactly
    `anthropic-version: 2023-06-01`. The MCP tools alone do not prove route support.
 4. Use official `@anthropic-ai/sdk` 0.115.0 with `maxRetries: 0` for model
-   list/retrieve and one non-streaming Message.
-5. In `strict` mode, prove wrong-key `401 authentication_error`. `accept_any` accepts
+   list/retrieve and one JSON Message.
+5. Call Messages again with `stream: true`, consume it with `for await`, and require
+   named `message_start`, content-block, cumulative-usage `message_delta`, and
+   `message_stop` ordering. A content block has zero or more payload deltas; text uses
+   `text_delta` and canonical tool input uses `input_json_delta`. Require no `[DONE]`
+   or mock-emitted `ping`, but tolerate upstream `ping`. Cancel a separate stream
+   after a payload delta and do not require fabricated `message_stop`.
+6. In `strict` mode, prove wrong-key `401 authentication_error`. `accept_any` accepts
    every syntactically valid `x-api-key` Mock Credential without verifier comparison.
-   Alternatively, prove version/beta/`stream: true` `400 invalid_request_error`.
-   Streaming, beta APIs, broad parameters, and LLM observations are unsupported.
-6. In `finally`, get the latest revision, call `delete_mock_llm_server`, reconcile
+   Alternatively, prove a version/beta, unknown-field, or non-Boolean-stream
+   `400 invalid_request_error`. Beta APIs, broad parameters, and LLM observations are
+   unsupported.
+7. In `finally`, get the latest revision, call `delete_mock_llm_server`, reconcile
    `MOCK_LLM_SERVER_REVISION_CONFLICT`, delete the disposable environment, and close
    management MCP.
+
+Anthropic uses the shared complete-body 2,097,152-byte preflight, strict schedule
+inequality, payload-only pacing, and absolute initial/pacing/backpressure deadline.
+Pre-header failure is generic JSON; post-header cancellation/deadline truncates
+without success. Configured errors remain provider JSON before HTTP `200` even when
+streaming is requested, and configured midstream errors are unsupported. The current
+stateless selected plan is committed in the Environment Durable Object before edge
+return; post-header cancellation does not roll that commit back.
 
 ## Exercise the provider flow
 
