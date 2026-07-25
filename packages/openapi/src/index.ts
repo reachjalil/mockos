@@ -87,8 +87,12 @@ export type MockosManagementDocumentationCatalog = {
   };
   future: {
     mockMcpServers: {
-      status: "unavailable";
+      status: "source-qualified";
       phase: "F1";
+      testedProtocolVersion: "2025-11-25";
+      pathEndpoint: "/e/{environmentId}/mcp-mock/{slug}";
+      subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}";
+      deployedAcceptance: "unqualified";
     };
     mockLlmApis: {
       status: "unavailable";
@@ -245,7 +249,14 @@ export const generateMockosManagementDocumentationCatalog =
         operations: httpOperations,
       },
       future: {
-        mockMcpServers: { status: "unavailable", phase: "F1" },
+        mockMcpServers: {
+          status: "source-qualified",
+          phase: "F1",
+          testedProtocolVersion: "2025-11-25",
+          pathEndpoint: "/e/{environmentId}/mcp-mock/{slug}",
+          subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}",
+          deployedAcceptance: "unqualified",
+        },
         mockLlmApis: { status: "unavailable", phase: "F2" },
         codeMode: { status: "unavailable", phase: "F6" },
       },

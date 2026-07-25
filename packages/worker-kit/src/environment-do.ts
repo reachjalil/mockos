@@ -18,8 +18,12 @@ import {
   type ManagementListQuery,
   type MintedToken,
   type MintTokenRequest,
+  type MockMcpServerSummary,
+  type MockMcpServerView,
   managementListQuerySchema,
   mintTokenRequestSchema,
+  mockMcpServerWriteSchema,
+  mockMcpSlugSchema,
   type ProvisioningHttpOperation,
   type ProvisioningHttpResponse,
   type ProvisioningRun,
@@ -39,6 +43,7 @@ import {
   type ScenarioListPage,
   type ScenarioSpec,
   scenarioListPageSchema,
+  toMockMcpServerView,
   type WellKnownUrls,
   wellKnownUrlsSchema,
 } from "@mockos/contracts";
@@ -49,7 +54,9 @@ import {
   DeviceAuthorizationError,
   decodeJwt,
   Engine,
+  hashSecret,
   MAX_REQUEST_LOG_BODY_BYTES,
+  MockMcpRepository,
   OAuthError,
   type RenderedProviderError,
   ScimService,
@@ -72,6 +79,7 @@ import {
   type OktaHttpEngine,
   type OktaRenderedError,
 } from "@mockos/engine-http";
+import { createMockMcpFetchHandler, type MockMcpObservation } from "@mockos/mcp-mock";
 import {
   createGraphDirectoryEngine,
   createOktaDirectoryEngine,
@@ -376,6 +384,7 @@ const headersRecord = (
     if (normalizedName.startsWith("x-mockos-")) continue;
     const sensitiveHeader =
       normalizedName === "authorization" ||
+      normalizedName === "mcp-session-id" ||
       normalizedName === "proxy-authorization" ||
       normalizedName === "cookie" ||
       normalizedName === "set-cookie" ||
@@ -858,6 +867,7 @@ export class UnknownProvisioningApplicationError extends Error {
 /** One isolated identity engine and SQLite database per mock environment. */
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
+  readonly #mockMcp: MockMcpRepository;
   readonly #provisioning: ProvisioningPersistence;
   readonly #provisioningEnvironment: ProvisioningEnvironmentVariables;
   readonly #outboundTargetPolicy: OutboundTargetPolicy;
@@ -880,6 +890,7 @@ export class EnvironmentDurableObject extends DurableObject {
     super(ctx, env);
     this.#store = new DoSqlStore(ctx.storage);
     this.#ensureSchema();
+    this.#mockMcp = new MockMcpRepository(this.#store);
     this.#provisioning = new ProvisioningPersistence(this.#store);
     this.#provisioningEnvironment = asProvisioningEnvironment(env);
     this.#outboundTargetPolicy = outboundTargetPolicy(env);
@@ -1039,6 +1050,153 @@ export class EnvironmentDurableObject extends DurableObject {
     const created = await engine.applications.create(input);
     await this.#touch();
     return applicationRegistration(created);
+  }
+
+  async putMockMcpServer(input: unknown): Promise<MockMcpServerView> {
+    const server = mockMcpServerWriteSchema.parse(input);
+    const { authentication, ...common } = server;
+    if (authentication.mode === "bearer") {
+      this.#assertNotPlatformCredential(authentication.token);
+    }
+    const persisted = this.#mockMcp.put({
+      ...common,
+      authentication:
+        authentication.mode === "none"
+          ? authentication
+          : {
+              mode: "bearer",
+              tokenSha256: await hashSecret(authentication.token),
+            },
+    });
+    await this.#touch();
+    return toMockMcpServerView(persisted);
+  }
+
+  async listMockMcpServers(): Promise<MockMcpServerSummary[]> {
+    const servers = this.#mockMcp.list();
+    await this.#touch();
+    return servers;
+  }
+
+  async getMockMcpServer(slug: string): Promise<MockMcpServerView | undefined> {
+    const server = this.#mockMcp.get(slug);
+    if (server) await this.#touch();
+    return server ? toMockMcpServerView(server) : undefined;
+  }
+
+  async deleteMockMcpServer(slug: string): Promise<boolean> {
+    const deleted = this.#mockMcp.delete(slug);
+    if (deleted) await this.#touch();
+    return deleted;
+  }
+
+  async resetMockMcpState(slug: string): Promise<number> {
+    const cleared = this.#mockMcp.resetState(slug);
+    await this.#touch();
+    return cleared;
+  }
+
+  async #appendMockMcpObservation(
+    engine: Engine,
+    request: Request,
+    observation: MockMcpObservation
+  ): Promise<void> {
+    const correlationId = crypto.randomUUID();
+    try {
+      engine.requestLog.append({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        source: "inbound",
+        provider: "mcp",
+        protocol: "mcp",
+        method: observation.transportMethod,
+        path: protocolPath(request),
+        requestHeaders: headersRecord(request.headers, {
+          redactAuthorization: true,
+          redactSecrets: true,
+        }),
+        requestBody: null,
+        responseStatus: observation.httpStatus,
+        responseHeaders: {},
+        responseBody: null,
+        durationMs: observation.durationMs,
+        correlationId,
+        ...(observation.mcpMethod === undefined
+          ? {}
+          : { mcpMethod: observation.mcpMethod }),
+        ...(observation.mcpTool === undefined ? {} : { mcpTool: observation.mcpTool }),
+        ...(observation.mcpArguments === undefined
+          ? {}
+          : { mcpArguments: { ...observation.mcpArguments } }),
+        ...(observation.mcpErrorCode === undefined
+          ? {}
+          : { mcpErrorCode: observation.mcpErrorCode }),
+        ...(observation.mcpToolIsError === undefined
+          ? {}
+          : { mcpToolIsError: observation.mcpToolIsError }),
+      });
+    } catch {
+      console.error("Failed to append a bounded mock MCP request-log entry.");
+    }
+    await this.#touch();
+  }
+
+  async #fetchMockMcp(request: Request, engine: Engine): Promise<Response> {
+    const slug = request.headers.get("x-mockos-mcp-slug");
+    if (
+      request.headers.get("x-mockos-route-kind") !== "mock-mcp" ||
+      !slug ||
+      !mockMcpSlugSchema.safeParse(slug).success
+    ) {
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32_600, message: "The mock MCP route is invalid." },
+        },
+        { status: 400 }
+      );
+    }
+    if (request.headers.get("x-mockos-redact-authorization") === "true") {
+      void request.body?.cancel("platform credential rejected").catch(() => undefined);
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: {
+            code: -32_001,
+            message: "A Mock Credential is required at this endpoint.",
+          },
+        },
+        {
+          status: 401,
+          headers: { "www-authenticate": "Bearer" },
+        }
+      );
+    }
+    const server = this.#mockMcp.get(slug);
+    if (!server) {
+      void request.body?.cancel("mock MCP server not found").catch(() => undefined);
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32_001, message: "Mock MCP server not found." },
+        },
+        { status: 404 }
+      );
+    }
+    const handler = createMockMcpFetchHandler({
+      repository: this.#mockMcp,
+      authenticateBearer: async ({ token, tokenSha256 }) => {
+        this.#assertNotPlatformCredential(token);
+        return sameProvisioningSecret(await hashSecret(token), tokenSha256);
+      },
+      observe: (observation) =>
+        this.#appendMockMcpObservation(engine, request, observation),
+      waitUntil: (promise) => this.ctx.waitUntil(promise),
+    });
+    return handler(request, { server });
   }
 
   async listApplications(input: ManagementListQuery): Promise<ApplicationListPage> {
@@ -1722,6 +1880,9 @@ export class EnvironmentDurableObject extends DurableObject {
     }
     const engine = await this.#engine();
     if (generation !== this.#configGeneration) return this.fetch(request);
+    if (request.headers.get("x-mockos-route-kind") === "mock-mcp") {
+      return this.#fetchMockMcp(request, engine);
+    }
     let httpApp =
       this.#httpApp?.generation === generation ? this.#httpApp.app : undefined;
     if (!httpApp) {

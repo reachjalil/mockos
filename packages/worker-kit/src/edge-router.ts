@@ -53,15 +53,17 @@ export const routeEnvironmentRequest = async (
   const controlAuthorization = bindings.API_KEY
     ? request.headers.get("authorization") === `Bearer ${bindings.API_KEY}`
     : false;
+  const routedResolution =
+    resolution.kind === "mock-mcp"
+      ? resolution
+      : {
+          ...resolution,
+          environmentId,
+          graphBaseUrl: graphBaseUrlForEnvironment(resolution, environmentId, config),
+        };
   return stub.fetch(
-    forwardEnvironmentRequest(
-      request,
-      {
-        ...resolution,
-        environmentId,
-        graphBaseUrl: graphBaseUrlForEnvironment(resolution, environmentId, config),
-      },
-      { redactAuthorization: controlAuthorization }
-    )
+    forwardEnvironmentRequest(request, routedResolution, {
+      redactAuthorization: controlAuthorization,
+    })
   );
 };

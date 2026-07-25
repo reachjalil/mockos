@@ -1,7 +1,7 @@
 # mockOS testing skill
 
-Status: Accepted M5 workflow plus bounded M6 guidance with sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: Accepted M5/M6 identity workflow; F1 mock-MCP guidance lives in its task guide
+Last reviewed: 2026-07-24
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
 teaches an agent to inventory an application's identity configuration, capability-
@@ -24,8 +24,9 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   transaction cancellation/replay checks, lifecycle/password revocation, bounded
   retention, restricted same-origin non-credentialed CORS, provider-shaped response
   omissions, and recursive Authn body/header redaction;
-- the 15-tool MCP registry, including `simulate_lifecycle` and
-  `run_provisioning_cycle`;
+- capability discovery against the 20-tool current management registry, preserving
+  `simulate_lifecycle` and `run_provisioning_cycle` and recognizing the five F1
+  mock-MCP definition/state operations;
 - deterministic Entra- and Okta-shaped outbound SCIM planning through a durable
   Workflow, with User-before-Group execution, explicit 429 waits/retries, saved or run-
   scoped targets, and the disposable target application;
@@ -70,3 +71,11 @@ SAML, unrecorded deployment qualification, and npm publication remain outside th
 workflow. Use only immutable CI/deployment records linked by the implementation
 ledger, and never present mockOS source or deployment evidence as verified-live
 provider parity.
+
+The checked skill remains primarily an identity-integration workflow. For an agent
+under test, route directly to [Environment-hosted mock MCP](./mock-mcp.md), which owns
+the management/data-plane distinction, server-definition contract, wire sequence,
+state and revision semantics, observation matchers, and F1 limitations. The existence
+of those source tools does not imply that the F1 route is deployed on an arbitrary
+connected server; capability-negotiate management MCP and retain the endpoint/evidence
+boundary returned by the operator.

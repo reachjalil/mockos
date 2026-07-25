@@ -193,8 +193,14 @@ const isPlatformCredentialToolCall = (
   const message = record(value);
   if (message?.method !== "tools/call") return false;
   const params = record(message.params);
+  const arguments_ = record(params?.arguments);
+  if (params?.name === "put_mock_mcp_server") {
+    const server = record(arguments_?.server);
+    const authentication = record(server?.authentication);
+    const token = authentication?.mode === "bearer" ? authentication.token : undefined;
+    return typeof token === "string" && sameSecret(token, platformApiKey);
+  }
   if (params?.name !== "run_provisioning_cycle") return false;
-  const arguments_ = record(params.arguments);
   const target = record(arguments_?.target);
   if (target?.kind !== "inline") return false;
   const inlineTarget = record(target.target);

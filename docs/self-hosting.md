@@ -1,7 +1,7 @@
 # Self-hosting
 
-Status: Source-build guide with sampled M6 workers.dev acceptance; distribution limits remain
-Last reviewed: 2026-07-22
+Status: Source-build guide with F1 local routes and sampled M6 deployment evidence
+Last reviewed: 2026-07-24
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
 operations, and Wrangler authentication. Local repository checks do not require a
@@ -36,7 +36,9 @@ mock provider protocol routes do not require that control credential.
 The accepted M3 source exposes 14 authenticated MCP management tools, including
 `simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15; its Worker suite,
 full repository gate, and two-process provisioning e2e are green locally. The
-source-paired hosted flow also passed. Path-mode provider
+source-paired hosted flow also passed. The current F1 source appends five mock-MCP
+definition/state tools for 20 total; they do not inherit the M5 hosted result.
+Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
@@ -48,6 +50,13 @@ deployed evidence; M5 has a separate source-paired hosted acceptance record. The
 [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) samples the six bounded M6
 slices, including Classic Authn states/privacy/CORS/redaction, on exact staging and
 production versions; it is not corpus-wide or verified-live evidence.
+
+The F1 source route is
+`/e/<environment>/mcp-mock/<slug>`. Configure it through management MCP, then connect
+the agent under test with no credential or the separate Bearer Mock Credential defined
+for that slug. The local adapter supports MCP `2025-11-25`, POST, and DELETE; GET
+returns `405`. See [Environment-hosted mock MCP](./mock-mcp.md). Neither listed
+workers.dev deployment has recorded F1 acceptance.
 
 Save a local CLI profile without putting the key directly in the command line:
 
@@ -81,7 +90,8 @@ node packages/cli/dist/bin.js lifecycle simulate \
 
 SCIM and Graph accept non-empty synthetic Bearer values; the Okta directory API accepts
 a non-empty synthetic SSWS value. Those checks are for protocol tests, not production
-authorization. Never use the MCP Access Key as a directory or outbound target token.
+authorization. Never use the MCP Access Key as a directory, mock-MCP, or outbound
+target token.
 The M5 CLI and runtime reject an outbound target Bearer equal to the exact active
 self-host `API_KEY`, even when it has no `mk_` prefix. A later key rotation that
 collides with a saved target also fails before the outbound request; choose distinct,

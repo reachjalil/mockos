@@ -1,69 +1,201 @@
-# F1 mock-MCP foundation
+# F1 mock-MCP source implementation
 
-Status: Foundation source-complete locally; full workspace gate green
-Last reviewed: 2026-07-23
+Status: Locally source-qualified; no hosted or deployed acceptance
+Last reviewed: 2026-07-25
 
-This is the first implementation tranche of the F1 mock-MCP runtime. It establishes
-the protocol-independent contract, persistence, behavior, and observation boundaries.
-It does **not** yet expose a mock-MCP HTTP endpoint.
+F1 makes a deterministic MCP server a first-class synthetic dependency inside an
+existing mockOS environment. Operators configure it through the primary management
+MCP surface; an agent or MCP client under test connects to the separate
+environment-hosted endpoint.
 
-The repository revision carrying this document passes the complete local
-`pnpm check` gate. It has no hosted-CI, merge, deployment, or live-client evidence.
+The task guide and exact behavior reference are in
+[Environment-hosted mock MCP](../mock-mcp.md). This record explains the delivered
+architecture, responsibilities, and qualification boundary.
 
-## Delivered in this tranche
+## Delivered vertical slice
 
-- A strict version-one mock-MCP server contract covers server identity, transport and
-  bearer-hash policy, bounded page size, tools, fixed resources, resource templates,
-  prompts, declarative behavior, and configured server-range JSON-RPC error codes.
-  Capability schemas use a bounded, locally validated JSON Schema subset; remote
-  references and unsupported keywords fail creation.
-- Untrusted server documents are bounded before recursive Zod parsing. Behavior
-  documents have explicit serialized-byte, depth, and node ceilings.
-- Schema migration v6 adds revisioned `mock_mcp_servers`, revision-bound
-  `mock_state`, hashed-session storage, expiry indexes, and nullable MCP request-log
-  metadata.
-- Replacing a server atomically increments its revision, deletes its application
-  state, and terminates sessions for the old revision. Deleting a server cascades its
-  state and sessions. A state-only reset leaves the server specification intact.
-  Individual state values are bounded JSON on both write and persisted read.
-- The runtime-independent behavior evaluator implements static, restricted template,
-  first-match, once/hold-last/loop sequence, configured error, and fail-closed script
-  semantics. Seeded latency is returned as a plan instead of sleeping in a database
-  transaction.
-- Sequence movement is staged with an expected-state check. The future protocol
-  adapter must validate the method-specific result and only then call `commit()`.
-  A scenario short-circuit or invalid output can therefore leave the sequence cursor
-  unchanged. If an interleaved invocation commits first, the stale plan fails before
-  any write or response rendering and the caller must re-evaluate.
-- Request logs can represent MCP protocol method, tool, canonical argument object,
-  JSON-RPC error code, and tool-level `isError`. Top-level and ordered-sequence
-  assertions support exact method, tool, and canonical-argument matching.
+- The management MCP registry grows from 15 to 20 tools. The appended
+  `put_mock_mcp_server`, `list_mock_mcp_servers`, `get_mock_mcp_server`,
+  `delete_mock_mcp_server`, and `reset_mock_mcp_state` operations are generated from
+  the shared operation registry and are deliberately MCP-only. The existing
+  self-hosted HTTP surface remains five routes.
+- Strict version-one contracts cover server identity, transport and hash-only Bearer
+  policy, bounded pagination, tools, fixed resources, safe Level-1 resource
+  templates, prompts, declarative behavior, method-specific results, and configured
+  server-range JSON-RPC errors.
+- A hand-written `@mockos/mcp-mock` package implements the stable `2025-11-25`
+  Streamable HTTP boundary without using the official SDK at runtime. The official
+  SDK remains a black-box conformance client.
+- Path mode resolves `/e/{environmentId}/mcp-mock/{slug}`. Subdomain mode resolves
+  `https://{environmentId}.{baseDomain}/mcp-mock/{slug}`. Mock-MCP routing is a
+  discriminated data-plane route and does not acquire identity-provider issuer or
+  Graph metadata.
+- One existing Environment Durable Object owns each environment's server definitions,
+  revisions, sessions, behavior state, and MCP request observations. F1 does not add a
+  second Durable Object binding or another management ingress.
+- Schema migration v6 adds revisioned `mock_mcp_servers`, one bounded environment
+  revision-allocator row, revision-bound `mock_state`, hash-only session storage,
+  expiry indexes, and nullable MCP request-log metadata.
+- The protocol-independent behavior evaluator implements static, restricted
+  template, first-match, once/hold-last/loop sequence, configured error, and
+  fail-closed script semantics with deterministic seeded latency.
+- Request logs represent MCP protocol method, tool, canonical argument object,
+  top-level JSON-RPC error code, and tool-level `isError`. Filters, exact assertions,
+  and ordered cross-source sequences match their supported subset: log reads filter by
+  method/tool, while assertions match method/tool/arguments. Error code and tool
+  `isError` remain diagnostic fields on returned entries, not assertion matchers.
 
-## Locked behavior semantics
+## Responsibility graph
 
-| Variant | F1 foundation behavior |
+| Node | Responsibility | Must not own |
+| --- | --- | --- |
+| `packages/contracts/src/mock-mcp.ts` | Versioned public server/capability/result contracts, safe read views, validation limits | Transport I/O or database state |
+| `packages/contracts/src/operations/management.ts` | Five F1 management operation schemas and metadata | HTTP routes |
+| `packages/core/src/behavior/evaluator.ts` | Portable deterministic behavior plans and staged state | MCP wire rendering |
+| `packages/core/src/mock-mcp/repository.ts` | Environment-local revisions, state, sessions, pruning | Public routing |
+| `packages/mcp-mock` | `2025-11-25` parsing, lifecycle, dispatch, pagination, result validation, errors | Platform tenancy or private Cloud policy |
+| `packages/mcp/src/index.ts` | Handler-agnostic management tool registration | Direct Durable Object imports |
+| `packages/worker-kit/src/mcp-agent.ts` | Management dependency adapter and typed EnvironmentDO calls | A second MCP product model |
+| `packages/worker-kit/src/host-resolver.ts` and `edge-router.ts` | Exact public route classification and trusted metadata | Caller-controlled internal headers |
+| `packages/worker-kit/src/environment-do.ts` | Bind adapter, repository, behavior, observation, and RPCs to one environment | Account, billing, or entitlement policy |
+| `apps/worker/src/app.ts` | Self-hosted management authentication and route entry | Secret persistence or mock-MCP behavior |
+
+The private operated product may consume these public exports and add hosted account,
+tenant, quota, and entitlement policy. The public implementation never imports or
+requires that private service.
+
+## Locked source semantics
+
+### Definition and revisions
+
+- At most 64 servers exist in one environment and 64 capabilities exist per kind.
+- Definitions are bounded before recursive validation. Tool schemas use a documented,
+  deterministic JSON Schema subset. Omitted input schemas default to
+  `{ "type": "object" }`; explicit input and output schemas must declare that literal
+  object root. `$ref`, `pattern`, `format`, unsafe keys, and unsupported vocabularies
+  fail creation.
+- Binary resource blobs and tool/prompt image or audio blocks accept canonical
+  standard base64 only, including correct padding and padding bits.
+- Repeating a byte-identical normalized definition is a no-op that preserves revision,
+  timestamps, state, and sessions. Every new or changed definition atomically consumes
+  the next environment-wide safe positive-integer revision, deletes old application
+  state when replacing a slug, and terminates old-revision sessions. Per-slug values
+  may skip, but they increase strictly.
+- In-flight initialize, notification, request, configured-error, and DELETE paths
+  recheck the resolved revision before commit/response. A racing replacement or
+  deletion returns transport `409`, not an old-revision result.
+- Deleting a slug explicitly removes state and sessions even without SQLite foreign
+  key enforcement. The single allocator row survives even when every server is
+  deleted, so delete/recreate cannot reuse an old revision without an unbounded
+  tombstone ledger. Resetting deletes state only and preserves the definition,
+  revision, current sessions, and allocator.
+- Bearer Mock Credentials are accepted only on the write contract. Persistence stores
+  a SHA-256 verifier; reads expose only `configured: true`. The platform management
+  credential is rejected as a mock Bearer value.
+- User-authored configured errors map one-to-one into `-32099` through `-32000`,
+  excluding MockOS-reserved state-capacity code `-32050`.
+
+### Transport and sessions
+
+- F1 negotiates exactly MCP `2025-11-25`.
+- Streamable HTTP is POST-only. Stateful initialize issues one opaque 32-byte
+  base64url session ID and persists only its SHA-256 hash.
+- Sessions bind slug, server revision, protocol version, initialization state, TTL,
+  and termination. A server allows at most 100 active sessions and prunes bounded
+  expired/terminated rows before enforcing the cap.
+- Subsequent requests validate protocol and session headers. DELETE terminates the
+  session. GET returns `405`; F1 does not emit `listChanged`.
+- Opaque pagination cursors encode capability kind, slug, revision,
+  transport/session scope, and offset. Malformed, naively modified, cross-kind,
+  cross-session, or stale-revision cursors fail. Their checksum is unkeyed, so cursors
+  provide pagination correctness, not authorization or tamper-proof security.
+- Resource-template reverse matching compares literals exactly, accepts empty simple
+  expansions, percent-decodes encoded reserved characters, and uses deterministic
+  leftmost-minimal captures for adjacent variables. The implementation avoids regex
+  backtracking and remains linear in the URI for the contract-bounded maximum of 20
+  variables and 1,024 URI characters.
+
+### Behavior and state
+
+| Variant | F1 behavior |
 | --- | --- |
-| `static` | Returns a detached JSON value. The protocol adapter still validates the method-specific result. |
-| `template` | Replaces `{{dotted.path}}` from explicit behavior data and invocation input. Prototype paths, helpers, evaluation, recursion, and missing values are rejected. |
-| `match` | Selects the first case whose dotted-path values are deeply equal; otherwise uses the explicit fallback or fails. |
-| `sequence` | `once` fails after the final committed step, `hold_last` repeats the final step, and `loop` wraps. Cursor writes are staged and compare their expected read before commit. |
-| `error` | Produces a protocol-independent error plan. F1 maps its symbolic code through the server's validated `errorCodeMap`. |
-| `script` | Uses an injected executor only. Without one, it takes an explicit fallback or fails closed; this tranche never evaluates JavaScript. |
+| `static` | Returns a detached JSON value. |
+| `template` | Replaces `{{dotted.path}}` from explicit behavior data and invocation input. Prototype paths, helpers, evaluation, recursion, and missing values fail. |
+| `match` | Selects the first deeply equal dotted-path case; otherwise uses the explicit fallback or fails. |
+| `sequence` | `once` fails after the final committed step, `hold_last` repeats the final step, and `loop` wraps. |
+| `error` | Maps one symbolic name through the server's exact, own-property `errorCodeMap` entry. |
+| `script` | Uses an injected executor only. F1 provides none, so the explicit fallback runs or evaluation fails closed. |
 
-## Explicitly still open
+Behavior evaluation stages sequence movement with its expected read. The adapter
+validates a method-specific value, waits for seeded latency outside a SQLite
+transaction while observing the HTTP Fetch request's abort signal, then calls
+`commit()`. Invalid output and an HTTP abort/disconnect observed during latency do not
+advance state. If an interleaved request commits first, the stale plan fails instead
+of overwriting the newer cursor. A configured-error step also waits and commits its
+staged sequence movement before the mapped JSON-RPC error is returned; the same
+latency-abort guard prevents that movement.
 
-- the runtime `@mockos/mcp-mock` package and versioned `2025-11-25` adapter;
-- initialize/initialized lifecycle, protocol headers, session issuance and
-  termination, Origin and Mock Credential checks, POST/DELETE/GET handling;
-- tools/resources/prompts dispatch, output-schema validation, opaque pagination, and
-  configured error rendering;
-- Environment Durable Object CRUD/reset RPCs, management tools, path/subdomain
-  routing, scenario integration, latency scheduling, and universal Authorization
-  redaction;
-- official MCP SDK clients against both the in-process adapter and the Worker route;
-- sourced wire fixtures, GET list-change delivery, hosted CI, deployment, and the
-  2026-07-28 final-protocol checkpoint.
+F1 does not implement message-level MCP cancellation. It has no in-flight request-ID
+registry, and `notifications/cancelled` is accepted with HTTP `202` and deliberately
+ignored. Cancellation is a protocol SHOULD rather than a MUST, so this is an explicit
+client limitation rather than a claim that notification cancellation is enforced.
 
-The public management MCP remains the product control interface. A future mock-MCP
-endpoint is a provider-shaped dependency exposed to the application under test; it is
-not a second management surface.
+Each state value is bounded to 64 KiB/16 levels/5,000 nodes. A server revision is
+additionally capped at 256 current-revision rows and 2 MiB of serialized state;
+capacity failure returns HTTP `200` with reserved JSON-RPC `-32050` and exact message
+`Mock MCP application state capacity reached.`, and does not partially commit.
+
+`proxy` is intentionally absent. Record/replay remains F9.
+
+A syntactically valid `tools/call` whose argument object fails the selected tool's
+input schema returns an HTTP-`200` JSON-RPC result with bounded text and
+`isError: true`; it does not expose input values or run behavior. Unknown tools and
+malformed call parameters remain top-level invalid params. A deliberate tool-error
+result may omit output-schema `structuredContent`, while invalid successful output
+remains an adapter error and never commits state. The schema-mismatch result starts
+with one exact stable sentence and may add one bounded diagnostics block containing
+issue paths/messages only.
+
+### Observation
+
+The adapter appends bounded inbound entries with `provider: "mcp"` and
+`protocol: "mcp"`. Management log reads can filter by MCP method or tool. Assertions
+can match exact method, tool, and canonical argument object, including in
+non-overlapping ordered sequences with other environment traffic.
+
+Authentication and transport capability headers are redacted. Synthetic arguments
+and results may remain because observable test traffic is the product.
+
+## Qualification matrix
+
+| Evidence | F1 requirement |
+| --- | --- |
+| Contract tests | Strict bounds/defaults, schema subset, safe template grammar, write-only credentials, 20-tool registry, five HTTP routes |
+| Core tests | Atomic revision/state behavior, hash-only sessions, cap/pruning, stale-revision handling, staged sequence conflict behavior, request-log assertions |
+| Adapter tests | Raw-wire negotiation, lifecycle, method dispatch, cursors, schemas, configured errors, bounded/linear resource-template reverse matching, HTTP-abort state protection during latency, deliberately ignored `notifications/cancelled`, output validation, in-flight revision races, and real-repository sequential/concurrent state capacity |
+| Management tests | Five tool registration, explicit/current environment resolution, safe results, typed failures, redaction |
+| Worker and routing tests | Host-resolver coverage for both route modes and trusted headers; [`mock-mcp.integration.test.ts`](../../apps/worker/test/mock-mcp.integration.test.ts) for the path-mode official SDK, management creation, auth/session, capabilities, reset/revision/delete, and redacted observations |
+| Documentation checks | Generated catalog/reference drift, exact counts, links/anchors, inert examples, supported/unsupported claims |
+| Full local source gate | `pnpm check` |
+
+Every applicable focused suite and the complete `pnpm check` gate are green in the
+revision carrying this record, so the bounded F1 implementation is locally
+source-qualified. It does not yet have hosted CI, merge, package publication, staging,
+production, private Cloud consumption, or broader ecosystem evidence.
+
+## Still open
+
+- standalone GET event streaming and `listChanged` notifications;
+- JSON-RPC batch requests;
+- message-level request cancellation; `notifications/cancelled` is accepted but does
+  not cancel an in-flight request;
+- script execution and Worker Loader enforcement;
+- `proxy` record/replay;
+- mock OpenAI and Anthropic APIs;
+- enforced shared Access Key scopes and team policy;
+- the final post-July-2026 MCP protocol checkpoint and a second version adapter;
+- npm distribution, hosted qualification, deployment, wildcard TLS, load/cost
+  envelopes, and broader client/ecosystem conformance.
+
+Those gaps are explicit [known limitations](../known-limitations.md), not implied
+parts of the F1 source slice.

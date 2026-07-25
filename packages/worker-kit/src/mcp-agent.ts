@@ -1,8 +1,10 @@
 import type {
   EnvironmentConfig,
+  MockMcpServerView,
   ProviderId,
   ProvisioningWorkflowParams,
 } from "@mockos/contracts";
+import { mockMcpServerListSchema, mockMcpServerViewSchema } from "@mockos/contracts";
 import { createTenantId } from "@mockos/core";
 import {
   type MockosToolDependencies,
@@ -34,6 +36,14 @@ export type MockosMcpBindings = {
   PROVISIONING_WORKFLOW: Workflow<ProvisioningWorkflowParams>;
   PUBLIC_ORIGIN: string;
   TID_INDEX?: KVNamespace;
+};
+
+type MockMcpEnvironmentRpc = {
+  putMockMcpServer(input: unknown): Promise<unknown>;
+  listMockMcpServers(): Promise<unknown>;
+  getMockMcpServer(slug: string): Promise<unknown>;
+  deleteMockMcpServer(slug: string): Promise<boolean>;
+  resetMockMcpState(slug: string): Promise<number>;
 };
 
 const newEnvironmentConfig = (
@@ -102,6 +112,37 @@ const provisioningToolError = (error: unknown): MockosToolError | undefined => {
   return undefined;
 };
 
+const missingMockMcpServer = (slug: string): MockosToolError =>
+  new MockosToolError({
+    type: "https://mockos.live/problems/mock-mcp-server-not-found",
+    title: "Mock MCP server not found",
+    status: 404,
+    detail: `Mock MCP server '${slug}' is not available in the selected environment.`,
+    code: "MOCK_MCP_SERVER_NOT_FOUND",
+  });
+
+const mockMcpToolError = (
+  error: unknown,
+  slug: string
+): MockosToolError | undefined => {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? Reflect.get(error, "code")
+      : undefined;
+  if (code === "server_not_found") return missingMockMcpServer(slug);
+  if (code === "server_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-limit",
+      title: "Mock MCP server limit reached",
+      status: 409,
+      detail:
+        "Delete an existing mock MCP server before creating another in this environment.",
+      code: "MOCK_MCP_SERVER_LIMIT",
+    });
+  }
+  return undefined;
+};
+
 /** Stateful, authenticated management MCP. Each transport session owns its cursor. */
 export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> {
   server = new McpServer({ name: "mockOS", version: "0.1.0" });
@@ -118,6 +159,13 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
 
   #environment(environmentId: string) {
     return this.env.ENVIRONMENTS.get(this.env.ENVIRONMENTS.idFromName(environmentId));
+  }
+
+  #mockMcpEnvironment(environmentId: string): MockMcpEnvironmentRpc {
+    // Cloudflare's RPC serializer type recurses through the complete mock server
+    // schema. Keep that framework boundary structural and validate every complex
+    // result immediately after it crosses back into the management agent.
+    return this.#environment(environmentId) as unknown as MockMcpEnvironmentRpc;
   }
 
   async #requireEnvironment(environmentId: string) {
@@ -260,6 +308,41 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
           issuerBase: location.issuerBase,
           ...(location.graphBaseUrl ? { graphBaseUrl: location.graphBaseUrl } : {}),
         });
+      },
+      putMockMcpServer: async (environmentId, server) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return mockMcpServerViewSchema.parse(
+            await this.#mockMcpEnvironment(environmentId).putMockMcpServer(server)
+          );
+        } catch (error) {
+          throw mockMcpToolError(error, server.slug) ?? error;
+        }
+      },
+      listMockMcpServers: async (environmentId) => {
+        await this.#requireEnvironment(environmentId);
+        return mockMcpServerListSchema.parse({
+          servers: await this.#mockMcpEnvironment(environmentId).listMockMcpServers(),
+        }).servers;
+      },
+      getMockMcpServer: async (environmentId, slug) => {
+        await this.#requireEnvironment(environmentId);
+        const raw =
+          await this.#mockMcpEnvironment(environmentId).getMockMcpServer(slug);
+        if (!raw) throw missingMockMcpServer(slug);
+        return mockMcpServerViewSchema.parse(raw) as MockMcpServerView;
+      },
+      deleteMockMcpServer: async (environmentId, slug) => {
+        await this.#requireEnvironment(environmentId);
+        return this.#mockMcpEnvironment(environmentId).deleteMockMcpServer(slug);
+      },
+      resetMockMcpState: async (environmentId, slug) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return await this.#mockMcpEnvironment(environmentId).resetMockMcpState(slug);
+        } catch (error) {
+          throw mockMcpToolError(error, slug) ?? error;
+        }
       },
       getCurrentEnvironmentId: async () => {
         const currentEnvironmentId = this.state.currentEnvironmentId;

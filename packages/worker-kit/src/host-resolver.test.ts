@@ -112,6 +112,51 @@ describe("resolveEnvironmentRequest", () => {
     ).toBe(`https://${environmentId}.id.mockos.live/graph/v1.0`);
   });
 
+  it("resolves mock MCP endpoints without identity-provider metadata", () => {
+    expect(
+      resolveEnvironmentRequest(
+        `https://mockos.example/e/${environmentId}/mcp-mock/recruiting-agent`,
+        { hostingMode: "path" }
+      )
+    ).toEqual({
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath: "/mcp-mock/recruiting-agent",
+      locator: { type: "environment", environmentId },
+      publicBase: `https://mockos.example/e/${environmentId}`,
+      slug: "recruiting-agent",
+    });
+
+    expect(
+      resolveEnvironmentRequest(
+        `https://${environmentId}.id.mockos.live/mcp-mock/recruiting-agent`,
+        { hostingMode: "subdomain", baseDomain: "id.mockos.live" }
+      )
+    ).toEqual({
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath: "/mcp-mock/recruiting-agent",
+      locator: { type: "environment", environmentId },
+      publicBase: `https://${environmentId}.id.mockos.live`,
+      slug: "recruiting-agent",
+    });
+  });
+
+  it("rejects malformed or nested mock MCP endpoint paths", () => {
+    for (const path of [
+      "/mcp-mock/UPPERCASE",
+      "/mcp-mock/a/extra",
+      "/mcp-mock/%2Fescaped",
+      "/mcp-mock/",
+    ]) {
+      expect(
+        resolveEnvironmentRequest(`https://mockos.example/e/${environmentId}${path}`, {
+          hostingMode: "path",
+        })
+      ).toBeUndefined();
+    }
+  });
+
   it("removes caller-supplied internal routing headers before forwarding", () => {
     const request = new Request(
       `https://mockos.example/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
@@ -135,6 +180,7 @@ describe("resolveEnvironmentRequest", () => {
     });
 
     expect(forwarded.headers.get("x-mockos-env")).toBe(environmentId);
+    expect(forwarded.headers.get("x-mockos-route-kind")).toBe("identity");
     expect(forwarded.headers.get("x-mockos-issuer-base")).toBe(
       `https://mockos.example/e/${environmentId}/${tenantId}/v2.0`
     );
@@ -145,6 +191,31 @@ describe("resolveEnvironmentRequest", () => {
       `https://mockos.example/e/${environmentId}/graph/v1.0`
     );
     expect(forwarded.headers.has("x-mockos-private-future")).toBe(false);
+  });
+
+  it("replaces caller-supplied mock MCP routing metadata", () => {
+    const request = new Request(
+      `https://mockos.example/e/${environmentId}/mcp-mock/recruiting-agent`,
+      {
+        method: "POST",
+        headers: {
+          "x-mockos-mcp-slug": "spoofed",
+          "x-mockos-route-kind": "identity",
+        },
+      }
+    );
+    const resolution = resolveEnvironmentRequest(request, { hostingMode: "path" });
+    if (resolution?.kind !== "mock-mcp") {
+      throw new Error("Expected mock MCP route.");
+    }
+
+    const forwarded = forwardEnvironmentRequest(request, resolution);
+
+    expect(new URL(forwarded.url).pathname).toBe("/mcp-mock/recruiting-agent");
+    expect(forwarded.headers.get("x-mockos-env")).toBe(environmentId);
+    expect(forwarded.headers.get("x-mockos-route-kind")).toBe("mock-mcp");
+    expect(forwarded.headers.get("x-mockos-mcp-slug")).toBe("recruiting-agent");
+    expect(forwarded.headers.has("x-mockos-issuer-base")).toBe(false);
   });
 
   it("marks matching control authorization for log redaction without altering it", () => {
@@ -164,5 +235,23 @@ describe("resolveEnvironmentRequest", () => {
 
     expect(forwarded.headers.get("authorization")).toBe(authorization);
     expect(forwarded.headers.get("x-mockos-redact-authorization")).toBe("true");
+  });
+
+  it("preserves abort propagation when forwarding into the environment object", () => {
+    const controller = new AbortController();
+    const request = new Request(
+      `https://mockos.example/e/${environmentId}/mcp-mock/recruiting-agent`,
+      { method: "POST", signal: controller.signal }
+    );
+    const resolution = resolveEnvironmentRequest(request, { hostingMode: "path" });
+    if (resolution?.kind !== "mock-mcp") {
+      throw new Error("Expected mock MCP route.");
+    }
+
+    const forwarded = forwardEnvironmentRequest(request, resolution);
+    expect(forwarded.signal.aborted).toBe(false);
+    controller.abort("client disconnected");
+    expect(forwarded.signal.aborted).toBe(true);
+    expect(forwarded.signal.reason).toBe("client disconnected");
   });
 });

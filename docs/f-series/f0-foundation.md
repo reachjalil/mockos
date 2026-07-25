@@ -1,10 +1,12 @@
 # F0 contract, client, and wrapper foundation
 
-Status: Source-complete locally; hosted CI and merge pending
-Last reviewed: 2026-07-23
+Status: Source-complete locally; current registry extended by locally source-qualified F1
+Last reviewed: 2026-07-25
 
-F0 establishes checked seams for the F-series without enabling an experimental
-runtime. The source candidate passes the complete local `pnpm check` gate. It has no
+F0 established checked seams for the F-series without enabling a runtime. The current
+source extends those seams with F1 while preserving the same generation and
+fail-closed rules. The F0 candidate passed the complete local `pnpm check` gate. It
+has no
 hosted-CI, merge, deployment, publication, Worker Loader, or paid-account evidence.
 
 ## One-source flow
@@ -46,10 +48,10 @@ performs a byte-for-byte comparison and is part of local and hosted CI gates.
 
 ## Package boundaries
 
-| Package | F0 responsibility | Explicitly not yet claimed |
+| Package | F0 responsibility | Outside the F0 boundary |
 | --- | --- | --- |
 | `@mockos/contracts/behavior` | Version-one `static`, `template`, `sequence`, `match`, `error`, and `script` schemas with seeded latency | Evaluator, template semantics, sequence storage, proxy, or script execution |
-| `@mockos/contracts/operations` | Exhaustive metadata for all 15 existing MCP operations and HTTP metadata for five live routes | HTTP availability for MCP-only operations or enforced scoped Access Keys |
+| `@mockos/contracts/operations` | Exhaustive metadata for all current operations—20 after F1—and HTTP metadata for five live routes | HTTP availability for MCP-only operations or enforced scoped Access Keys |
 | `@mockos/openapi` | Deterministic OpenAPI, client-manifest, and management-documentation catalog generation | A deployed public API catalog |
 | `@mockos/client` | Fetch injection, relative known paths, constructor-owned auth, Zod validation, abort/timeout handling, and typed problems | CLI migration, automatic retries, npm publication, or unsupported HTTP operations |
 | `@mockos/codemode` | Explicit-enable wrapper around the exact experimental package | Worker wiring, `LOADER`, executor qualification, audit, or quotas |

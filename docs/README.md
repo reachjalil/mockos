@@ -1,13 +1,13 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: MCP-first public documentation for the accepted M0-M3/M5 and sampled M6
-runtime, the F0/F1 source candidates, and bounded MSAL Node local X/Q qualification
+Status: MCP-first public documentation for accepted M0-M3/M5 and sampled M6, locally
+source-qualified F0/F1, and bounded MSAL Node local X/Q qualification
 Last reviewed: 2026-07-26
 
-mockOS is an MCP-first, deterministic identity-platform test double. Agents and
-automation use management MCP to create isolated Entra ID or Okta environments;
-applications under test connect to their provider-shaped OIDC, OAuth, SCIM, Graph,
-and Okta endpoints.
+mockOS is an MCP-first, deterministic identity-platform and agent-dependency test
+double. Agents and automation use management MCP to create isolated Entra ID, Okta,
+and mock MCP environments. Applications under test connect to the provider-shaped
+identity routes or an environment-hosted mock MCP server.
 
 The documentation keeps eight evidence levels separate:
 
@@ -37,6 +37,7 @@ support, deployment, or provider-parity claim.
 | I want to… | Start here |
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
+| Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
 | Understand MCP, the console, CLI, HTTP, and provider endpoints | [Interface model](./concepts/interface-model.md) |
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
@@ -50,16 +51,18 @@ support, deployment, or provider-parity claim.
 - [MCP-first quickstart](./getting-started/mcp-first.md)
 - [Interface model](./concepts/interface-model.md)
 - [Management MCP behavior](./mcp.md)
-- [Generated 15-tool reference](./reference/management-tools.md)
+- [Generated 20-tool reference](./reference/management-tools.md)
 - [Machine-readable management catalog](./reference/management-operations.v1.json)
 - [Self-hosted HTTP reference](./reference/self-hosted-http.md)
 - [Source-built CLI](../packages/cli/README.md)
 - [Agent testing skill](./skill.md)
 
 The management MCP server at `/mcp` is the primary control interface. The current
-source exposes 15 tools. The direct self-hosted management HTTP surface contains five
-implemented routes and must not be presented as equivalent. Future mock MCP servers
-inside environments belong to F1 and are unavailable today.
+source exposes 20 tools. Five F1 tools configure mock MCP servers, but the direct
+self-hosted management HTTP surface still contains only five identity-management
+routes and must not be presented as equivalent. The configured mock endpoint is a
+separate data plane called by an agent under test. Its source behavior, wire sequence,
+server contract, and limits are in [Environment-hosted mock MCP](./mock-mcp.md).
 
 The current source candidate adds one bounded client qualification:
 `@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local
@@ -101,11 +104,13 @@ Access Key.
 - [Implementation status](./IMPLEMENTATION_STATUS.md)
 - [Requirements traceability](./requirements-traceability.md)
 - [F0 contract, client, and wrapper foundation](./f-series/f0-foundation.md)
+- [F1 mock-MCP source implementation](./f-series/f1-mcp-foundation.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 
-The F-series roadmap is target design, not implementation evidence. In particular,
-mock MCP servers, mock LLM APIs, script execution, enforced scoped keys, and Code Mode
-remain unavailable at the current F0 source boundary.
+The F-series roadmap is target design, not implementation evidence. F1 is locally
+source-qualified for its bounded implementation, while hosted CI, merge, package
+publication, private Cloud consumption, and deployed F1 acceptance remain open. Mock
+LLM APIs, script execution, enforced scoped keys, and Code Mode remain unavailable.
 
 ## Accepted evidence
 

@@ -1,7 +1,7 @@
 # Hosting modes
 
-Status: Bounded M6 path-mode sample deployed; wildcard/subdomain mode remains open
-Last reviewed: 2026-07-22
+Status: Bounded M6 path-mode sample deployed; F1 routes are source-only; wildcard live mode remains open
+Last reviewed: 2026-07-24
 
 ## Path mode
 
@@ -30,6 +30,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
   `/e/<env>/api/v1/authn`
 - Entra- or Okta-profile SCIM:
   `/e/<env>/scim/v2/Users`
+- Environment-hosted mock MCP:
+  `/e/<env>/mcp-mock/<slug>`
 
 The Graph, Okta directory, and SCIM paths are accepted for the bounded M3 scope. The
 M3 deployed smoke sampled both SCIM profiles, an Entra Graph read, and an Okta directory
@@ -43,6 +45,11 @@ accept a non-empty synthetic Bearer value, while the Okta directory API accepts 
 non-empty synthetic SSWS value. Those directory checks validate scheme and presence,
 not a real provider token. Never send the MCP/control Access Key, real identities, or
 production credentials to these endpoints.
+
+The F1 mock MCP route accepts no credential or the separate Bearer Mock Credential
+configured for that slug. It negotiates MCP `2025-11-25` over POST-only Streamable
+HTTP. The path resolver and local Worker integration are source evidence only; neither
+recorded workers.dev origin has F1 deployment acceptance.
 
 Path mode works without an account-owned zone, but some SDKs assume provider-shaped
 hosts. Configure explicit authorities and never infer broad SDK compatibility from a
@@ -72,10 +79,12 @@ the resolved environment:
 
 - `https://<environment>.<base-domain>/scim/v2`
 - `https://<environment>.<base-domain>/graph/v1.0`
+- `https://<environment>.<base-domain>/mcp-mock/<slug>`
 
-Unit tests cover this split for MCP direct minting, well-known URL results, routed
-group-overage claim sources, and spoofed internal routing-header replacement. Live TLS
-and wildcard-route qualification remain pending.
+Unit tests cover this split for management-MCP direct minting, well-known URL results,
+routed group-overage claim sources, mock-MCP route classification, and spoofed
+internal routing-header replacement. Live TLS and wildcard-route qualification remain
+pending.
 
 The critical invariant is that stored state contains no absolute issuer URL. Cutover
 must be only host resolution, routes, variables, certificates, and index backfill—not a

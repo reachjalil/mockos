@@ -11,8 +11,8 @@ import {
   getRequestLogToolInputSchema,
   identitySeedSchema,
   lifecycleResultSchema,
-  managementListQuerySchema,
   MAX_MANAGEMENT_LIST_PAGE_SIZE,
+  managementListQuerySchema,
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
@@ -20,8 +20,8 @@ import {
   SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
-  scenarioSpecSchema,
   scenarioListPageSchema,
+  scenarioSpecSchema,
   scimUserInputSchema,
   scimWeakEtag,
   seedIdentitiesToolInputSchema,
@@ -119,6 +119,12 @@ describe("wire contracts", () => {
     expect(() =>
       requestLogEntrySchema.parse({
         ...base,
+        mcpArguments: { ["x".repeat(257)]: true },
+      })
+    ).toThrow();
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
         mcpArguments: { invalid: 1n },
       })
     ).toThrow();
@@ -129,6 +135,40 @@ describe("wire contracts", () => {
       assertionSpecSchema.parse({
         mcpArguments: cyclic,
         count: { atLeast: 1 },
+      })
+    ).toThrow();
+  });
+
+  it("accepts the MCP request-cancelled error code in request logs", () => {
+    const base = {
+      id: "request-cancelled",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "mcp",
+      protocol: "mcp",
+      method: "POST",
+      path: "/mcp-mock/server",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: 200,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: 1,
+      correlationId: "correlation-cancelled",
+      mcpMethod: "tools/call",
+      mcpTool: "lookup",
+    } as const;
+
+    expect(
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpErrorCode: -32_800,
+      }).mcpErrorCode
+    ).toBe(-32_800);
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpErrorCode: -32_801,
       })
     ).toThrow();
   });
@@ -358,7 +398,13 @@ describe("wire contracts", () => {
       "simulate_lifecycle",
       "get_wellknown_urls",
       "set_current_environment",
+      "put_mock_mcp_server",
+      "list_mock_mcp_servers",
+      "get_mock_mcp_server",
+      "delete_mock_mcp_server",
+      "reset_mock_mcp_state",
     ]);
+    expect(mockosMcpToolNames).toHaveLength(20);
   });
 
   it("locks M3 SCIM and lifecycle wire shapes", () => {

@@ -1,6 +1,8 @@
 # Known limitations
 
-Status: Accepted M3/M5 and sampled M6 boundaries retained; bounded MSAL Node local X/Q and source-only M7/F0 foundations documented with remaining limits
+Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
+source-qualified F0/F1, bounded MSAL Node local X/Q, and remaining limits;
+deliberately candid
 Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
@@ -138,21 +140,50 @@ slice has sampled H evidence, but no current fixture is V or P.
   The standalone public staging/production Access Keys were preserved, so the
   authenticated hosted acceptance ran through the private edge consuming the public
   runtime rather than those standalone credentials.
-  The registry does not yet host
-  user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
-  OIDC-federated CI access.
-- F0 adds contracts and checked integration boundaries, not an enabled product
-  runtime. The partial F1 foundation now adds bounded behavior parsing, a declarative
-  evaluator, revisioned mock-MCP configuration and sequence state, session tables, and
-  MCP-aware request assertions. There is still no MCP-mock transport or Worker route,
-  LLM planner/renderer, production script executor, management operation, or official
-  client conformance evidence. The OpenAPI document contains exactly five already-implemented
-  self-hosted HTTP control routes; the other ten MCP operations are deliberately absent
-  from the HTTP client. `env:ro`/`env:rw` are contract metadata until F4 implements
-  scoped-key/role/ACL enforcement. Code Mode has no Worker import, flag, `LOADER`, or
-  `worker_loaders` binding, and `NoSandbox` always rejects JavaScript. The client,
-  Code Mode, and sandbox packages remain private workspaces; npm distribution is not
-  qualified by their local builds.
+  F1 appends five locally source-qualified tools for environment-hosted mock MCP
+  definitions and state. Those five have no inherited M5 hosted/deployed acceptance.
+- The locally source-qualified F1 implementation supports only MCP `2025-11-25` over POST-only Streamable
+  HTTP. `GET` returns `405`; there are no `listChanged` notifications, JSON-RPC
+  batches, legacy HTTP+SSE fallback, or second protocol-version adapter. The route is
+  source-tested in path and subdomain resolution, but no current workers.dev version,
+  wildcard TLS route, private hosted composition, or external ecosystem matrix is
+  qualified for F1.
+- F1 protects staged sequence state when an HTTP Fetch abort/disconnect is observed
+  during configured latency and uses JSON-RPC `-32800` if it can still render a
+  response. It has no in-flight request-ID registry: `notifications/cancelled` is
+  accepted with HTTP `202` and deliberately ignored. MCP defines cancellation as a
+  SHOULD rather than a MUST, but clients cannot rely on message-level cancellation in
+  this tranche.
+- F1 supports bounded declarative `static`, `template`, `match`, `sequence`, and
+  configured `error` behavior. A `script` definition can only use an explicit
+  declarative fallback or fail closed because no executor is installed. `proxy`
+  record/replay is rejected. Mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
+  blueprints, and OIDC-federated CI access remain future work.
+- The OpenAPI document contains exactly five already-implemented self-hosted HTTP
+  control routes; the other 15 management MCP operations, including all five F1
+  operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
+  contract metadata until F4 implements scoped-key/role/ACL enforcement. Code Mode has
+  no Worker import, flag, `LOADER`, or `worker_loaders` binding, and `NoSandbox` always
+  rejects JavaScript. The client, Code Mode, sandbox, and mock-MCP packages remain
+  unpublished workspaces; local builds do not qualify npm distribution.
+- F1 schemas intentionally implement a bounded JSON Schema subset rather than a
+  general validator. `$ref`, `pattern`, `format`, remote schemas, unsafe keys, and
+  unknown vocabularies are rejected. Resource templates support only safe absolute
+  Level-1 `{variable}` expressions. Their bounded reverse matcher accepts empty
+  expansions, decodes percent-encoded reserved characters, and assigns adjacent
+  variables leftmost-minimally; raw reserved characters do not belong to a simple
+  expansion. Server definitions are capped at 64 capabilities per kind and 64 servers
+  per environment; pages are capped at 50 and stateful servers at 100 active sessions.
+  Current-revision application state is capped at 256 rows and 2 MiB per server.
+  Pagination cursors use a public unkeyed checksum for correctness; they are opaque
+  client tokens, not authorization credentials or cryptographic tamper protection.
+- Structurally bounded tool input can still exhaust the validator's internal shared
+  work budget when composition, traversal, path rendering, uniqueness, or canonical
+  comparison multiplies work. It then returns a bounded tool-level schema mismatch
+  with one root diagnostic instead of attempting exhaustive validation. The numeric
+  budget is not a compatibility guarantee. Template expansion is independently
+  capped at 256 KiB of UTF-8 output; stricter method-result limits can reject a
+  smaller rendered value.
 - The additive M7 management-read substrate is source-only. Application and scenario
   pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
   exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,

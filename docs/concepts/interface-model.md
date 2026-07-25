@@ -1,7 +1,7 @@
 # Interface model
 
-Status: Current interface taxonomy; future F-series surfaces are labeled unavailable
-Last reviewed: 2026-07-23
+Status: Current interface taxonomy including locally source-qualified F1
+Last reviewed: 2026-07-25
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
 the management MCP server, then an application under test connects to the
@@ -12,7 +12,8 @@ surface are supporting interfaces, not separate sources of product behavior.
 
 | Interface | Job | Current status |
 | --- | --- | --- |
-| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, inject scenarios, inspect traffic, and clean up | Implemented with 15 classic tools |
+| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 20 classic tools in the current source |
+| Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](../README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -24,20 +25,23 @@ The [generated management reference](../reference/management-tools.md) is the ex
 catalog for the current source. The [self-hosted HTTP reference](../reference/self-hosted-http.md)
 shows the smaller HTTP subset.
 
-## Management MCP is not a mock MCP server
+## Management MCP is not an environment mock MCP server
 
 Two MCP roles exist in the product direction and must not be conflated:
 
-1. **Management MCP** controls mockOS. It is available now at `/mcp` and exposes the
-   15 management tools.
-2. **Mock MCP servers** will let an agent under test connect to a simulated tool,
-   resource, and prompt server inside an environment. That F1 runtime is unavailable
-   today.
+1. **Management MCP** controls mockOS. It is available at `/mcp` and exposes 20
+   management tools in this source.
+2. **Environment mock MCP** lets an agent under test connect to configured synthetic
+   tools, resources, resource templates, and prompts inside an environment. The
+   locally source-qualified F1 boundary is documented in
+   [Environment-hosted mock MCP](../mock-mcp.md).
 
-A tool returned by management `tools/list` is a control-plane capability. A future
-tool exposed by `/e/{environmentId}/mcp-mock/{slug}` will be synthetic application
-traffic that mockOS captures and asserts. No such F1 route should be constructed or
-advertised from the current source.
+A tool returned by management `tools/list` is a control-plane capability. A tool
+returned from `/e/{environmentId}/mcp-mock/{slug}` or
+`https://{environmentId}.{baseDomain}/mcp-mock/{slug}` is synthetic application
+traffic that mockOS captures and asserts. The five F1 management tools define that
+dependency; they are not the dependency's own tools and do not have invented HTTP
+management routes.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
@@ -62,7 +66,7 @@ An operation without HTTP metadata is MCP-only. An HTTP-looking path in a design
 type is not an implemented route. `set_current_environment`, for example, is an MCP
 session convenience and has no HTTP equivalent.
 
-The registry currently labels operations with `env:ro` and `env:rw`, but those
+The registry currently labels all 20 operations with `env:ro` and `env:rw`, but those
 values are metadata until F4 implements and verifies shared scoped authorization.
 Current authentication and environment ownership checks remain real; the future
 scope vocabulary must not be marketed as enforced key permissions.
@@ -73,12 +77,16 @@ Management credentials and provider-shaped mock credentials are deliberately
 different:
 
 - `/mcp` and self-hosted management HTTP require the configured management key;
+- a mock MCP server accepts no credential or its own write-only Bearer Mock
+  Credential, according to its definition;
 - SCIM and Graph-shaped paths accept a non-empty synthetic Bearer value;
 - Okta directory-shaped paths accept a non-empty synthetic SSWS value; and
 - Okta Classic Authn is a public synthetic sign-in boundary.
 
-Never send a management key to a provider-shaped endpoint. Mock credentials exercise
-scheme and presence behavior; they are not real provider authorization.
+Never send a management key to a provider-shaped or environment mock MCP endpoint.
+The public Worker rejects an exact active platform key when defining a mock-MCP Bearer
+credential. Mock credentials exercise synthetic protocol behavior; they are not real
+provider authorization.
 
 ## Evidence vocabulary
 
