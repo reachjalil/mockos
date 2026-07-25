@@ -1,7 +1,7 @@
 # Threat model
 
-Status: M3/M5 controls accepted; bounded M6 controls have sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: M3/M5 controls accepted; bounded M6 deployed sample retained; OAuth evidence redaction has local MSAL X/Q and Worker source proof
+Last reviewed: 2026-07-25
 
 ## Assets and trust boundaries
 
@@ -28,7 +28,8 @@ redirect abuse, code replay, refresh-token theft, signing-key confusion, stored 
 hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, authentication-state user enumeration, Authn
 state/session capability theft or replay, parser or body resource exhaustion, secret
-leakage through logs, unbounded SQLite growth, denial of service, and SSRF through
+leakage through form/JSON bodies or redirect locations in durable logs, unbounded
+SQLite growth, denial of service, local-development CA overtrust, and SSRF through
 outbound provisioning targets.
 
 ## Implemented controls and evidence boundaries
@@ -65,11 +66,16 @@ outbound provisioning targets.
   provider-shaped data disclosure. Deactivating lifecycle transitions and SCIM
   password changes remove outstanding Authn capabilities atomically so reactivation
   cannot restore them.
-- Authn log capture recursively redacts password, passcode, secret, token, credential,
-  code, API-key, private-key, and authorization body keys; malformed or non-object
-  bodies are replaced wholesale. Sensitive authorization, proxy-authorization,
+- Structured request-log capture recursively redacts password, passcode, secret, token,
+  credential, code, code-verifier, client-assertion, API-key, private-key, and related
+  form/JSON keys. It redacts sensitive authorization, proxy-authorization,
   cookie/set-cookie, API-key, credential, password, private-key, secret, and token
-  header families are redacted on requests and responses.
+  request/response header families. Redirect `Location` values are parsed and secret
+  query or fragment fields are replaced before persistence; malformed locations fail
+  closed. Malformed JSON, primitive JSON requests, and unsupported-media request bodies
+  on provider routes are replaced with markers; malformed form requests are also
+  replaced. Credential-bearing OAuth, device, activation, and Classic Authn routes use
+  the stricter authentication-body marker where applicable.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
@@ -93,6 +99,19 @@ outbound provisioning targets.
   endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
+- The local MSAL acceptance harness keeps TLS verification enabled. For readiness, the
+  parent anchors the captured Wrangler leaf, validates its `localhost` hostname, and
+  requires the owned child's nonce. It writes the certificate to a temporary
+  mode-`0600` CA file and passes that file to the client through
+  `NODE_EXTRA_CA_CERTS`; this augments standard Node roots rather than exclusively
+  pinning the certificate. The client independently requires an HTTPS `localhost`
+  origin and the same nonce. Cleanup deletes the file, and the harness neither installs
+  a system CA nor uses `NODE_TLS_REJECT_UNAUTHORIZED=0`. No alternate-certificate
+  rejection is qualified.
+- The local signal-cleanup probe interrupts a ready harness with `SIGTERM` and requires
+  parent exit `143`, a reusable loopback port, an absent Wrangler process group, and
+  removed temporary state. It does not establish uncatchable `SIGKILL`, Windows
+  process-tree, or every active-client interruption boundary.
 
 The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) exercises a bounded
 authenticated MCP, environment isolation, OIDC/JWKS, refresh/lifecycle, directory,
@@ -108,6 +127,13 @@ conflict/race/tolerances, same-origin Authn CORS, account-state privacy, and exa
 header/body redaction. It is not a penetration test or a remote execution of every
 storage, retention, concurrency, and denial assertion above.
 
+The [MSAL Node local record](../evidence/entra-msal-node-local-qualification.md)
+separately exercises a real local HTTPS socket with pinned `@azure/msal-node` 5.4.2
+and the official MCP SDK. The exact code/refresh/disabled-refresh sequence passes, and
+the harness plus focused lifecycle Worker test prove that its password, client secret,
+authorization code, PKCE verifier, issued tokens, and redirect code are absent from
+durable evidence. This is local S/X/Q evidence, not H, a penetration test, V, or P.
+
 Those records establish deployed mock acceptance only when an exact revision is bound
 to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
 separate tier reserved for sanitized, independently reviewed comparison with a real
@@ -122,8 +148,10 @@ separate private boundary and does not change this self-hosted threat model. wor
 path mode also lacks provider-shaped wildcard hosts, so client compatibility remains
 intentionally bounded.
 
-Environment logs intentionally retain test protocol bodies and mock tokens because
-assertion is the product. This is not permission to send production secrets, account
+Environment logs intentionally retain safe test protocol structure because assertion
+is the product. Structured secret-bearing fields and headers are redacted, but the
+policy is based on names and media types and cannot classify every credential embedded
+in arbitrary content. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
 

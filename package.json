@@ -16,6 +16,8 @@
     "check": "pnpm format:check && pnpm lint && pnpm docs:check && pnpm m6:parity:check && pnpm brand:check && pnpm public-boundary:check && pnpm types && pnpm test && pnpm build && pnpm worker:check",
     "dev": "pnpm --filter @mockos/worker dev",
     "docs:check": "node scripts/check-doc-status.mjs",
+    "e2e:entra-msal": "node scripts/e2e-entra-msal.mjs",
+    "e2e:entra-msal-cleanup": "node scripts/e2e-entra-msal-cleanup.mjs",
     "e2e:provisioning": "node scripts/e2e-provisioning.mjs",
     "format": "biome format --write .",
     "format:check": "biome format .",
@@ -31,8 +33,10 @@
     "worker:dry-run": "pnpm --filter @mockos/worker exec wrangler deploy --dry-run --env= --outdir .wrangler/dry-run"
   },
   "devDependencies": {
+    "@azure/msal-node": "catalog:",
     "@biomejs/biome": "catalog:",
     "@changesets/cli": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "catalog:",
     "sharp": "catalog:",
     "turbo": "catalog:",

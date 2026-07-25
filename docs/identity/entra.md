@@ -1,7 +1,7 @@
 # Entra ID behavior
 
-Status: Accepted bounded M3/M5 Entra slices; bounded M6 token/key/overage sample deployed
-Last reviewed: 2026-07-22
+Status: Accepted bounded M3/M5 Entra slices and sampled M6 deployment; bounded MSAL Node 5.4.2 local X/Q qualification added
+Last reviewed: 2026-07-25
 
 mockOS models a tenant-specific Microsoft identity platform authority. In path hosting,
 the target authority is:
@@ -29,6 +29,57 @@ effective access and refresh credentials in the same transaction; a later refres
 attempt fails with Entra-shaped `invalid_grant` / `AADSTS50057` behavior. This has
 focused core, adapter, and Worker coverage, and the M3 deployed smoke sampled the
 rotation/lifecycle path.
+
+## Pinned MSAL Node client boundary
+
+The current source candidate qualifies one official-client slice through a real local
+HTTPS socket: `@azure/msal-node` 5.4.2 runs as a confidential client against a
+tenant-specific mockOS custom authority. The official MCP SDK 1.29.0 first creates,
+seeds, configures, observes, and deletes the disposable environment. MSAL then drives
+authorization URL construction, authorization-code redemption with S256 PKCE, and
+`acquireTokenSilent({ forceRefresh: true })`. After MCP lifecycle disable, another
+forced refresh surfaces `invalid_grant` with `AADSTS50057`.
+
+The client must use the exact `issuer` returned by `get_wellknown_urls`, trust the
+authority host explicitly, and select generic OIDC behavior:
+
+```js
+const app = new ConfidentialClientApplication({
+  auth: {
+    authority,
+    clientId,
+    clientSecret,
+    knownAuthorities: [new URL(authority).host],
+  },
+  system: { protocolMode: ProtocolMode.OIDC },
+});
+```
+
+The `knownAuthorities` entry is the host only. The test does not use static authority
+metadata or a Microsoft-owned tenant alias. Its actual-network boundary is a local
+Wrangler HTTPS listener. For readiness, the parent anchors the captured leaf, validates
+its `localhost` hostname, and requires the owned child's nonce. The child adds that
+certificate as a process-local CA through `NODE_EXTRA_CA_CERTS` while retaining
+standard Node trust, then independently requires an HTTPS `localhost` origin and the
+same nonce. TLS verification remains enabled, the temporary mode-`0600` CA file is
+removed during cleanup, and no alternate-certificate rejection is qualified.
+
+The exact provider sequence—discovery, login GET/POST, successful code redemption,
+successful forced refresh, and rejected post-disable forced refresh—is asserted from
+the durable request log. The same tranche closes a credential-evidence gap by redacting
+OAuth passwords, client secrets, authorization codes, PKCE verifiers, token response
+fields, and redirect `Location` query/fragment secrets before persistence.
+
+Normal completion deletes the MCP environment and stops the client, Wrangler process
+group, and temporary state. A separate local cleanup probe interrupts a ready parent
+with `SIGTERM` and verifies exit `143`, port release, process-group exit, and temporary
+state removal. It does not qualify `SIGKILL`, Windows process-tree behavior, or every
+active-client interruption point.
+
+This qualifies D/I/S/X/Q for that one MSAL Node flow. It has no hosted-smoke (H),
+verified-live (V), or production-ready (P) evidence. See the
+[task guide](../quickstarts/entra-msal-node.md) and
+[local evidence record](../evidence/entra-msal-node-local-qualification.md).
 
 The M6 token/key stream keeps schema v5 and adds a pre-published successor key.
 Rotation atomically promotes that successor, creates another successor, and converts the
@@ -113,8 +164,14 @@ case and is not verified-live Entra ID evidence.
 
 ## SDK note
 
-MSAL clients in workers.dev path mode need an explicit authority and may need metadata
-overrides depending on the SDK. Do not use `common`, `organizations`, or
-`consumers` as proof of full multi-tenant parity; deterministic mock tenants are the
-supported test unit. SDKs that require Microsoft-owned hosts or unimplemented Graph
-operations remain outside the current compatibility claim.
+The only qualified SDK is `@azure/msal-node` 5.4.2 in the confidential-client,
+authorization-code + S256 PKCE, forced-refresh flow above. It requires the explicit
+request-derived authority, `knownAuthorities: [new URL(authority).host]`, and
+`system.protocolMode: ProtocolMode.OIDC`. This local Wrangler proof does not qualify
+workers.dev or Cloud deployment behavior.
+
+Do not use `common`, `organizations`, or `consumers` as proof of multi-tenant parity;
+deterministic mock tenants are the supported test unit. `@azure/msal-browser`, device
+and client-credential grants, public-client interactive helpers, on-behalf-of,
+Microsoft Graph SDK calls, and SDKs that require Microsoft-owned hosts or
+unimplemented Graph operations remain outside the compatibility claim.

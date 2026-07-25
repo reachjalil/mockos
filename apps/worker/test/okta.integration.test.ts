@@ -426,6 +426,124 @@ describe("Okta public identity surface", () => {
       expect(captured).toContain("E0000004");
       expect(captured).toContain(preservedPasswordChanged);
       expect(captured).toContain("[REDACTED]");
+
+      const malformedScimSecret = "MalformedScimPasswordSecret";
+      const malformedScim = await worker.fetch(`${urls.scimBaseUrl}/Users`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer synthetic-scim-token",
+          "content-type": "application/scim+json",
+        },
+        body: `{"userName":"malformed.scim@example.test","password":"${malformedScimSecret}`,
+      });
+      expect(malformedScim.status).toBe(400);
+      const primitiveScimSecret = "PrimitiveScimPasswordSecret";
+      const primitiveScim = await worker.fetch(`${urls.scimBaseUrl}/Users`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer synthetic-scim-token",
+          "content-type": "application/scim+json",
+        },
+        body: JSON.stringify(primitiveScimSecret),
+      });
+      expect(primitiveScim.status).toBe(400);
+      const wrongMediaScimSecret = "WrongMediaScimPasswordSecret";
+      const wrongMediaScim = await worker.fetch(`${urls.scimBaseUrl}/Users`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer synthetic-scim-token",
+          "content-type": "text/plain",
+        },
+        body: `{"password":"${wrongMediaScimSecret}"}`,
+      });
+      expect(wrongMediaScim.status).toBe(415);
+      const scimLog = await callTool<{
+        entries: Array<{ requestBody: string | null }>;
+      }>(sessionId, "get_request_log", {
+        environmentId: environment.id,
+        source: "inbound",
+        method: "POST",
+        path: `/e/${environment.id}/scim/v2/Users`,
+        limit: 10,
+      });
+      expect(JSON.stringify(scimLog.entries)).not.toContain(malformedScimSecret);
+      expect(JSON.stringify(scimLog.entries)).not.toContain(primitiveScimSecret);
+      expect(JSON.stringify(scimLog.entries)).not.toContain(wrongMediaScimSecret);
+      expect(scimLog.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestBody: "[REDACTED malformed JSON body]",
+          }),
+          expect.objectContaining({
+            requestBody: "[REDACTED unstructured JSON request body]",
+          }),
+          expect.objectContaining({
+            requestBody: "[REDACTED unsupported request body]",
+          }),
+        ])
+      );
+
+      const malformedDirectorySecret = "MalformedOktaDirectoryPasswordSecret";
+      const malformedDirectory = await worker.fetch(`${urls.oktaApiBaseUrl}/users`, {
+        method: "POST",
+        headers: {
+          authorization: "SSWS synthetic-okta-api-token",
+          "content-type": "application/json",
+        },
+        body: `{"profile":{"login":"malformed.directory@example.test"},"credentials":{"password":{"value":"${malformedDirectorySecret}`,
+      });
+      expect(malformedDirectory.status).toBe(400);
+      const primitiveDirectorySecret = "PrimitiveOktaDirectoryPasswordSecret";
+      const primitiveDirectory = await worker.fetch(`${urls.oktaApiBaseUrl}/users`, {
+        method: "POST",
+        headers: {
+          authorization: "SSWS synthetic-okta-api-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(primitiveDirectorySecret),
+      });
+      expect(primitiveDirectory.status).toBe(400);
+      const wrongMediaDirectorySecret = "WrongMediaOktaDirectoryPasswordSecret";
+      const wrongMediaDirectory = await worker.fetch(`${urls.oktaApiBaseUrl}/users`, {
+        method: "POST",
+        headers: {
+          authorization: "SSWS synthetic-okta-api-token",
+          "content-type": "text/plain",
+        },
+        body: `{"credentials":{"password":{"value":"${wrongMediaDirectorySecret}"}}}`,
+      });
+      expect(wrongMediaDirectory.status).toBe(400);
+      const directoryLog = await callTool<{
+        entries: Array<{ requestBody: string | null }>;
+      }>(sessionId, "get_request_log", {
+        environmentId: environment.id,
+        source: "inbound",
+        method: "POST",
+        path: `/e/${environment.id}/api/v1/users`,
+        limit: 10,
+      });
+      expect(JSON.stringify(directoryLog.entries)).not.toContain(
+        malformedDirectorySecret
+      );
+      expect(JSON.stringify(directoryLog.entries)).not.toContain(
+        primitiveDirectorySecret
+      );
+      expect(JSON.stringify(directoryLog.entries)).not.toContain(
+        wrongMediaDirectorySecret
+      );
+      expect(directoryLog.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestBody: "[REDACTED malformed JSON body]",
+          }),
+          expect.objectContaining({
+            requestBody: "[REDACTED unstructured JSON request body]",
+          }),
+          expect.objectContaining({
+            requestBody: "[REDACTED unsupported request body]",
+          }),
+        ])
+      );
     } finally {
       await callTool(sessionId, "delete_environment", {
         environmentId: environment.id,

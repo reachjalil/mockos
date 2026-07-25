@@ -1,28 +1,29 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: M0-M3 accepted; tested M5 slice manually accepted; bounded M6 slice accepted with sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: M0-M3 accepted; tested M5 and bounded M6 deployment evidence retained; bounded MSAL Node local X/Q qualification added
+Last reviewed: 2026-07-25
 
 mockOS is an open-core, deterministic identity-platform test double for Entra ID and
 Okta integrations. The public repository is intended to contain the provider engine,
 self-hostable Cloudflare Worker, conformance fixtures, MCP tools, and test skill.
 
-The documentation distinguishes implementation state from three independent evidence
-tiers:
+The documentation keeps eight evidence levels separate:
 
-- **Documented target** means a sourced fixture or design exists but the runtime may
-  not.
-- **Implemented / source candidate** means linked code and automated tests exist, but
-  the source may not yet have an immutable accepted revision and its local or hosted-CI
-  gates may still be open.
-- **Source evidence** means exact-revision local or hosted-CI execution.
-- **Deployed acceptance** additionally binds that exact revision to an exact mockOS
-  deployment/version and a recorded acceptance run.
-- **Verified-live** is reserved for sanitized, independently reviewed comparison with
-  a real Entra ID tenant or Okta organization.
+| Code | Level | What it establishes |
+| --- | --- | --- |
+| D | Designed | A reviewed target, fixture, or contract exists. Runtime behavior is not implied. |
+| I | Implemented | Executable code exists. Test execution is not implied. |
+| S | Source-tested | Named focused or full local tests pass against the source candidate. |
+| X | Integration-tested | Named composed-runtime or actual-network tests pass at the stated boundary. |
+| Q | SDK/client-qualified | A pinned official client passes the exact stated flow. |
+| H | Hosted-smoke | An exact remote serving version passes a recorded mockOS smoke. |
+| V | Verified-live | Sanitized, independently reviewed evidence compares the case with a real provider. |
+| P | Production-ready | Distribution, operations, security, rollback, support, and release gates for the stated product claim are complete. |
 
-A workers.dev or hosted mockOS run can supply deployed mock evidence; it is never
-verified-live provider evidence. No current fixture or milestone is verified-live.
+The levels do not substitute for one another. A local official-SDK run can establish X
+and Q without H; a raw workers.dev smoke can establish H without Q; neither is V or P.
+Hosted CI is source execution, not H, unless it drives and identifies an exact deployed
+serving version. No current fixture or milestone is V or P.
 
 M0-M3 have accepted evidence. M3 adds path-mode inbound SCIM for Entra and Okta
 environments, bounded Microsoft Graph reads, bounded Okta Users/Groups and lifecycle
@@ -56,6 +57,16 @@ sampled all six M6 slices plus accepted regressions. It is deployed mock evidenc
 a remote run of every generated case or fixture, qualification of the guarded
 Cloudflare-credential deployment workflow, or verified-live provider evidence.
 
+The current source candidate adds one bounded client qualification:
+`@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local
+Wrangler HTTPS socket for custom-authority authorization code with S256 PKCE, forced
+MSAL refresh, lifecycle disable, request assertion, durable credential-redaction
+checks, normal cleanup, and a focused ready-Worker `SIGTERM` cleanup probe. This is
+D/I/S/X/Q evidence only. Read the
+[MSAL Node quickstart](./quickstarts/entra-msal-node.md) and
+[local qualification record](./evidence/entra-msal-node-local-qualification.md).
+There is no H, V, or P claim for that slice.
+
 The public source remains independently self-hostable. The later public docs-only close
 commit `e446eeda357b5e765401b97b892128fd70ac9ab8` was consumed by the separately
 qualified private M4 composition, but that private acceptance is not M5 evidence and
@@ -79,13 +90,15 @@ fixture alone.
 - [M5 local source qualification](./evidence/m5-local-source-qualification.md)
 - [M5 deployment and hosted provisioning acceptance](./evidence/m5-workers-dev-smoke.md)
 - [M6 staging and production workers.dev sampled acceptance](./evidence/m6-workers-dev-smoke.md)
+- [Entra MSAL Node local X/Q qualification](./evidence/entra-msal-node-local-qualification.md)
 - Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
   [SCIM](./identity/scim.md)
 - Security: [threat model](./security/threat-model.md) and
   [outbound provisioning](./security/outbound-provisioning.md)
 - [Hosting modes](./hosting-modes.md)
 - Quickstarts: [curl probe](./quickstarts/curl.md),
-  [Entra SSO](./quickstarts/entra-sso.md), and
+  [Entra SSO](./quickstarts/entra-sso.md),
+  [Entra with MSAL Node](./quickstarts/entra-msal-node.md), and
   [provisioning cycle](./quickstarts/provisioning-cycle.md)
 - Agent interfaces: [MCP](./mcp.md) and [testing skill](./skill.md)
 - [Source-built CLI](../packages/cli/README.md)
