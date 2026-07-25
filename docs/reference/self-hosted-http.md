@@ -53,7 +53,9 @@ environment-hosted mock MCP, or outbound target requests.
 - The five F1 mock-MCP definition/state operations are MCP-only. The configured
   environment endpoint is a data plane, not an HTTP management route.
 - The four F2 mock-LLM definition operations are also MCP-only. They persist
-  configuration but do not make an OpenAI or Anthropic provider route available.
+  configuration for the separate environment data plane and add no management
+  HTTP route. The bounded OpenAI provider operations are not management HTTP;
+  Anthropic remains unavailable.
 - The HTTP `get_environment_discovery` operation returns an OIDC discovery document;
   the MCP `get_wellknown_urls` tool returns a broader endpoint summary.
 - HTTP routes always require an explicit environment ID.

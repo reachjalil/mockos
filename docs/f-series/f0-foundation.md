@@ -1,6 +1,6 @@
 # F0 contract, client, and wrapper foundation
 
-Status: Source-complete locally; registry extended by locally qualified F1 and management-only F2
+Status: Source-complete locally; registry extended by qualified F1 and bounded OpenAI F2
 Last reviewed: 2026-07-25
 
 F0 established checked seams for the F-series without enabling a runtime. The current

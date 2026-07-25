@@ -142,6 +142,57 @@ describe("resolveEnvironmentRequest", () => {
     });
   });
 
+  it("resolves OpenAI mock LLM endpoints in both hosting modes", () => {
+    expect(
+      resolveEnvironmentRequest(
+        `https://mockos.example/e/${environmentId}/llm-mock/agent-tests/openai/v1/chat/completions`,
+        { hostingMode: "path" }
+      )
+    ).toEqual({
+      kind: "mock-llm",
+      dialect: "openai",
+      environmentId,
+      forwardedPath: "/llm-mock/agent-tests/openai/v1/chat/completions",
+      locator: { type: "environment", environmentId },
+      providerPath: "/chat/completions",
+      publicBase: `https://mockos.example/e/${environmentId}`,
+      slug: "agent-tests",
+    });
+
+    expect(
+      resolveEnvironmentRequest(
+        `https://${environmentId}.id.mockos.live/llm-mock/agent-tests/openai/v1/models/mockos-text-1`,
+        { hostingMode: "subdomain", baseDomain: "id.mockos.live" }
+      )
+    ).toEqual({
+      kind: "mock-llm",
+      dialect: "openai",
+      environmentId,
+      forwardedPath: "/llm-mock/agent-tests/openai/v1/models/mockos-text-1",
+      locator: { type: "environment", environmentId },
+      providerPath: "/models/mockos-text-1",
+      publicBase: `https://${environmentId}.id.mockos.live`,
+      slug: "agent-tests",
+    });
+  });
+
+  it("rejects malformed, nested, or unsupported mock LLM roots", () => {
+    for (const path of [
+      "/llm-mock/UPPERCASE/openai/v1/models",
+      "/llm-mock/a/extra/openai/v1/models",
+      "/llm-mock/%2Fescaped/openai/v1/models",
+      "/llm-mock/demo/anthropic/v1/messages",
+      "/llm-mock/demo/openai/v2/models",
+      "/llm-mock//openai/v1/models",
+    ]) {
+      expect(
+        resolveEnvironmentRequest(`https://mockos.example/e/${environmentId}${path}`, {
+          hostingMode: "path",
+        })
+      ).toBeUndefined();
+    }
+  });
+
   it("rejects malformed or nested mock MCP endpoint paths", () => {
     for (const path of [
       "/mcp-mock/UPPERCASE",
@@ -215,6 +266,34 @@ describe("resolveEnvironmentRequest", () => {
     expect(forwarded.headers.get("x-mockos-env")).toBe(environmentId);
     expect(forwarded.headers.get("x-mockos-route-kind")).toBe("mock-mcp");
     expect(forwarded.headers.get("x-mockos-mcp-slug")).toBe("recruiting-agent");
+    expect(forwarded.headers.has("x-mockos-issuer-base")).toBe(false);
+  });
+
+  it("replaces caller-supplied mock LLM routing metadata", () => {
+    const request = new Request(
+      `https://mockos.example/e/${environmentId}/llm-mock/agent-tests/openai/v1/models`,
+      {
+        headers: {
+          "x-mockos-llm-dialect": "anthropic",
+          "x-mockos-llm-slug": "spoofed",
+          "x-mockos-route-kind": "identity",
+        },
+      }
+    );
+    const resolution = resolveEnvironmentRequest(request, { hostingMode: "path" });
+    if (resolution?.kind !== "mock-llm") {
+      throw new Error("Expected mock LLM route.");
+    }
+
+    const forwarded = forwardEnvironmentRequest(request, resolution);
+
+    expect(new URL(forwarded.url).pathname).toBe(
+      "/llm-mock/agent-tests/openai/v1/models"
+    );
+    expect(forwarded.headers.get("x-mockos-env")).toBe(environmentId);
+    expect(forwarded.headers.get("x-mockos-route-kind")).toBe("mock-llm");
+    expect(forwarded.headers.get("x-mockos-llm-dialect")).toBe("openai");
+    expect(forwarded.headers.get("x-mockos-llm-slug")).toBe("agent-tests");
     expect(forwarded.headers.has("x-mockos-issuer-base")).toBe(false);
   });
 

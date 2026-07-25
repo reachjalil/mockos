@@ -16,6 +16,7 @@
     "@mockos/contracts": "workspace:*",
     "@mockos/core": "workspace:*",
     "@mockos/engine-http": "workspace:*",
+    "@mockos/llm-mock": "workspace:*",
     "@mockos/mcp": "workspace:*",
     "@mockos/mcp-mock": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",

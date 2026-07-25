@@ -98,7 +98,10 @@ export const mockLlmModelSchema = z
   .string()
   .min(1)
   .max(256)
-  .regex(/^[\x21-\x7e]+$/, "Model must contain visible ASCII characters only.");
+  .regex(/^[\x21-\x7e]+$/, "Model must contain visible ASCII characters only.")
+  .refine((model) => model !== "." && model !== "..", {
+    message: "Model cannot be a relative path segment.",
+  });
 export type MockLlmModel = z.infer<typeof mockLlmModelSchema>;
 
 export const mockLlmTextSegmentSchema = z

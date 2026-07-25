@@ -1,14 +1,14 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
 Status: MCP-first public documentation for accepted M0-M3/M5 and sampled M6, locally
-source-qualified F0/F1, the management-only F2 source slice, and bounded MSAL Node
-local X/Q qualification
+source-qualified F0/F1, the partial OpenAI F2 source slice, and bounded MSAL Node local
+X/Q qualification
 Last reviewed: 2026-07-26
 
 mockOS is an MCP-first, deterministic identity-platform and agent-dependency test
 double. Agents and automation use management MCP to create isolated Entra ID, Okta,
-and mock MCP environments. Applications under test connect to the provider-shaped
-identity routes or an environment-hosted mock MCP server.
+mock MCP, and mock LLM environments. Applications under test connect to the
+provider-shaped identity, MCP, or bounded OpenAI data plane.
 
 The documentation keeps eight evidence levels separate:
 
@@ -39,8 +39,9 @@ support, deployment, or provider-parity claim.
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
-| Define a future OpenAI/Anthropic mock safely through management MCP | [Mock LLM management definitions](./mock-llm.md) |
-| Understand the source-only mock-LLM plan/renderer architecture | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
+| Test an application against deterministic OpenAI model and non-streaming Chat Completions behavior | [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) |
+| Configure, replace, inspect, and remove a mock LLM through MCP | [MCP-managed mock OpenAI](./mock-llm.md) |
+| Understand the partial mock-LLM planner/provider architecture | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
 | Understand MCP, the console, CLI, HTTP, and provider endpoints | [Interface model](./concepts/interface-model.md) |
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
@@ -56,20 +57,19 @@ support, deployment, or provider-parity claim.
 - [Management MCP behavior](./mcp.md)
 - [Generated 24-tool reference](./reference/management-tools.md)
 - [Machine-readable management catalog](./reference/management-operations.v1.json)
+- [Machine-readable mock OpenAI provider manifest](./reference/mock-llm-openai.v1.json)
 - [Self-hosted HTTP reference](./reference/self-hosted-http.md)
 - [Source-built CLI](../packages/cli/README.md)
 - [Agent testing skill](./skill.md)
 
 The management MCP server at `/mcp` is the primary control interface. The current
 source exposes 24 tools. Five F1 tools configure mock MCP servers and four F2 tools
-configure management-only mock-LLM definitions, but the direct
-self-hosted management HTTP surface still contains only five identity-management
-routes and must not be presented as equivalent. The configured mock endpoint is a
-separate data plane called by an agent under test. Its source behavior, wire sequence,
-server contract, and limits are in [Environment-hosted mock MCP](./mock-mcp.md).
-Mock-LLM definitions do not yet create a provider data plane; their exact
-compare-and-swap, credential, persistence, and unsupported boundaries are in
-[Mock LLM management definitions](./mock-llm.md).
+configure mock-LLM definitions. The direct self-hosted management HTTP surface still
+contains only five identity-management routes and must not be presented as
+equivalent. Environment mock MCP and mock OpenAI endpoints are separate data planes
+called by the application or agent under test. Their source behavior and exact
+boundaries are in [Environment-hosted mock MCP](./mock-mcp.md) and
+[MCP-managed mock OpenAI](./mock-llm.md).
 
 The current source candidate adds one bounded client qualification:
 `@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local
@@ -91,6 +91,8 @@ does not add a private runtime dependency to this repository.
 - [Entra ID](./identity/entra.md)
 - [Okta](./identity/okta.md)
 - [SCIM 2.0](./identity/scim.md)
+- [Bounded OpenAI provider data plane](./mock-llm.md)
+- [OpenAI SDK quickstart](./quickstarts/openai-sdk.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
 - [Generated M6 executable-evidence matrix](./conformance/m6-generated-parity.md)
 
@@ -112,8 +114,8 @@ Access Key.
 - [Requirements traceability](./requirements-traceability.md)
 - [F0 contract, client, and wrapper foundation](./f-series/f0-foundation.md)
 - [F1 mock-MCP source implementation](./f-series/f1-mcp-foundation.md)
-- [F2 mock-LLM management guide](./mock-llm.md)
-- [Partial F2 LLM kernel and management slice](./f-series/f2-llm-kernel.md)
+- [F2 MCP-managed mock OpenAI guide](./mock-llm.md)
+- [Partial F2 LLM kernel and OpenAI provider slice](./f-series/f2-llm-kernel.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 
 The F-series roadmap is target design, not implementation evidence. F1 is locally
@@ -123,10 +125,12 @@ F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
 server-definition contract, four MCP-only operations, schema-v7 environment
 persistence, mandatory revision compare-and-swap, and write-only provider Mock
-Credentials. It still adds no provider route/auth enforcement, model renderer,
-runtime/conversation state, reset, network/timed streaming, observation, Wrangler,
-deployment, or Cloud pin, so mock LLM APIs remain unavailable as a data plane.
-Script execution, enforced scoped keys, and Code Mode also remain unavailable.
+Credentials. It now source-qualifies an OpenAI-only provider route for ordered model
+list/retrieve and non-streaming Chat Completions through the local Worker integration
+and pinned official SDK. Anthropic routing, SSE/timed streaming,
+runtime/conversation state, reset, LLM observations/assertions, Wrangler-network
+qualification, deployment, and Cloud pinning remain unavailable. Script execution,
+enforced scoped keys, and Code Mode also remain unavailable.
 
 ## Accepted evidence
 

@@ -192,6 +192,8 @@ describe("neutral mock LLM plan contracts", () => {
       { requestHash: "A".repeat(64) },
       { model: "model with spaces" },
       { model: "model\nname" },
+      { model: "." },
+      { model: ".." },
       { createdAtEpochSeconds: Number.MAX_SAFE_INTEGER + 1 },
       { turnIndex: -1 },
       { seed: "" },

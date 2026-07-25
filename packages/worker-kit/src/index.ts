@@ -5,6 +5,7 @@ export * from "./environment-catalog";
 export * from "./environment-do";
 export * from "./host-resolver";
 export * from "./mcp-agent";
+export * from "./mock-llm-runtime";
 export * from "./provisioning-http";
 export * from "./provisioning-bounds";
 export * from "./provisioning-orchestrator";

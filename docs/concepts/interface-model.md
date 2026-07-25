@@ -1,6 +1,6 @@
 # Interface model
 
-Status: Current interface taxonomy including F1 and management-only F2
+Status: Current interface taxonomy including F1 and partial OpenAI F2
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
@@ -14,8 +14,8 @@ surface are supporting interfaces, not separate sources of product behavior.
 | --- | --- | --- |
 | Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
-| Mock LLM definitions | Persist future OpenAI/Anthropic mock models, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; management only |
-| Environment-hosted mock LLM | Simulate OpenAI/Anthropic provider APIs for an application or agent SDK under test | Unavailable; no provider route/data plane |
+| Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
+| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | OpenAI model list/retrieve and non-streaming Chat Completions source-qualified locally; Anthropic, SSE, state, observations, and deployment unavailable |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](../README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -25,7 +25,9 @@ surface are supporting interfaces, not separate sources of product behavior.
 
 The [generated management reference](../reference/management-tools.md) is the exact
 catalog for the current source. The [self-hosted HTTP reference](../reference/self-hosted-http.md)
-shows the smaller HTTP subset.
+shows the smaller HTTP subset. The
+[mock OpenAI provider manifest](../reference/mock-llm-openai.v1.json) separately
+describes the application-facing F2 data plane.
 
 ## Management MCP is not an environment mock MCP server
 
@@ -45,11 +47,14 @@ traffic that mockOS captures and asserts. The five F1 management tools define th
 dependency; they are not the dependency's own tools and do not have invented HTTP
 management routes.
 
-The four F2 management tools similarly define future mock-LLM dependencies but do not
-make an OpenAI or Anthropic endpoint callable. They have no HTTP management
-projection. Use [Mock LLM management definitions](../mock-llm.md) for mandatory
-revision compare-and-swap, write-only provider keys, schema-v7 persistence, and the
-complete unsupported boundary.
+The four F2 management tools define mock-LLM dependencies and have no HTTP management
+projection. The configured application-facing route is separate: the current bounded
+source exposes OpenAI `/models`, `/models/{model}`, and non-streaming
+`/chat/completions`. The tools existed before that route, so their presence alone is
+not provider capability evidence; use authenticated `GET /models` as the
+non-mutating probe. Anthropic remains unavailable. Use
+[MCP-managed mock OpenAI](../mock-llm.md) for revision compare-and-swap, write-only
+provider keys, schema-v7 persistence, provider requests, and unsupported behavior.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
@@ -76,8 +81,8 @@ session convenience and has no HTTP equivalent.
 
 The registry currently labels all 24 operations with `env:ro` and `env:rw`, but those
 values are metadata until F4 implements and verifies shared scoped authorization.
-Current authentication and environment ownership checks remain real; the future
-scope vocabulary must not be marketed as enforced key permissions.
+Current public authentication, environment-existence, and isolation checks remain
+real; the future scope vocabulary must not be marketed as enforced key permissions.
 
 ## Trust boundaries
 
@@ -88,7 +93,10 @@ different:
 - a mock MCP server accepts no credential or its own write-only Bearer Mock
   Credential, according to its definition;
 - a mock-LLM definition accepts provider-scoped OpenAI/Anthropic Mock Credentials only
-  on its management write; no current provider route evaluates them;
+  on its management write;
+- the OpenAI data plane requires its own valid Bearer Mock Credential in both
+  `accept_any` and `strict` modes; only `strict` compares the current verifier, and
+  there is no Anthropic route;
 - SCIM and Graph-shaped paths accept a non-empty synthetic Bearer value;
 - Okta directory-shaped paths accept a non-empty synthetic SSWS value; and
 - Okta Classic Authn is a public synthetic sign-in boundary.

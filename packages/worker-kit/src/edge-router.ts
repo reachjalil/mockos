@@ -1,3 +1,10 @@
+import type { JsonValue } from "@mockos/contracts/behavior";
+import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
+import {
+  createMockLlmOpenAiFetchHandler,
+  type MockLlmOpenAiCatalog,
+  type MockLlmOpenAiRuntimeResult,
+} from "@mockos/llm-mock";
 import type { EnvironmentDurableObject } from "./environment-do";
 import {
   forwardEnvironmentRequest,
@@ -16,7 +23,20 @@ export type ProtocolRequestHooks = {
   beforeRequest?: (input: {
     environmentId: string;
     request: Request;
+    resolution: ReturnType<typeof resolveEnvironmentRequest>;
   }) => Promise<Response | undefined> | Response | undefined;
+};
+
+type MockLlmOpenAiEnvironmentRpc = {
+  getMockLlmOpenAiCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmOpenAiCatalog>>;
+  planMockLlmOpenAiChatCompletion(
+    slug: string,
+    credential: string,
+    request: JsonValue
+  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmPlan>>;
 };
 
 const resolveEnvironmentId = async (
@@ -46,10 +66,34 @@ export const routeEnvironmentRequest = async (
   if (!environmentId) {
     return new Response("Environment not found.", { status: 404 });
   }
-  const intercepted = await hooks.beforeRequest?.({ environmentId, request });
+  const intercepted = await hooks.beforeRequest?.({
+    environmentId,
+    request,
+    resolution,
+  });
   if (intercepted) return intercepted;
   const id = bindings.ENVIRONMENTS.idFromName(environmentId);
   const stub = bindings.ENVIRONMENTS.get(id);
+  if (resolution.kind === "mock-llm") {
+    const mockLlm = stub as unknown as MockLlmOpenAiEnvironmentRpc;
+    const handler = createMockLlmOpenAiFetchHandler({
+      ...(bindings.API_KEY ? { platformApiKey: bindings.API_KEY } : {}),
+      runtime: {
+        getCatalog: (input) =>
+          mockLlm.getMockLlmOpenAiCatalog(input.slug, input.credential),
+        planChatCompletion: (input) =>
+          mockLlm.planMockLlmOpenAiChatCompletion(
+            input.slug,
+            input.credential,
+            input.request
+          ),
+      },
+    });
+    return handler(request, {
+      slug: resolution.slug,
+      providerPath: resolution.providerPath,
+    });
+  }
   const controlAuthorization = bindings.API_KEY
     ? request.headers.get("authorization") === `Bearer ${bindings.API_KEY}`
     : false;

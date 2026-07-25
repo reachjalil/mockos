@@ -7,6 +7,20 @@ type MockLlmErrorPlan = Extract<MockLlmPlan, { readonly kind: "error" }>;
 type MockLlmErrorKind = MockLlmErrorPlan["error"]["kind"];
 type MockLlmStopReason = MockLlmResponsePlan["stopReason"];
 
+export type RenderOpenAiPlanOptions = RenderLlmPlanOptions & {
+  /**
+   * Provider invocation identity. Pure callers may omit both values and retain
+   * the deterministic plan ID used by the source fixtures.
+   */
+  readonly requestId?: string;
+  readonly responseId?: string;
+};
+
+type OpenAiWireIdentity = {
+  readonly requestId: string;
+  readonly responseId: string;
+};
+
 const OPENAI_ERROR_STATUS = {
   invalid_request: 400,
   authentication: 401,
@@ -38,18 +52,21 @@ const OPENAI_FINISH_REASON = {
   tool_use: "tool_calls",
 } as const satisfies Record<MockLlmStopReason, string>;
 
-const jsonHeaders = (planId: string): Readonly<Record<string, string>> => ({
+const jsonHeaders = (requestId: string): Readonly<Record<string, string>> => ({
   "content-type": "application/json",
-  "x-request-id": planId,
+  "x-request-id": requestId,
 });
 
-const eventStreamHeaders = (planId: string): Readonly<Record<string, string>> => ({
+const eventStreamHeaders = (requestId: string): Readonly<Record<string, string>> => ({
   "content-type": "text/event-stream",
-  "x-request-id": planId,
+  "x-request-id": requestId,
 });
 
-const errorHeaders = (plan: MockLlmErrorPlan): Readonly<Record<string, string>> => ({
-  ...jsonHeaders(plan.planId),
+const errorHeaders = (
+  plan: MockLlmErrorPlan,
+  requestId: string
+): Readonly<Record<string, string>> => ({
+  ...jsonHeaders(requestId),
   ...(plan.error.retryAfterSeconds === undefined
     ? {}
     : { "retry-after": String(plan.error.retryAfterSeconds) }),
@@ -89,7 +106,10 @@ const completionUsage = (plan: MockLlmResponsePlan) => ({
   total_tokens: plan.usage.inputTokens + plan.usage.outputTokens,
 });
 
-const renderOpenAiJsonResponse = (plan: MockLlmResponsePlan): RenderedLlmWire => {
+const renderOpenAiJsonResponse = (
+  plan: MockLlmResponsePlan,
+  identity: OpenAiWireIdentity
+): RenderedLlmWire => {
   const textSegments = plan.segments.filter(
     (
       segment
@@ -102,9 +122,9 @@ const renderOpenAiJsonResponse = (plan: MockLlmResponsePlan): RenderedLlmWire =>
   return {
     kind: "json",
     status: 200,
-    headers: jsonHeaders(plan.planId),
+    headers: jsonHeaders(identity.requestId),
     body: {
-      id: plan.planId,
+      id: identity.responseId,
       object: "chat.completion",
       created: plan.createdAtEpochSeconds,
       model: plan.model,
@@ -134,10 +154,11 @@ const openAiSseFrame = (event: Readonly<Record<string, unknown>>): string =>
 
 const openAiChunk = (
   plan: MockLlmResponsePlan,
+  responseId: string,
   choice: Readonly<Record<string, unknown>>,
   includeUsage: boolean
 ): Readonly<Record<string, unknown>> => ({
-  id: plan.planId,
+  id: responseId,
   object: "chat.completion.chunk",
   created: plan.createdAtEpochSeconds,
   model: plan.model,
@@ -147,12 +168,14 @@ const openAiChunk = (
 
 const renderOpenAiSseResponse = (
   plan: MockLlmResponsePlan,
+  identity: OpenAiWireIdentity,
   includeUsage: boolean
 ): RenderedLlmWire => {
   const frames: string[] = [
     openAiSseFrame(
       openAiChunk(
         plan,
+        identity.responseId,
         {
           index: 0,
           delta: { role: "assistant", content: "", refusal: null },
@@ -172,6 +195,7 @@ const renderOpenAiSseResponse = (
           openAiSseFrame(
             openAiChunk(
               plan,
+              identity.responseId,
               {
                 index: 0,
                 delta: { content: text },
@@ -195,6 +219,7 @@ const renderOpenAiSseResponse = (
       openAiSseFrame(
         openAiChunk(
           plan,
+          identity.responseId,
           {
             index: 0,
             delta: {
@@ -222,6 +247,7 @@ const renderOpenAiSseResponse = (
         openAiSseFrame(
           openAiChunk(
             plan,
+            identity.responseId,
             {
               index: 0,
               delta: {
@@ -247,6 +273,7 @@ const renderOpenAiSseResponse = (
     openAiSseFrame(
       openAiChunk(
         plan,
+        identity.responseId,
         {
           index: 0,
           delta: {},
@@ -260,7 +287,7 @@ const renderOpenAiSseResponse = (
   if (includeUsage) {
     frames.push(
       openAiSseFrame({
-        id: plan.planId,
+        id: identity.responseId,
         object: "chat.completion.chunk",
         created: plan.createdAtEpochSeconds,
         model: plan.model,
@@ -273,15 +300,18 @@ const renderOpenAiSseResponse = (
   return {
     kind: "sse",
     status: 200,
-    headers: eventStreamHeaders(plan.planId),
+    headers: eventStreamHeaders(identity.requestId),
     frames,
   };
 };
 
-const renderOpenAiError = (plan: MockLlmErrorPlan): RenderedLlmWire => ({
+const renderOpenAiError = (
+  plan: MockLlmErrorPlan,
+  requestId: string
+): RenderedLlmWire => ({
   kind: "json",
   status: OPENAI_ERROR_STATUS[plan.error.kind],
-  headers: errorHeaders(plan),
+  headers: errorHeaders(plan, requestId),
   body: {
     error: {
       message: plan.error.message,
@@ -298,10 +328,14 @@ const renderOpenAiError = (plan: MockLlmErrorPlan): RenderedLlmWire => ({
  */
 export const renderOpenAiPlan = (
   plan: MockLlmPlan,
-  options: RenderLlmPlanOptions
+  options: RenderOpenAiPlanOptions
 ): RenderedLlmWire => {
-  if (plan.kind === "error") return renderOpenAiError(plan);
+  const identity = {
+    requestId: options.requestId ?? plan.planId,
+    responseId: options.responseId ?? plan.planId,
+  };
+  if (plan.kind === "error") return renderOpenAiError(plan, identity.requestId);
   return options.stream
-    ? renderOpenAiSseResponse(plan, options.includeUsage === true)
-    : renderOpenAiJsonResponse(plan);
+    ? renderOpenAiSseResponse(plan, identity, options.includeUsage === true)
+    : renderOpenAiJsonResponse(plan, identity);
 };

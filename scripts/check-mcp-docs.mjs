@@ -41,6 +41,8 @@ const expectedHttpOperations = [
 const read = (path) => readFile(resolve(process.cwd(), path), "utf8");
 const catalogPath = "docs/reference/management-operations.v1.json";
 const catalog = JSON.parse(await read(catalogPath));
+const mockLlmOpenAiProviderPath = "docs/reference/mock-llm-openai.v1.json";
+const mockLlmOpenAiProvider = JSON.parse(await read(mockLlmOpenAiProviderPath));
 const failures = [];
 
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -87,9 +89,19 @@ const expectedMockLlmManagementTools = [
   "delete_mock_llm_server",
 ];
 if (
-  catalog.future?.mockLlmApis?.status !== "unavailable" ||
+  catalog.future?.mockLlmApis?.status !== "partial-source-qualified" ||
   catalog.future?.mockLlmApis?.phase !== "F2" ||
-  catalog.future?.mockLlmApis?.providerDataPlane !== "unavailable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.status !==
+    "openai-non-streaming-source-qualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.managementConfiguration !==
+    "MCP-only" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.manifest !==
+    mockLlmOpenAiProviderPath ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.anthropic !== "unavailable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.responsesApi !== "unavailable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.conversationState !== "unavailable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions !==
+    "unavailable" ||
   catalog.future?.mockLlmApis?.deployedAcceptance !== "unqualified" ||
   catalog.future?.mockLlmApis?.guide !== "docs/mock-llm.md" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.status !== "source-implemented" ||
@@ -127,10 +139,79 @@ if (
   !equal(
     catalog.future?.mockLlmApis?.managementDefinitions?.toolIds,
     expectedMockLlmManagementTools
+  ) ||
+  !equal(catalog.future?.mockLlmApis?.providerDataPlane?.openAi, mockLlmOpenAiProvider)
+) {
+  failures.push(
+    "F2 must expose exactly four MCP-only definition tools plus the generated bounded OpenAI non-streaming data-plane contract while deployment remains unqualified"
+  );
+}
+if (
+  mockLlmOpenAiProvider?.schemaVersion !== 1 ||
+  mockLlmOpenAiProvider?.generatedFrom !== "packages/llm-mock/src/openai-http.ts" ||
+  mockLlmOpenAiProvider?.status !== "source-qualified" ||
+  mockLlmOpenAiProvider?.compatibility !== "bounded-openai-chat-completions-subset" ||
+  mockLlmOpenAiProvider?.routeBases?.pathMode !==
+    "/e/{environmentId}/llm-mock/{slug}/openai/v1" ||
+  mockLlmOpenAiProvider?.routeBases?.subdomainMode !==
+    "https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1" ||
+  mockLlmOpenAiProvider?.capabilityProbe !== "GET /models" ||
+  mockLlmOpenAiProvider?.authentication?.scheme !== "bearer" ||
+  mockLlmOpenAiProvider?.authentication?.acceptAny !==
+    "valid-mock-credential-required-no-verifier-comparison" ||
+  mockLlmOpenAiProvider?.authentication?.strict !==
+    "current-sha256-verifier-constant-time" ||
+  mockLlmOpenAiProvider?.authentication?.platformManagementAccessKey !== "rejected" ||
+  mockLlmOpenAiProvider?.request?.maxBodyBytes !== 262144 ||
+  mockLlmOpenAiProvider?.request?.maxDepth !== 24 ||
+  mockLlmOpenAiProvider?.request?.maxNodes !== 10000 ||
+  mockLlmOpenAiProvider?.request?.maxMessages !== 256 ||
+  mockLlmOpenAiProvider?.request?.maxTools !== 64 ||
+  mockLlmOpenAiProvider?.request?.modelId !==
+    "1-256-visible-ascii-excluding-dot-segments" ||
+  mockLlmOpenAiProvider?.request?.streaming !== "rejected" ||
+  mockLlmOpenAiProvider?.request?.streamOptions !== "rejected" ||
+  mockLlmOpenAiProvider?.request?.unknownTopLevelFields !== "rejected" ||
+  mockLlmOpenAiProvider?.response?.maxBodyBytes !== 2097152 ||
+  mockLlmOpenAiProvider?.response?.transportIds !== "fresh-per-invocation" ||
+  mockLlmOpenAiProvider?.response?.deterministicPlanIdExposure !== "never" ||
+  mockLlmOpenAiProvider?.planning?.conversationState !== "stateless" ||
+  mockLlmOpenAiProvider?.planning?.turnIndex !== "prior-assistant-message-count" ||
+  mockLlmOpenAiProvider?.planning?.initialDelay !== "abort-aware" ||
+  mockLlmOpenAiProvider?.evidence?.localWorkerOfficialOpenAiSdk !== "qualified" ||
+  mockLlmOpenAiProvider?.evidence?.cloudPin !== "unqualified" ||
+  mockLlmOpenAiProvider?.evidence?.hostedDeployment !== "unqualified" ||
+  !equal(
+    mockLlmOpenAiProvider?.operations?.map(({ id, method, path, streaming }) => ({
+      id,
+      method,
+      path,
+      streaming,
+    })),
+    [
+      {
+        id: "create_chat_completion",
+        method: "POST",
+        path: "/chat/completions",
+        streaming: false,
+      },
+      {
+        id: "list_models",
+        method: "GET",
+        path: "/models",
+        streaming: false,
+      },
+      {
+        id: "retrieve_model",
+        method: "GET",
+        path: "/models/{model}",
+        streaming: false,
+      },
+    ]
   )
 ) {
   failures.push(
-    "F2 must expose exactly four source-implemented MCP-only definition tools while its provider data plane and deployed acceptance remain unavailable"
+    "the generated mock OpenAI provider manifest must preserve the exact bounded source-qualified contract"
   );
 }
 const putMockLlmTool = catalog.managementMcp?.tools?.find(
@@ -176,11 +257,15 @@ const publicMcpFiles = [
   "docs/concepts/interface-model.md",
   "docs/mock-mcp.md",
   "docs/mock-llm.md",
+  "docs/quickstarts/openai-sdk.md",
+  "docs/skill.md",
   "docs/f-series/f1-mcp-foundation.md",
   "docs/f-series/f2-llm-kernel.md",
   "docs/reference/management-tools.md",
   "docs/reference/self-hosted-http.md",
+  "skills/mockos-testing/SKILL.md",
   catalogPath,
+  mockLlmOpenAiProviderPath,
   "llms.txt",
   "llms-full.txt",
 ];
@@ -284,42 +369,46 @@ if (mockMcpGuide?.includes("POST /__mockos/v1") && mockMcpGuide.includes("mock M
 
 const mockLlmGuide = contents.find(([path]) => path === "docs/mock-llm.md")?.[1];
 for (const required of [
-  "management-only",
+  "MCP-first",
+  "24 management MCP tools",
+  "five routes",
   "put_mock_llm_server",
   "list_mock_llm_servers",
   "get_mock_llm_server",
   "delete_mock_llm_server",
   "expectedRevision",
   "canonical replay",
-  "full desired definition",
+  "complete write",
   "resupply or rotate",
-  "`configured: true` is not a write shape",
-  "atomic compare-and-swap",
-  "missing or retried delete",
-  "MOCK_LLM_SERVER_REVISION_CONFLICT",
-  "write-only",
   "configured: true",
+  "atomic compare-and-swap",
+  "deleted: false",
+  "MOCK_LLM_SERVER_REVISION_CONFLICT",
   "secret-safe",
-  "bounded neutral-plan validation",
-  "platform Access Key as a substring",
+  "active platform management Access Key, including as a substring",
   "JSON keys or string values",
   "schema v7",
   "older v6 bundle",
-  "newer schema v7",
-  "forward-recovery",
-  "mockLlmApis",
-  "data plane remains unavailable",
-  "no reset operation",
-  "no provider route",
-  "no model renderer",
-  "no conversation",
-  "no observation",
-  "no paced stream",
-  "no Wrangler",
-  "no deployment",
-  "no Cloud pin",
-  "$MOCKOS_OPENAI_MOCK_CREDENTIAL",
-  "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL",
+  "roll forward",
+  "MCP-only",
+  "OpenAI-only",
+  "not a general OpenAI API",
+  "GET /models",
+  "/models/{model}",
+  "POST /chat/completions",
+  "accept_any",
+  "visible-ASCII strings",
+  "streaming_not_supported",
+  "turnIndex",
+  "abort-aware",
+  "empty `499`",
+  "fresh `x-request-id`",
+  "`planId` values are never exposed",
+  "2,097,152",
+  "no mock-LLM reset operation",
+  "LLM-specific observations or assertions",
+  "Cloud pinning",
+  "source-qualified locally",
 ]) {
   if (!mockLlmGuide?.includes(required)) {
     failures.push(`docs/mock-llm.md must describe ${required}`);
@@ -331,6 +420,51 @@ if (mockLlmGuide?.includes("POST /__mockos/v1")) {
   );
 }
 
+const openAiQuickstart = contents.find(
+  ([path]) => path === "docs/quickstarts/openai-sdk.md"
+)?.[1];
+for (const required of [
+  "put_mock_llm_server",
+  "GET /models",
+  "openai@6.49.0",
+  "maxRetries: 0",
+  "invalid_api_key",
+  "streaming_not_supported",
+  "delete_mock_llm_server",
+  "MOCK_LLM_SERVER_REVISION_CONFLICT",
+  "source-qualified",
+  "no hosted or deployed qualification",
+]) {
+  if (!openAiQuickstart?.includes(required)) {
+    failures.push(`docs/quickstarts/openai-sdk.md must describe ${required}`);
+  }
+}
+
+const skillGuide = contents.find(([path]) => path === "docs/skill.md")?.[1];
+const testingSkill = contents.find(
+  ([path]) => path === "skills/mockos-testing/SKILL.md"
+)?.[1];
+for (const [path, body] of [
+  ["docs/skill.md", skillGuide],
+  ["skills/mockos-testing/SKILL.md", testingSkill],
+]) {
+  for (const required of [
+    "put_mock_llm_server",
+    "expectedRevision: null",
+    "GET /models",
+    "6.49.0",
+    "maxRetries: 0",
+    "streaming_not_supported",
+    "delete_mock_llm_server",
+    "source",
+    "deployment",
+  ]) {
+    if (!body?.includes(required)) {
+      failures.push(`${path} must describe ${required}`);
+    }
+  }
+}
+
 if (failures.length > 0) {
   throw new Error(
     `MCP-first documentation safety check failed:\n${failures
@@ -340,5 +474,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 24 tools, five HTTP routes, source-qualified F1, management-only F2, and inert secrets\n"
+  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded OpenAI F2, and inert secrets\n"
 );

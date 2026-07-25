@@ -1,4 +1,8 @@
-import { environmentIdSchema, mockMcpSlugSchema } from "@mockos/contracts";
+import {
+  environmentIdSchema,
+  mockLlmSlugSchema,
+  mockMcpSlugSchema,
+} from "@mockos/contracts";
 
 export type HostingMode = "path" | "subdomain";
 
@@ -34,9 +38,21 @@ export type ResolvedMockMcpRequest = {
   slug: string;
 };
 
+export type ResolvedMockLlmRequest = {
+  kind: "mock-llm";
+  dialect: "openai";
+  environmentId: string;
+  forwardedPath: string;
+  locator: Extract<EnvironmentLocator, { type: "environment" }>;
+  providerPath: string;
+  publicBase: string;
+  slug: string;
+};
+
 export type ResolvedEnvironmentRequest =
   | ResolvedIdentityRequest
-  | ResolvedMockMcpRequest;
+  | ResolvedMockMcpRequest
+  | ResolvedMockLlmRequest;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -85,6 +101,26 @@ const mockMcpSlugFromPath = (pathname: string): string | undefined => {
   return decoded && mockMcpSlugSchema.safeParse(decoded).success ? decoded : undefined;
 };
 
+const mockLlmFromPath = (
+  pathname: string
+): Pick<ResolvedMockLlmRequest, "dialect" | "providerPath" | "slug"> | undefined => {
+  const match = /^\/llm-mock\/([^/]+)\/openai\/v1(\/.*)?$/.exec(pathname);
+  if (!match?.[1]) return undefined;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
+  })();
+  if (!decoded || !mockLlmSlugSchema.safeParse(decoded).success) return undefined;
+  return {
+    dialect: "openai",
+    providerPath: match[2] || "/",
+    slug: decoded,
+  };
+};
+
 const pathModeResolution = (
   url: URL,
   config: HostResolverConfig
@@ -98,6 +134,7 @@ const pathModeResolution = (
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
   const forwardedPath = rest.slice(slash) || "/";
   const mockMcpSlug = mockMcpSlugFromPath(forwardedPath);
+  const mockLlm = mockLlmFromPath(forwardedPath);
   const publicBase = `${url.origin}${prefix}/${environmentId}`;
   if (mockMcpSlug) {
     return {
@@ -107,6 +144,16 @@ const pathModeResolution = (
       locator: { type: "environment", environmentId },
       publicBase,
       slug: mockMcpSlug,
+    };
+  }
+  if (mockLlm) {
+    return {
+      kind: "mock-llm",
+      environmentId,
+      forwardedPath,
+      locator: { type: "environment", environmentId },
+      publicBase,
+      ...mockLlm,
     };
   }
   const classification = classifyPath(forwardedPath);
@@ -160,6 +207,7 @@ const subdomainModeResolution = (
   const environmentId = hostname.slice(0, -suffix.length);
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
   const mockMcpSlug = mockMcpSlugFromPath(url.pathname);
+  const mockLlm = mockLlmFromPath(url.pathname);
   if (mockMcpSlug) {
     return {
       kind: "mock-mcp",
@@ -168,6 +216,16 @@ const subdomainModeResolution = (
       locator: { type: "environment", environmentId },
       publicBase: url.origin,
       slug: mockMcpSlug,
+    };
+  }
+  if (mockLlm) {
+    return {
+      kind: "mock-llm",
+      environmentId,
+      forwardedPath: url.pathname,
+      locator: { type: "environment", environmentId },
+      publicBase: url.origin,
+      ...mockLlm,
     };
   }
   if (!classification || classification.provider === "entra") return undefined;
@@ -208,7 +266,7 @@ export const graphBaseUrlForEnvironment = (
   environmentId: string,
   config: HostResolverConfig
 ): string | undefined => {
-  if (resolution.kind === "mock-mcp") return undefined;
+  if (resolution.kind !== "identity") return undefined;
   if (resolution.provider !== "entra") return undefined;
   if (!environmentIdSchema.safeParse(environmentId).success) {
     throw new Error("A valid environment ID is required for the Graph base URL.");
@@ -241,8 +299,11 @@ export const forwardEnvironmentRequest = (
     if (resolution.graphBaseUrl) {
       headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
     }
-  } else {
+  } else if (resolution.kind === "mock-mcp") {
     headers.set("x-mockos-mcp-slug", resolution.slug);
+  } else {
+    headers.set("x-mockos-llm-dialect", resolution.dialect);
+    headers.set("x-mockos-llm-slug", resolution.slug);
   }
   if (resolution.environmentId) {
     headers.set("x-mockos-env", resolution.environmentId);

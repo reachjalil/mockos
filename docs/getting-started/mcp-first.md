@@ -7,6 +7,8 @@ Use management MCP to create a deterministic identity environment, obtain its
 provider-shaped endpoints, exercise your application, assert what it sent, and remove
 the environment. MCP is the primary control interface; the OIDC, OAuth, SCIM, Graph,
 and Okta-shaped routes are the dependencies your application tests against.
+The same management interface also owns mock MCP and mock LLM definitions; their
+application-facing data planes remain separate task flows.
 
 ## Before connecting
 
@@ -55,7 +57,8 @@ workflow and tolerate additional tools from a newer compatible server. The curre
 source exposes exactly 24 tools; use the
 [generated management-tool reference](../reference/management-tools.md) instead of a
 copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
-four F2 tools persist management-only mock-LLM definitions.
+four F2 tools persist mock-LLM definitions. Those four tools do not prove that the
+connected endpoint serves the separate OpenAI provider route.
 
 Stop before creating state when:
 
@@ -121,7 +124,7 @@ global install. The full command workflow and exit-code contract are in the
 
 The management key authenticates management MCP. It must not be reused for SCIM,
 Graph-shaped, Okta directory-shaped, environment mock MCP, outbound provisioning, or
-application login traffic. Those surfaces use separate synthetic Mock Credentials
+mock OpenAI application traffic. Those surfaces use separate synthetic Mock Credentials
 documented in the
 [interface model](../concepts/interface-model.md#trust-boundaries).
 
@@ -133,11 +136,15 @@ minimum safe request evidence.
 
 This identity workflow does not configure the source-qualified F1 mock MCP server.
 Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for that task.
-It also does not configure the F2 definition substrate; use the
-[mock LLM management guide](../mock-llm.md) for its explicit revision, credential,
-persistence, and cleanup contract. Neither workflow enables:
+It also does not configure the F2 definition/provider workflow. Use the
+[OpenAI SDK quickstart](../quickstarts/openai-sdk.md) for the shortest end-to-end
+path, or [MCP-managed mock OpenAI](../mock-llm.md) for exact revision, credential,
+request, persistence, and cleanup contracts. That partial F2 workflow enables only
+OpenAI model list/retrieve and non-streaming Chat Completions. It does not enable:
 
-- mock OpenAI or Anthropic provider APIs (the F2 data plane remains unavailable);
+- Anthropic provider APIs, the OpenAI Responses API, or SSE;
+- LLM conversation state, reset, observations, or assertions;
+- Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);
 - enforced `env:ro` or `env:rw` key scopes (F4);
 - Code Mode `search` and `execute` (F6); or
