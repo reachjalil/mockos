@@ -86,6 +86,8 @@ import {
   type OktaRenderedError,
 } from "@mockos/engine-http";
 import type {
+  MockLlmAnthropicCatalog,
+  MockLlmAnthropicRuntimeResult,
   MockLlmOpenAiCatalog,
   MockLlmOpenAiRuntimeResult,
 } from "@mockos/llm-mock";
@@ -95,7 +97,10 @@ import {
   createOktaDirectoryEngine,
 } from "./directory-http";
 import { DoSqlStore } from "./do-sql-store";
-import { EnvironmentMockLlmOpenAiRuntime } from "./mock-llm-runtime";
+import {
+  EnvironmentMockLlmAnthropicRuntime,
+  EnvironmentMockLlmOpenAiRuntime,
+} from "./mock-llm-runtime";
 import { assertProvisioningPreparedOutputBounds } from "./provisioning-bounds";
 import { performProvisioningHttpOperation } from "./provisioning-http";
 import {
@@ -879,6 +884,7 @@ export class UnknownProvisioningApplicationError extends Error {
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
   readonly #mockLlm: MockLlmRepository;
+  readonly #mockLlmAnthropic: EnvironmentMockLlmAnthropicRuntime;
   readonly #mockLlmOpenAi: EnvironmentMockLlmOpenAiRuntime;
   readonly #mockMcp: MockMcpRepository;
   readonly #provisioning: ProvisioningPersistence;
@@ -905,6 +911,11 @@ export class EnvironmentDurableObject extends DurableObject {
     this.#ensureSchema();
     this.#provisioningEnvironment = asProvisioningEnvironment(env);
     this.#mockLlm = new MockLlmRepository(this.#store);
+    this.#mockLlmAnthropic = new EnvironmentMockLlmAnthropicRuntime(this.#mockLlm, {
+      ...(this.#provisioningEnvironment.API_KEY
+        ? { platformApiKey: this.#provisioningEnvironment.API_KEY }
+        : {}),
+    });
     this.#mockLlmOpenAi = new EnvironmentMockLlmOpenAiRuntime(this.#mockLlm, {
       ...(this.#provisioningEnvironment.API_KEY
         ? { platformApiKey: this.#provisioningEnvironment.API_KEY }
@@ -1197,6 +1208,31 @@ export class EnvironmentDurableObject extends DurableObject {
       credential,
       request
     );
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async getMockLlmAnthropicCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmAnthropicCatalog>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmAnthropic.getCatalog(slug, credential);
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async planMockLlmAnthropicMessage(
+    slug: string,
+    credential: string,
+    request: unknown
+  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmPlan>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmAnthropic.planMessage(slug, credential, request);
     const currentConfig = this.#readConfig();
     if (!currentConfig) return { ok: false, code: "server_not_found" };
     if (result.ok) await this.#touch(currentConfig);
@@ -1995,6 +2031,23 @@ export class EnvironmentDurableObject extends DurableObject {
       void request.body
         ?.cancel("mock LLM traffic must be composed at the edge")
         .catch(() => undefined);
+      const requestId = `req_${crypto.randomUUID().replaceAll("-", "")}`;
+      if (request.headers.get("x-mockos-llm-dialect") === "anthropic") {
+        return Response.json(
+          {
+            type: "error",
+            error: {
+              type: "api_error",
+              message: "The mock Anthropic request could not be completed.",
+            },
+            request_id: requestId,
+          },
+          {
+            status: 500,
+            headers: { "request-id": requestId },
+          }
+        );
+      }
       return Response.json(
         {
           error: {
@@ -2007,7 +2060,7 @@ export class EnvironmentDurableObject extends DurableObject {
         {
           status: 500,
           headers: {
-            "x-request-id": `req_${crypto.randomUUID().replaceAll("-", "")}`,
+            "x-request-id": requestId,
           },
         }
       );

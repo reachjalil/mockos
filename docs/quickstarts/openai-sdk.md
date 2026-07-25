@@ -242,7 +242,8 @@ integration using the official OpenAI JavaScript SDK with injected Fetch. It doe
 prove a Wrangler network round trip, hosted CI, Cloud consumption, staging,
 production, or live OpenAI parity.
 
-The current provider slice has no Anthropic route, SSE, Responses API, multimodal
+This OpenAI workflow does not exercise the separately source-qualified bounded
+Anthropic route. The current F2 slice still has no SSE, Responses API, multimodal
 content, persisted conversation state, reset, LLM observations/assertions, or broad
 Chat Completions parameter support. Use the
 [machine-readable provider manifest](../reference/mock-llm-openai.v1.json) instead of

@@ -5,6 +5,7 @@ import {
 } from "@mockos/contracts/operations";
 import { describe, expect, it } from "vitest";
 import {
+  generateMockLlmAnthropicProviderDocumentation,
   generateMockLlmOpenAiProviderDocumentation,
   generateMockosHttpOperationManifest,
   generateMockosManagementDocumentationCatalog,
@@ -75,7 +76,7 @@ describe("management OpenAPI generation", () => {
     ).toHaveLength(5);
   });
 
-  it("keeps F1 and the bounded F2 OpenAI slice source-qualified while later workloads stay unavailable", () => {
+  it("keeps F1 and the bounded F2 provider slice source-qualified while later workloads stay unavailable", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
     expect(catalog.managementMcp.scopeEnforcement).toBe("metadata-only");
@@ -125,11 +126,14 @@ describe("management OpenAPI generation", () => {
       },
       guide: "docs/mock-llm.md",
       providerDataPlane: {
-        status: "openai-non-streaming-source-qualified",
+        status: "openai-and-anthropic-non-streaming-source-qualified",
         managementConfiguration: "MCP-only",
-        manifest: "docs/reference/mock-llm-openai.v1.json",
+        manifests: [
+          "docs/reference/mock-llm-openai.v1.json",
+          "docs/reference/mock-llm-anthropic.v1.json",
+        ],
         openAi: generateMockLlmOpenAiProviderDocumentation(),
-        anthropic: "unavailable",
+        anthropic: generateMockLlmAnthropicProviderDocumentation(),
         responsesApi: "unavailable",
         conversationState: "unavailable",
         observationsAndAssertions: "unavailable",

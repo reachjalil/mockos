@@ -43,6 +43,8 @@ const catalogPath = "docs/reference/management-operations.v1.json";
 const catalog = JSON.parse(await read(catalogPath));
 const mockLlmOpenAiProviderPath = "docs/reference/mock-llm-openai.v1.json";
 const mockLlmOpenAiProvider = JSON.parse(await read(mockLlmOpenAiProviderPath));
+const mockLlmAnthropicProviderPath = "docs/reference/mock-llm-anthropic.v1.json";
+const mockLlmAnthropicProvider = JSON.parse(await read(mockLlmAnthropicProviderPath));
 const failures = [];
 
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -92,12 +94,13 @@ if (
   catalog.future?.mockLlmApis?.status !== "partial-source-qualified" ||
   catalog.future?.mockLlmApis?.phase !== "F2" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.status !==
-    "openai-non-streaming-source-qualified" ||
+    "openai-and-anthropic-non-streaming-source-qualified" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.managementConfiguration !==
     "MCP-only" ||
-  catalog.future?.mockLlmApis?.providerDataPlane?.manifest !==
-    mockLlmOpenAiProviderPath ||
-  catalog.future?.mockLlmApis?.providerDataPlane?.anthropic !== "unavailable" ||
+  !equal(catalog.future?.mockLlmApis?.providerDataPlane?.manifests, [
+    mockLlmOpenAiProviderPath,
+    mockLlmAnthropicProviderPath,
+  ]) ||
   catalog.future?.mockLlmApis?.providerDataPlane?.responsesApi !== "unavailable" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.conversationState !== "unavailable" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions !==
@@ -140,10 +143,17 @@ if (
     catalog.future?.mockLlmApis?.managementDefinitions?.toolIds,
     expectedMockLlmManagementTools
   ) ||
-  !equal(catalog.future?.mockLlmApis?.providerDataPlane?.openAi, mockLlmOpenAiProvider)
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.openAi,
+    mockLlmOpenAiProvider
+  ) ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.anthropic,
+    mockLlmAnthropicProvider
+  )
 ) {
   failures.push(
-    "F2 must expose exactly four MCP-only definition tools plus the generated bounded OpenAI non-streaming data-plane contract while deployment remains unqualified"
+    "F2 must expose exactly four MCP-only definition tools plus generated bounded OpenAI and Anthropic non-streaming data-plane contracts while deployment remains unqualified"
   );
 }
 if (
@@ -214,6 +224,98 @@ if (
     "the generated mock OpenAI provider manifest must preserve the exact bounded source-qualified contract"
   );
 }
+if (
+  mockLlmAnthropicProvider?.schemaVersion !== 1 ||
+  mockLlmAnthropicProvider?.generatedFrom !==
+    "packages/llm-mock/src/anthropic-http.ts" ||
+  mockLlmAnthropicProvider?.status !== "source-qualified" ||
+  mockLlmAnthropicProvider?.compatibility !== "bounded-anthropic-messages-subset" ||
+  mockLlmAnthropicProvider?.routeBases?.pathMode !==
+    "/e/{environmentId}/llm-mock/{slug}/anthropic" ||
+  mockLlmAnthropicProvider?.routeBases?.subdomainMode !==
+    "https://{environmentId}.{baseDomain}/llm-mock/{slug}/anthropic" ||
+  mockLlmAnthropicProvider?.capabilityProbe !== "GET /v1/models" ||
+  mockLlmAnthropicProvider?.authentication?.scheme !== "x-api-key" ||
+  mockLlmAnthropicProvider?.authentication?.acceptAny !==
+    "valid-mock-credential-required-no-verifier-comparison" ||
+  mockLlmAnthropicProvider?.authentication?.strict !==
+    "current-sha256-verifier-constant-time" ||
+  mockLlmAnthropicProvider?.authentication?.platformManagementAccessKey !==
+    "rejected" ||
+  mockLlmAnthropicProvider?.authentication?.alternateAuthenticationHeaders !==
+    "rejected" ||
+  mockLlmAnthropicProvider?.providerHeaders?.anthropicVersion !==
+    "required-exact-2023-06-01" ||
+  mockLlmAnthropicProvider?.providerHeaders?.betaHeaders !== "rejected" ||
+  mockLlmAnthropicProvider?.request?.maxBodyBytes !== 262144 ||
+  mockLlmAnthropicProvider?.request?.maxDepth !== 24 ||
+  mockLlmAnthropicProvider?.request?.maxNodes !== 10000 ||
+  mockLlmAnthropicProvider?.request?.maxMessages !== 256 ||
+  mockLlmAnthropicProvider?.request?.maxContentBlocksPerMessage !== 256 ||
+  mockLlmAnthropicProvider?.request?.maxTools !== 64 ||
+  mockLlmAnthropicProvider?.request?.maxTextBytes !== 65536 ||
+  mockLlmAnthropicProvider?.request?.maxToolValueBytes !== 65536 ||
+  mockLlmAnthropicProvider?.request?.maxToolValueDepth !== 16 ||
+  mockLlmAnthropicProvider?.request?.maxToolValueNodes !== 2000 ||
+  mockLlmAnthropicProvider?.request?.maxTokens !== "integer-1-through-1000000000" ||
+  mockLlmAnthropicProvider?.request?.maxTokensEffect !==
+    "validated-fingerprint-input-not-response-truncation" ||
+  mockLlmAnthropicProvider?.request?.turnAlternation !== "not-validated" ||
+  mockLlmAnthropicProvider?.request?.toolUseResultCorrelation !== "not-validated" ||
+  mockLlmAnthropicProvider?.request?.toolChoice !== "absent-or-auto" ||
+  mockLlmAnthropicProvider?.request?.streaming !== "rejected" ||
+  mockLlmAnthropicProvider?.request?.multimodal !== "unsupported" ||
+  mockLlmAnthropicProvider?.request?.betaFeatures !== "unsupported" ||
+  mockLlmAnthropicProvider?.request?.unknownTopLevelFields !== "rejected" ||
+  mockLlmAnthropicProvider?.modelPagination !==
+    "query-parameters-ignored-single-page" ||
+  mockLlmAnthropicProvider?.response?.maxBodyBytes !== 2097152 ||
+  mockLlmAnthropicProvider?.response?.requestIdHeader !== "request-id" ||
+  mockLlmAnthropicProvider?.response?.messageIdPrefix !== "msg_" ||
+  mockLlmAnthropicProvider?.response?.transportIds !== "fresh-per-invocation" ||
+  mockLlmAnthropicProvider?.response?.deterministicPlanIdExposure !== "never" ||
+  mockLlmAnthropicProvider?.planning?.conversationState !== "stateless" ||
+  mockLlmAnthropicProvider?.planning?.turnIndex !== "prior-assistant-message-count" ||
+  mockLlmAnthropicProvider?.planning?.initialDelay !== "abort-aware" ||
+  mockLlmAnthropicProvider?.security?.requestCredentialReflection !== "rejected" ||
+  mockLlmAnthropicProvider?.security?.responseCredentialReflection !== "rejected" ||
+  mockLlmAnthropicProvider?.evidence?.officialSdkVersion !== "0.115.0" ||
+  mockLlmAnthropicProvider?.evidence?.localWorkerOfficialAnthropicSdk !== "qualified" ||
+  mockLlmAnthropicProvider?.evidence?.cloudPin !== "unqualified" ||
+  mockLlmAnthropicProvider?.evidence?.hostedDeployment !== "unqualified" ||
+  !equal(
+    mockLlmAnthropicProvider?.operations?.map(({ id, method, path, streaming }) => ({
+      id,
+      method,
+      path,
+      streaming,
+    })),
+    [
+      {
+        id: "create_message",
+        method: "POST",
+        path: "/v1/messages",
+        streaming: false,
+      },
+      {
+        id: "list_models",
+        method: "GET",
+        path: "/v1/models",
+        streaming: false,
+      },
+      {
+        id: "retrieve_model",
+        method: "GET",
+        path: "/v1/models/{model}",
+        streaming: false,
+      },
+    ]
+  )
+) {
+  failures.push(
+    "the generated mock Anthropic provider manifest must preserve the exact bounded source-qualified contract"
+  );
+}
 const putMockLlmTool = catalog.managementMcp?.tools?.find(
   ({ operationId }) => operationId === "put_mock_llm_server"
 );
@@ -258,6 +360,7 @@ const publicMcpFiles = [
   "docs/mock-mcp.md",
   "docs/mock-llm.md",
   "docs/quickstarts/openai-sdk.md",
+  "docs/quickstarts/anthropic-sdk.md",
   "docs/skill.md",
   "docs/f-series/f1-mcp-foundation.md",
   "docs/f-series/f2-llm-kernel.md",
@@ -266,6 +369,7 @@ const publicMcpFiles = [
   "skills/mockos-testing/SKILL.md",
   catalogPath,
   mockLlmOpenAiProviderPath,
+  mockLlmAnthropicProviderPath,
   "llms.txt",
   "llms-full.txt",
 ];
@@ -391,11 +495,20 @@ for (const required of [
   "older v6 bundle",
   "roll forward",
   "MCP-only",
-  "OpenAI-only",
-  "not a general OpenAI API",
+  "OpenAI and Anthropic",
+  "not a general OpenAI or Anthropic API",
   "GET /models",
   "/models/{model}",
   "POST /chat/completions",
+  "GET /v1/models",
+  "/v1/models/{model}",
+  "POST /v1/messages",
+  "anthropic-version: 2023-06-01",
+  "x-api-key",
+  "beta headers",
+  "turn alternation",
+  "tool_use`↔`tool_result",
+  "`max_tokens` does not truncate",
   "accept_any",
   "visible-ASCII strings",
   "streaming_not_supported",
@@ -440,6 +553,30 @@ for (const required of [
   }
 }
 
+const anthropicQuickstart = contents.find(
+  ([path]) => path === "docs/quickstarts/anthropic-sdk.md"
+)?.[1];
+for (const required of [
+  "put_mock_llm_server",
+  "GET /v1/models",
+  "@anthropic-ai/sdk@0.115.0",
+  "maxRetries: 0",
+  "anthropic-version: 2023-06-01",
+  "x-api-key",
+  "authentication_error",
+  "invalid_request_error",
+  "beta headers",
+  "stream: true",
+  "delete_mock_llm_server",
+  "MOCK_LLM_SERVER_REVISION_CONFLICT",
+  "source-qualified",
+  "no hosted or deployed qualification",
+]) {
+  if (!anthropicQuickstart?.includes(required)) {
+    failures.push(`docs/quickstarts/anthropic-sdk.md must describe ${required}`);
+  }
+}
+
 const skillGuide = contents.find(([path]) => path === "docs/skill.md")?.[1];
 const testingSkill = contents.find(
   ([path]) => path === "skills/mockos-testing/SKILL.md"
@@ -453,8 +590,11 @@ for (const [path, body] of [
     "expectedRevision: null",
     "GET /models",
     "6.49.0",
+    "0.115.0",
     "maxRetries: 0",
     "streaming_not_supported",
+    "anthropic-version: 2023-06-01",
+    "GET /v1/models",
     "delete_mock_llm_server",
     "source",
     "deployment",
@@ -474,5 +614,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded OpenAI F2, and inert secrets\n"
+  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded OpenAI/Anthropic F2, and inert secrets\n"
 );

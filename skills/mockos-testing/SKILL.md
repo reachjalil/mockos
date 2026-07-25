@@ -1,16 +1,16 @@
 ---
 name: mockos-testing
 description: >-
-  Run accepted mockOS identity-integration tests and the bounded mock-OpenAI workflow
+  Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic workflows
   through authenticated management MCP: create isolated Entra ID or Okta
   environments, seed identities, register OIDC clients, configure MCP-managed mock
-  LLM definitions, call model discovery and non-streaming Chat Completions, run
+  LLM definitions, call model discovery and non-streaming Chat Completions or Messages, run
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, and clean up. Use when wiring or testing an application's
-  enterprise identity or OpenAI-shaped integration, or reproducing provider-shaped
-  failures; do not claim unrecorded deployment qualification, streaming, Anthropic,
+  enterprise identity or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped
+  failures; do not claim unrecorded deployment qualification, streaming/betas,
   the complete Okta Classic Authn transaction machine, or broad provider parity.
 ---
 
@@ -71,7 +71,7 @@ management MCP tools. The accepted identity workflow uses these 15:
 `get_request_log`, `assert_requests`, `simulate_lifecycle`, `get_wellknown_urls`, and
 `set_current_environment`.
 
-The bounded mock-OpenAI workflow additionally requires
+The bounded mock-LLM workflows additionally require
 `put_mock_llm_server`, `list_mock_llm_servers`, `get_mock_llm_server`, and
 `delete_mock_llm_server`. Require only the tools needed by the planned workflow and
 tolerate additional tools from a newer compatible server. Report a capability
@@ -90,7 +90,7 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
    test seed. This also selects the environment in the current MCP session.
 2. For an identity workflow, call `seed_identities` with explicit `users` and
    `groups`. Use the returned user ID in token tests; group members are seeded user
-   names. A mock-OpenAI-only workflow does not need identities.
+   names. A mock-LLM-only workflow does not need identities.
 3. For an identity workflow, call `create_application` with the exact callback URI and
    grants required by the test. Record the returned synthetic `clientId` and
    `clientSecret` without printing the secret.
@@ -137,7 +137,8 @@ evidence state.
    `chat.completions.create` call. The locally qualified source pins `openai` 6.49.0;
    another version needs its own evidence. The current request surface rejects
    `stream: true`, multimodal content, the Responses API, and unknown top-level keys.
-7. Prove one bounded negative case: missing model, wrong strict credential, or
+7. Prove one bounded negative case: missing model, a wrong credential in `strict`
+   mode, or
    `400 streaming_not_supported`. Do not expect an LLM request log or assertion
    result; this slice has no LLM-specific observation surface.
 8. In `finally`, read the latest safe definition, delete it with that positive
@@ -146,8 +147,31 @@ evidence state.
 
 The provider is stateless: prior `assistant` messages select the deterministic turn.
 Initial delay is abort-aware, but configured chunk cadence is inert without streaming.
-Do not claim Anthropic, SSE, conversation state, LLM observation/assertion, Wrangler
-or network qualification, Cloud pinning, deployment, or live OpenAI parity.
+Do not claim SSE, conversation state, LLM observation/assertion, Wrangler/network
+qualification, Cloud pinning, deployment, or live OpenAI parity.
+
+## Exercise the bounded mock-Anthropic flow
+
+Read the [Anthropic SDK quickstart](../../docs/quickstarts/anthropic-sdk.md) and
+[machine-readable manifest](../../docs/reference/mock-llm-anthropic.v1.json).
+
+1. Capability-negotiate the same four MCP-only definition tools and call
+   `put_mock_llm_server` with `expectedRevision: null`, an explicit environment ID,
+   an Anthropic-enabled definition, and a synthetic write-only provider credential.
+2. Require only `configured: true` in the safe strict view. Build
+   `<origin>/e/<environmentId>/llm-mock/<slug>/anthropic`; do not append `/v1` to the
+   SDK base.
+3. Probe `GET /v1/models` using `x-api-key` and exactly
+   `anthropic-version: 2023-06-01`. The MCP tools alone do not prove route support.
+4. Use official `@anthropic-ai/sdk` 0.115.0 with `maxRetries: 0` for model
+   list/retrieve and one non-streaming Message.
+5. In `strict` mode, prove wrong-key `401 authentication_error`. `accept_any` accepts
+   every syntactically valid `x-api-key` Mock Credential without verifier comparison.
+   Alternatively, prove version/beta/`stream: true` `400 invalid_request_error`.
+   Streaming, beta APIs, broad parameters, and LLM observations are unsupported.
+6. In `finally`, get the latest revision, call `delete_mock_llm_server`, reconcile
+   `MOCK_LLM_SERVER_REVISION_CONFLICT`, delete the disposable environment, and close
+   management MCP.
 
 ## Exercise the provider flow
 

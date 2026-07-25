@@ -755,7 +755,7 @@ beyond the tested clients.
 - No script execution; `script` falls back explicitly or fails closed.
 - No `proxy` or record/replay behavior.
 - This F1 mock-MCP route exposes no LLM API. The separate partial F2 surface supports
-  a bounded OpenAI-only route; Anthropic remains unavailable.
+  bounded OpenAI and Anthropic non-streaming provider routes.
 - No enforced `env:ro` or `env:rw` Access Key scopes before F4.
 - No direct HTTP management routes for the five F1 operations.
 - No npm publication, hosted acceptance, deployment acceptance, load envelope, or

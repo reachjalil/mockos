@@ -20,7 +20,7 @@ Repository path: `README.md`
 
 <p align="center"><strong>MCP-first identity and agent-dependency infrastructure for integration tests.</strong></p>
 
-<p align="center">Let agents build deterministic Entra ID, Okta, MCP, and OpenAI-shaped test environments, then run real integrations against their protocol surfaces.</p>
+<p align="center">Let agents build deterministic Entra ID, Okta, MCP, OpenAI, and Anthropic test environments, then run real integrations against their protocol surfaces.</p>
 
 > **Project status:** M0 through M3 are accepted at exact revision
 > `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
@@ -38,10 +38,11 @@ Repository path: `README.md`
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
 > MCP-only mock-LLM definition operations with environment-local schema-v7 persistence
-> and write-only provider keys plus an OpenAI-only, non-streaming provider data plane.
-> Package tests and the local Worker integration through the pinned official OpenAI
-> SDK qualify that bounded source slice. Anthropic, streaming, conversation state,
-> observations/assertions, and complete F2 remain unavailable. The guarded GitHub promotion
+> and write-only provider keys plus bounded OpenAI Chat Completions and Anthropic
+> Messages/model non-streaming data planes. Package tests and local Worker integrations
+> through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify that bounded
+> source slice. Streaming/betas, conversation state, observations/assertions, and
+> complete F2 remain unavailable. The guarded GitHub promotion
 > workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](docs/IMPLEMENTATION_STATUS.md).
@@ -76,11 +77,12 @@ configuration operations remain part of management MCP. Start with the
 [mock MCP guide](docs/mock-mcp.md). Four
 [mock-LLM definition operations](docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
-list/retrieve and non-streaming Chat Completions at an environment route through the
-official OpenAI SDK. Anthropic, SSE, conversation state, LLM observations/assertions,
-script execution, enforced scoped keys, Cloud integration, and deployment remain
-unavailable. Start with the
-[OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) and use the
+list/retrieve and non-streaming Chat Completions plus Anthropic model list/retrieve and
+non-streaming Messages at environment routes through pinned official SDKs.
+Streaming/betas, conversation state, LLM observations/assertions, script execution,
+enforced scoped keys, Cloud integration, and deployment remain unavailable. Start with
+the [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) or
+[Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md), and use the
 [partial F2 LLM record](docs/f-series/f2-llm-kernel.md) for architecture and exact
 evidence boundaries.
 
@@ -156,12 +158,13 @@ private control plane, licensing, billing, or a hosted mockOS account.
   JSON/SSE-frame renderers, pinned official-SDK consumption through injected
   in-process Fetch, strict server-definition contracts, four MCP-only management
   operations, schema-v7 environment persistence, mandatory revision
-  compare-and-swap, safe credential views, and a bounded OpenAI provider request
-  adapter. The local Worker integration configures through MCP and exercises official
-  SDK model list/retrieve, non-streaming text/tool/error completions, provider Bearer
-  auth, isolation, rotation, and fresh transport identity. Anthropic routing, SSE,
-  runtime/conversation state, reset, LLM observation/assertion, Wrangler-network or
-  deployed conformance, and Cloud pinning remain unavailable
+  compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
+  request adapters. Local Worker integrations configure through MCP and exercise
+  official SDK model list/retrieve, non-streaming text/tool/error calls,
+  provider-specific authentication/versioning, isolation, rotation, and fresh
+  transport identity. SSE/betas, runtime/conversation state, reset, LLM
+  observation/assertion, Wrangler-network or deployed conformance, and Cloud pinning
+  remain unavailable
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -179,11 +182,12 @@ configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values
 the Okta API accepts a non-empty synthetic SSWS value. An environment-hosted mock MCP
 server accepts no credential or its own write-only Bearer Mock Credential. A mock-LLM
 definition independently configures write-only OpenAI and Anthropic Mock Credentials.
-The current OpenAI data plane always requires a valid provider Bearer value:
-`accept_any` skips verifier comparison but is not unauthenticated, while `strict`
-compares the current verifier. There is no Anthropic route. Those are synthetic
-protocol boundaries, not production authorization; never forward the management key
-to them.
+The OpenAI data plane requires a valid provider Bearer value. The Anthropic data plane
+requires a valid `x-api-key` Mock Credential plus exactly
+`anthropic-version: 2023-06-01`. For both dialects, `accept_any` skips verifier
+comparison but is not unauthenticated, while `strict` compares only the dialect's
+current verifier. Those are synthetic protocol boundaries, not production
+authorization; never forward the management key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
@@ -224,7 +228,9 @@ pnpm check
 The concrete [local curl walkthrough](docs/quickstarts/curl.md) uses the implemented
 control and identity-protocol routes. The
 [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) configures a mock LLM
-through MCP and calls the bounded provider data plane. Read
+through MCP and calls its bounded provider data plane; the
+[Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md) does the same for the
+stable non-streaming Messages subset. Read
 [self-hosting](docs/self-hosting.md) before trying Wrangler and
 [known limitations](docs/known-limitations.md) before choosing an SDK.
 The sanitized [M6 workers.dev smoke evidence](docs/evidence/m6-workers-dev-smoke.md)
@@ -239,7 +245,7 @@ contracts <- core <- engine-http ---------- worker-kit <- apps/worker
      |          |                               ^
      |          +---- behavior/state ----------+
      +---- mcp-mock (mock data plane) ----------+
-     +---- llm-mock (partial OpenAI F2 data plane)
+     +---- llm-mock (partial OpenAI/Anthropic F2 data plane)
      +---- mcp (management plane) --------------+
                 testkit
 ```
@@ -253,8 +259,8 @@ and never persisted.
 
 Start at the [documentation index](docs/README.md). It routes agents and humans by
 task, distinguishes the 24-tool management MCP interface, the environment-hosted mock
-MCP data plane, the MCP-managed OpenAI data plane, and the five-route management HTTP
-subset, and
+MCP data plane, the MCP-managed OpenAI/Anthropic data planes, and the five-route
+management HTTP subset, and
 links support claims to their evidence. Use
 [requirements traceability](docs/requirements-traceability.md) and the
 [parity matrix](docs/conformance/parity-matrix.md) to distinguish targets from
@@ -336,7 +342,7 @@ source exposes exactly 24 tools; use the
 [generated management-tool reference](docs/reference/management-tools.md) instead of a
 copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
 four F2 tools persist mock-LLM definitions. Those four tools do not prove that the
-connected endpoint serves the separate OpenAI provider route.
+connected endpoint serves either separate provider route.
 
 Stop before creating state when:
 
@@ -402,7 +408,7 @@ global install. The full command workflow and exit-code contract are in the
 
 The management key authenticates management MCP. It must not be reused for SCIM,
 Graph-shaped, Okta directory-shaped, environment mock MCP, outbound provisioning, or
-mock OpenAI application traffic. Those surfaces use separate synthetic Mock Credentials
+mock OpenAI/Anthropic application traffic. Those surfaces use separate synthetic Mock Credentials
 documented in the
 [interface model](docs/concepts/interface-model.md#trust-boundaries).
 
@@ -415,12 +421,14 @@ minimum safe request evidence.
 This identity workflow does not configure the source-qualified F1 mock MCP server.
 Use the separate [environment-hosted mock MCP guide](docs/mock-mcp.md) for that task.
 It also does not configure the F2 definition/provider workflow. Use the
-[OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) for the shortest end-to-end
-path, or [MCP-managed mock OpenAI](docs/mock-llm.md) for exact revision, credential,
-request, persistence, and cleanup contracts. That partial F2 workflow enables only
-OpenAI model list/retrieve and non-streaming Chat Completions. It does not enable:
+[OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) or
+[Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md) for a short end-to-end
+path, or [MCP-managed mock OpenAI and Anthropic](docs/mock-llm.md) for exact revision,
+credential, request, persistence, and cleanup contracts. That partial F2 workflow
+enables bounded model discovery plus non-streaming OpenAI Chat Completions and
+Anthropic Messages. It does not enable:
 
-- Anthropic provider APIs, the OpenAI Responses API, or SSE;
+- broad Anthropic provider/beta APIs, the OpenAI Responses API, or SSE;
 - LLM conversation state, reset, observations, or assertions;
 - Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);
@@ -440,7 +448,7 @@ Repository path: `docs/concepts/interface-model.md`
 
 # Interface model
 
-Status: Current interface taxonomy including F1 and partial OpenAI F2
+Status: Current interface taxonomy including F1 and partial OpenAI/Anthropic F2
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
@@ -455,7 +463,7 @@ surface are supporting interfaces, not separate sources of product behavior.
 | Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
-| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | OpenAI model list/retrieve and non-streaming Chat Completions source-qualified locally; Anthropic, SSE, state, observations, and deployment unavailable |
+| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI Chat Completions and Anthropic Messages/model subsets source-qualified locally; streaming/betas, state, observations, and deployment unavailable |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](docs/README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -466,8 +474,9 @@ surface are supporting interfaces, not separate sources of product behavior.
 The [generated management reference](docs/reference/management-tools.md) is the exact
 catalog for the current source. The [self-hosted HTTP reference](docs/reference/self-hosted-http.md)
 shows the smaller HTTP subset. The
-[mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json) separately
-describes the application-facing F2 data plane.
+[mock OpenAI](docs/reference/mock-llm-openai.v1.json) and
+[mock Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests
+separately describe the application-facing F2 data planes.
 
 ## Management MCP is not an environment mock MCP server
 
@@ -490,11 +499,13 @@ management routes.
 The four F2 management tools define mock-LLM dependencies and have no HTTP management
 projection. The configured application-facing route is separate: the current bounded
 source exposes OpenAI `/models`, `/models/{model}`, and non-streaming
-`/chat/completions`. The tools existed before that route, so their presence alone is
-not provider capability evidence; use authenticated `GET /models` as the
-non-mutating probe. Anthropic remains unavailable. Use
-[MCP-managed mock OpenAI](docs/mock-llm.md) for revision compare-and-swap, write-only
-provider keys, schema-v7 persistence, provider requests, and unsupported behavior.
+`/chat/completions` plus Anthropic `/v1/models`, `/v1/models/{model}`, and
+non-streaming `/v1/messages`. The tools existed before those routes, so their presence
+alone is not provider capability evidence; use authenticated OpenAI `GET /models` or
+Anthropic `GET /v1/models` as the non-mutating probe. Use
+[MCP-managed mock OpenAI and Anthropic](docs/mock-llm.md) for revision
+compare-and-swap, write-only provider keys, schema-v7 persistence, provider requests,
+and unsupported behavior.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
@@ -535,8 +546,10 @@ different:
 - a mock-LLM definition accepts provider-scoped OpenAI/Anthropic Mock Credentials only
   on its management write;
 - the OpenAI data plane requires its own valid Bearer Mock Credential in both
-  `accept_any` and `strict` modes; only `strict` compares the current verifier, and
-  there is no Anthropic route;
+  `accept_any` and `strict` modes;
+- the Anthropic data plane requires its own valid `x-api-key` Mock Credential plus
+  exactly `anthropic-version: 2023-06-01`; beta and alternate auth headers fail closed;
+- for both dialects, only `strict` compares the dialect's current verifier;
 - SCIM and Graph-shaped paths accept a non-empty synthetic Bearer value;
 - Okta directory-shaped paths accept a non-empty synthetic SSWS value; and
 - Okta Classic Authn is a public synthetic sign-in boundary.
@@ -573,7 +586,7 @@ Repository path: `docs/reference/management-tools.md`
 
 # Management MCP tool reference
 
-Status: Generated from the implemented 24-tool management registry; F1 mock MCP and the bounded F2 OpenAI data plane are source-qualified locally
+Status: Generated from the implemented 24-tool management registry; F1 mock MCP and bounded F2 OpenAI/Anthropic data planes are source-qualified locally
 Last reviewed: 2026-07-25
 
 <!-- Generated by scripts/generate-f0-artifacts.ts. Do not edit. -->
@@ -9293,21 +9306,32 @@ invented HTTP path.
   `https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1`.
 - It implements `GET /models`, `GET /models/{model}`, and non-streaming
   `POST /chat/completions`. Use `GET /models` as the non-mutating capability
-  probe; the four management tools alone do not prove that provider routing exists.
+  probe.
 - Both `accept_any` and `strict` require a syntactically valid provider-scoped
   Bearer Mock Credential. Strict mode verifies the current SHA-256 verifier;
   platform management keys and alternate provider headers are rejected.
-- Streaming, Anthropic, conversation state, observations/assertions, Cloud pinning,
+- The bounded Anthropic data plane is source-qualified locally at
+  `/e/{environmentId}/llm-mock/{slug}/anthropic` or
+  `https://{environmentId}.{baseDomain}/llm-mock/{slug}/anthropic`.
+- It implements `GET /v1/models`, `GET /v1/models/{model}`, and non-streaming
+  `POST /v1/messages`. Use authenticated `GET /v1/models` as the capability probe;
+  the four management tools alone do not prove that either provider route exists.
+- Anthropic requires a provider-scoped `x-api-key` Mock Credential and the exact
+  `anthropic-version: 2023-06-01`; authorization aliases and every beta header are
+  rejected. The official `@anthropic-ai/sdk` 0.115.0 local Worker flow is qualified.
+- Streaming, beta APIs, OpenAI Responses, conversation state,
+  observations/assertions, Cloud pinning,
   hosted deployment, and live-provider parity remain unqualified or unavailable.
 - Deployed acceptance remains `unqualified`.
 - Use [the mock LLM guide](docs/mock-llm.md) for the exact definition, revision,
   provider request, credential, schema-migration, cleanup, evidence, and unsupported
-  boundaries. The [provider manifest](docs/reference/mock-llm-openai.v1.json) is generated from
+  boundaries. The [OpenAI](docs/reference/mock-llm-openai.v1.json) and
+  [Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests are generated from
   executable limits and operation metadata.
 
 ## Unavailable MCP surfaces
 
-- Anthropic, OpenAI Responses, provider streaming, durable conversations, and
+- OpenAI Responses, provider streaming/betas, durable conversations, and
   LLM-specific observation/assertion MCP surfaces remain unavailable.
 - Code Mode `search` and `execute` are planned for F6 and remain disabled.
 
@@ -9377,8 +9401,8 @@ environment-hosted mock MCP, or outbound target requests.
   environment endpoint is a data plane, not an HTTP management route.
 - The four F2 mock-LLM definition operations are also MCP-only. They persist
   configuration for the separate environment data plane and add no management
-  HTTP route. The bounded OpenAI provider operations are not management HTTP;
-  Anthropic remains unavailable.
+  HTTP route. The bounded OpenAI and Anthropic provider operations are not
+  management HTTP routes.
 - The HTTP `get_environment_discovery` operation returns an OIDC discovery document;
   the MCP `get_wellknown_urls` tool returns a broader endpoint summary.
 - HTTP routes always require an explicit environment ID.
@@ -9397,7 +9421,7 @@ Repository path: `docs/mcp.md`
 
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with a separate partial OpenAI data plane
+Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with separate partial OpenAI/Anthropic data planes
 Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -9418,7 +9442,7 @@ test. See the [interface model](docs/concepts/interface-model.md), begin identit
 workflows with the [MCP-first quickstart](docs/getting-started/mcp-first.md), and use the
 [mock MCP guide](docs/mock-mcp.md) for F1. Use the
 [mock LLM guide](docs/mock-llm.md) for the F2 MCP definition contract and separate
-OpenAI provider data plane.
+OpenAI/Anthropic provider data planes.
 
 ## Authentication fails closed
 
@@ -9464,8 +9488,10 @@ are generated from the canonical registry in the
 [management-tool reference](docs/reference/management-tools.md). The corresponding
 [JSON catalog](docs/reference/management-operations.v1.json) is intended for machine
 readers. The generated
-[mock OpenAI manifest](docs/reference/mock-llm-openai.v1.json) describes the separate
-application-facing provider operations; those operations are not management tools.
+[mock OpenAI](docs/reference/mock-llm-openai.v1.json) and
+[mock Anthropic](docs/reference/mock-llm-anthropic.v1.json) manifests describe the
+separate application-facing provider operations; those operations are not management
+tools.
 
 All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
@@ -9482,8 +9508,8 @@ idempotent success even when the supplied revision is stale.
 `delete_mock_llm_server` requires a positive current `expectedRevision`, deletes
 atomically on a match, returns the typed revision-conflict `409` on a stale/ABA
 revision, and returns `deleted: false` when the row is already absent. There is no LLM
-reset operation because the current OpenAI provider runtime is stateless and persists
-no conversation, response, or evaluator state.
+reset operation because the current provider runtimes are stateless and persist no
+conversation, response, or evaluator state.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -9513,7 +9539,10 @@ These are deliberately separate trust boundaries:
   provider Bearer Mock Credential. `accept_any` skips verifier comparison but is not
   unauthenticated; `strict` compares the current stored verifier. The route supports
   only model list/retrieve and non-streaming Chat Completions.
-- No Anthropic mock-LLM provider route exists.
+- `/llm-mock/{slug}/anthropic` under an environment requires a syntactically valid
+  provider `x-api-key` Mock Credential plus exactly
+  `anthropic-version: 2023-06-01`. It supports model list/retrieve and non-streaming
+  Messages; authorization aliases, beta headers, and streaming fail closed.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
@@ -10491,7 +10520,7 @@ beyond the tested clients.
 - No script execution; `script` falls back explicitly or fails closed.
 - No `proxy` or record/replay behavior.
 - This F1 mock-MCP route exposes no LLM API. The separate partial F2 surface supports
-  a bounded OpenAI-only route; Anthropic remains unavailable.
+  bounded OpenAI and Anthropic non-streaming provider routes.
 - No enforced `env:ro` or `env:rw` Access Key scopes before F4.
 - No direct HTTP management routes for the five F1 operations.
 - No npm publication, hosted acceptance, deployment acceptance, load envelope, or
@@ -10508,23 +10537,25 @@ boundary.
 
 Repository path: `docs/mock-llm.md`
 
-# MCP-managed mock OpenAI
+# MCP-managed mock OpenAI and Anthropic
 
-Status: OpenAI-only non-streaming provider data plane source-qualified locally; F2 remains partial
+Status: Bounded OpenAI and Anthropic non-streaming provider data planes source-qualified locally; F2 remains partial
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first. Agents and automation create, inspect, replace, and delete mock
 LLM definitions through management MCP. An application under test then calls a
-separate, environment-hosted OpenAI-shaped data plane. Configuration never moves to
-provider HTTP, and application traffic never becomes a management API.
+separate, environment-hosted OpenAI- or Anthropic-shaped data plane. Configuration
+never moves to provider HTTP, and application traffic never becomes a management API.
 
-The current source-qualified slice supports model list/retrieve and non-streaming
-Chat Completions through the official OpenAI JavaScript SDK. It is a bounded
-compatibility subset, not a general OpenAI API, deployed service, live-provider
-comparison, or complete F2 runtime. Start with the
-[OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) for one copyable workflow. The
-[machine-readable provider manifest](docs/reference/mock-llm-openai.v1.json) is the
-authority for routes, limits, and evidence state.
+The current source-qualified slice supports model list/retrieve plus non-streaming
+OpenAI Chat Completions and Anthropic Messages through pinned official JavaScript
+SDKs. It is a pair of bounded compatibility subsets, not a general OpenAI or Anthropic API,
+deployed service, live-provider comparison, or complete F2 runtime.
+Start with the [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) or
+[Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md). The generated
+[OpenAI](docs/reference/mock-llm-openai.v1.json) and
+[Anthropic](docs/reference/mock-llm-anthropic.v1.json) manifests are the
+machine-readable authorities for routes, limits, and evidence state.
 
 ## Product boundary
 
@@ -10544,17 +10575,22 @@ management MCP /mcp
           environment-local definition
           schema v7 + monotonic revision
 
-application or OpenAI SDK
+application or provider SDK
           │
-          │ provider-scoped Bearer Mock Credential
-          ▼
-/llm-mock/{slug}/openai/v1
+          ├── Bearer Mock Credential
+          │     └── /llm-mock/{slug}/openai/v1
+          │           ├── GET  /models
+          │           ├── GET  /models/{model}
+          │           └── POST /chat/completions
           │
-          ├── GET  /models
-          ├── GET  /models/{model}
-          └── POST /chat/completions
-                     │
-                     ▼
+          └── x-api-key Mock Credential
+                + anthropic-version: 2023-06-01
+                └── /llm-mock/{slug}/anthropic
+                      ├── GET  /v1/models
+                      ├── GET  /v1/models/{model}
+                      └── POST /v1/messages
+                               │
+                               ▼
           same environment definition
           deterministic stateless plan
 ```
@@ -10575,17 +10611,18 @@ It is not an alternative way to configure mockOS.
 | Configuration | Four MCP-only definition tools with explicit revision compare-and-swap |
 | OpenAI Models | Ordered list and exact retrieve |
 | OpenAI Chat Completions | One non-streaming choice with text, function tool calls, usage, deterministic behavior, and provider-shaped configured errors |
-| Authentication | A provider-scoped Bearer Mock Credential in both `accept_any` and `strict` modes |
+| Anthropic Models | Ordered single-page list and exact retrieve |
+| Anthropic Messages | One non-streaming message with text/custom `tool_use`, usage, deterministic behavior, and provider-shaped configured errors |
+| Authentication | Provider-scoped Bearer for OpenAI and `x-api-key` for Anthropic in both `accept_any` and `strict` modes |
+| Version contract | Anthropic requires exactly `anthropic-version: 2023-06-01`; beta headers fail closed |
 | Hosting forms | Environment path mode and environment subdomain mode |
-| SDK evidence | Pinned `openai` 6.49.0 through the local Worker integration using injected Fetch |
+| SDK evidence | Pinned `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0 through local Worker integrations using injected Fetch |
 | Runtime state | Stateless; the prior `assistant` message count selects the turn |
 | Timing | Bounded initial response/error delay with abort-aware edge waiting |
 | Evidence | Package and local Worker source qualification only |
 
-Anthropic definitions and a pure Anthropic renderer exist as source architecture, but
-there is no Anthropic provider route. Streaming, the OpenAI Responses API,
-conversation state, LLM observations/assertions, Cloud pinning, and deployment remain
-unavailable.
+Streaming, Anthropic beta APIs, the OpenAI Responses API, conversation state, LLM
+observations/assertions, Cloud pinning, and deployment remain unavailable.
 
 ## Prerequisites
 
@@ -10597,10 +10634,10 @@ You need:
 - an existing environment ID;
 - a provider-scoped synthetic Mock Credential of 16–1,024 RFC 6750 `b64token`
   characters; and
-- an application or official SDK that can set a custom OpenAI `baseURL`.
+- an application or official SDK that can set a custom provider `baseURL`.
 
 Use distinct values for the management Access Key and every provider Mock Credential.
-Never use a real OpenAI key, customer credential, or production token.
+Never use a real OpenAI or Anthropic key, customer credential, or production token.
 
 Capability-negotiate before mutation, but do not treat the four management tools as
 proof that a provider route is present: those tools existed in the earlier
@@ -10626,10 +10663,10 @@ The exact operations are:
 scoped-key enforcement. Current public management authentication, environment
 existence, and environment isolation checks still apply.
 
-### Create an OpenAI definition
+### Create a dual-provider definition
 
-Use `expectedRevision: null` for create-only intent. Disable Anthropic explicitly
-because this source slice has no Anthropic data plane:
+Use `expectedRevision: null` for create-only intent. Each enabled dialect has its own
+provider-scoped policy and raw write-only Mock Credential:
 
 ```json
 {
@@ -10648,7 +10685,11 @@ because this source slice has no Anthropic data plane:
         }
       },
       "anthropic": {
-        "enabled": false
+        "enabled": true,
+        "authentication": {
+          "mode": "strict",
+          "apiKey": "synthetic-anthropic-mock-credential"
+        }
       }
     },
     "models": [
@@ -10696,13 +10737,13 @@ authentication entirely.
 
 An enabled dialect chooses one policy:
 
-- `strict` compares the presented OpenAI Mock Credential with the current stored
-  SHA-256 verifier; or
+- `strict` compares the presented dialect-specific Mock Credential with the current
+  stored SHA-256 verifier; or
 - `accept_any` stores no verifier and accepts any syntactically valid provider
-  Bearer Mock Credential.
+  Mock Credential through that dialect's required authentication channel.
 
 `accept_any` does **not** make the route unauthenticated. A missing, malformed, or
-alternate-header credential still receives `401 invalid_api_key`.
+alternate-header credential still receives a provider-shaped `401`.
 
 ### Replace without losing credentials
 
@@ -10753,64 +10794,83 @@ conversation, response, or evaluator state.
 
 Choose the hosting form reported by the operator:
 
-| Mode | OpenAI base URL |
-| --- | --- |
-| Path | `<origin>/e/<environmentId>/llm-mock/<slug>/openai/v1` |
-| Subdomain | `https://<environmentId>.<baseDomain>/llm-mock/<slug>/openai/v1` |
+| Dialect | Path-mode base URL | Subdomain-mode base URL |
+| --- | --- | --- |
+| OpenAI | `<origin>/e/<environmentId>/llm-mock/<slug>/openai/v1` | `https://<environmentId>.<baseDomain>/llm-mock/<slug>/openai/v1` |
+| Anthropic | `<origin>/e/<environmentId>/llm-mock/<slug>/anthropic` | `https://<environmentId>.<baseDomain>/llm-mock/<slug>/anthropic` |
 
 For example, a local path-mode definition named `agent-tests` in environment
-`env_replace_me` uses:
+`env_replace_me` uses these SDK bases:
 
 ```text
 http://127.0.0.1:8787/e/env_replace_me/llm-mock/agent-tests/openai/v1
+http://127.0.0.1:8787/e/env_replace_me/llm-mock/agent-tests/anthropic
 ```
 
 The resolver percent-decodes the slug once and validates the decoded value. The
 request body cannot select an environment, slug, or dialect. Caller-supplied
 `x-mockos-*` routing headers are stripped before mockOS adds trusted routing metadata.
 
-Only the three generated operations are supported:
+Only the six generated provider operations are supported:
 
-| Method | Relative path | Outcome |
-| --- | --- | --- |
-| `GET` | `/models` | Ordered configured model list |
-| `GET` | `/models/{model}` | One exact configured model |
-| `POST` | `/chat/completions` | One non-streaming Chat Completion |
+| Dialect | Method | Relative path | Outcome |
+| --- | --- | --- | --- |
+| OpenAI | `GET` | `/models` | Ordered configured model list |
+| OpenAI | `GET` | `/models/{model}` | One exact configured model |
+| OpenAI | `POST` | `/chat/completions` | One non-streaming Chat Completion |
+| Anthropic | `GET` | `/v1/models` | Ordered configured model list |
+| Anthropic | `GET` | `/v1/models/{model}` | One exact configured model |
+| Anthropic | `POST` | `/v1/messages` | One non-streaming Message |
 
-Use the base exactly once. Do not append another `/v1`.
+Use each SDK base exactly as shown. OpenAI's base already ends in `/v1`; Anthropic's
+base intentionally does not because the SDK appends `/v1`.
 
 ## Authenticate provider traffic
 
-Send:
+OpenAI sends:
 
 ```http
 Authorization: Bearer <provider-scoped-mock-credential>
 ```
 
-The Bearer scheme is the only provider authentication channel in this slice.
-Requests are rejected before runtime dispatch when they:
+Anthropic sends both:
 
-- omit the header or present an invalid Bearer value;
-- include `X-API-Key` or `X-Anthropic-API-Key`;
+```http
+x-api-key: <provider-scoped-mock-credential>
+anthropic-version: 2023-06-01
+```
+
+OpenAI accepts only the Bearer channel. Anthropic accepts only `x-api-key` and
+requires exactly `anthropic-version: 2023-06-01`; a missing/different version or any
+`anthropic-beta`/`anthropic-beta-*` header returns a generic Anthropic
+`400 invalid_request_error` before runtime dispatch. The source slice has no beta
+allowlist.
+
+Provider requests are rejected before runtime dispatch when they:
+
+- omit or malform the dialect's required credential;
+- mix provider channels: OpenAI rejects `X-API-Key`/`X-Anthropic-API-Key`, while
+  Anthropic rejects `Authorization`/`X-Anthropic-API-Key`;
 - present the active platform management Access Key, including as a substring; or
 - place the presented provider credential or active platform key anywhere in the
-  Chat Completions JSON keys or string values.
+  Messages or Chat Completions JSON keys or string values.
 
 Strict verification hashes the presented credential before selecting the current
-definition and compares the fixed-length SHA-256 verifier without early exit. A Chat
-Completion rechecks the definition revision before committing its plan; a concurrent
-replacement causes bounded re-authentication and replanning or a generic internal
-failure. Rotation does not promise to cancel a request that has already passed its
-final current-revision check.
+definition and compares the fixed-length SHA-256 verifier without early exit. A
+completion/message rechecks the definition revision before committing its plan; a
+concurrent replacement causes bounded re-authentication and replanning or a generic
+internal failure. Each dialect verifies only its own current credential. Rotation
+does not promise to cancel a request that has already passed its final
+current-revision check.
 
 Do not send the management Access Key to the provider route. Mock Credentials are
 synthetic protocol inputs, not tenant or end-user authorization.
 
 ## Discover models
 
-`GET /models` is the recommended capability probe. It requires the same provider
-Bearer credential as Chat Completions and preserves model order from the MCP
-definition:
+Use authenticated OpenAI `GET /models` or Anthropic `GET /v1/models` as the
+dialect-specific capability probe. Each preserves model order from the MCP definition.
+OpenAI returns:
 
 ```json
 {
@@ -10826,14 +10886,40 @@ definition:
 }
 ```
 
-`GET /models/mock-agent-1` returns the same model object. Model IDs are exact,
-case-sensitive, visible-ASCII strings other than the exact path-special values `.`
-and `..`. A missing model returns
-`404 model_not_found` with `param: "model"`.
+Anthropic returns a single page:
 
-Every successful response receives a fresh `x-request-id`. A successful Chat
-Completion also receives a fresh `chatcmpl-...` body ID. Deterministic internal
-`planId` values are never exposed as transport identity.
+```json
+{
+  "data": [
+    {
+      "id": "mock-agent-1",
+      "type": "model",
+      "display_name": "Mock agent model",
+      "created_at": "1970-01-01T00:00:00.000Z",
+      "capabilities": null,
+      "max_input_tokens": null,
+      "max_tokens": null
+    }
+  ],
+  "first_id": "mock-agent-1",
+  "last_id": "mock-agent-1",
+  "has_more": false
+}
+```
+
+OpenAI `GET /models/mock-agent-1` and Anthropic
+`GET /v1/models/mock-agent-1` return their respective exact model object. Model IDs
+are exact, case-sensitive, visible-ASCII strings other than the path-special values
+`.` and `..`. A missing model returns the dialect's provider-shaped `404`.
+
+Anthropic model-list pagination query parameters are unsupported/ignored: the adapter
+returns the complete bounded catalog as one page with `has_more: false`. Do not claim
+cursor, `limit`, `before_id`, or `after_id` semantics from the broader API.
+
+Every OpenAI success receives a fresh `x-request-id`; every Anthropic success receives
+a fresh `request-id`. A successful Chat Completion receives a fresh `chatcmpl-...`
+body ID and a successful Anthropic Message receives a fresh `msg_...` body ID.
+Deterministic internal `planId` values are never exposed as transport identity.
 
 ## Call the bounded Chat Completions subset
 
@@ -10901,7 +10987,7 @@ adapter. Do not copy them into a client without versioning the assumption.
 ## Understand deterministic behavior
 
 The selected model's declarative behavior produces a provider-neutral immutable plan,
-which is then rendered into the bounded OpenAI response:
+which is then rendered into the selected bounded OpenAI or Anthropic response:
 
 - `static` returns fixed text or a fixed neutral response directive;
 - `template` renders bounded request-derived values;
@@ -10911,16 +10997,17 @@ which is then rendered into the bounded OpenAI response:
 - `script` requires an explicit declarative fallback until F3 supplies a sandbox.
 
 The runtime is stateless. It derives `turnIndex` by counting prior messages whose role
-is `assistant`; `developer`, `system`, `user`, and `tool` messages do not increment
-it. A first user-only call is turn zero. To select the next sequence step, include the
-prior assistant response in the next request. There is no implicit session,
-conversation handle, retry-deduplication record, or resettable LLM state.
+is `assistant`; other accepted roles do not increment it. A first user-only call is
+turn zero. To select the next sequence step, include the prior assistant response in
+the next request. There is no implicit session, conversation handle,
+retry-deduplication record, or resettable LLM state.
 
 Normalized messages, declared tool names and definitions, dialect, operation, and
 model enter the deterministic request fingerprint. Authorization and internal routing
-headers do not. The configured default usage is returned as
-`prompt_tokens`, `completion_tokens`, and their derived `total_tokens`; mockOS does
-not tokenize request text or claim provider-accurate accounting.
+headers do not. OpenAI returns configured default usage as `prompt_tokens`,
+`completion_tokens`, and derived `total_tokens`; Anthropic returns it as
+`input_tokens` and `output_tokens`. mockOS does not tokenize request text or claim
+provider-accurate accounting.
 
 Initial response or error delay is honored outside the Environment Durable Object
 with abort-aware waiting. With no streaming, chunk delay, chunk size, and maximum
@@ -10965,9 +11052,95 @@ A supported response uses the normal Chat Completions function-call shape:
 The application may append that assistant message and a matching `tool` result to a
 later request. Only the assistant message advances `turnIndex`.
 
+## Call the bounded Anthropic Messages subset
+
+`POST /v1/messages` accepts only:
+
+| Field | Supported form |
+| --- | --- |
+| `model` | Required configured model ID |
+| `max_tokens` | Required safe integer from 1 through 1,000,000,000 |
+| `messages` | Required array of 1–256 bounded `user`/`assistant` messages |
+| `system` | Optional bounded string; an array of system blocks is rejected |
+| `stream` | Absent or `false` |
+| `tools` | Optional array of at most 64 unique custom tool definitions |
+| `tool_choice` | Absent or exactly `{ "type": "auto" }` |
+
+Unknown top-level fields fail closed. Sampling controls, `stop_sequences`, `metadata`,
+`thinking`, service tiers, beta fields, and other broad Messages parameters are
+rejected rather than ignored. `stream: true` returns an Anthropic
+`400 invalid_request_error`. Required `max_tokens` enters the deterministic request
+fingerprint, but this first slice does not synthesize tokenization or truncate a
+configured plan: `max_tokens` does not truncate output.
+
+Each message has exactly `role` and `content`. Content may be a bounded string or an
+array of 1–256 supported blocks:
+
+| Message role | Supported content blocks |
+| --- | --- |
+| `user` | `text` and `tool_result` |
+| `assistant` | `text` and `tool_use` |
+
+A `text` block contains only `type: "text"` and a string. An assistant `tool_use`
+block contains only `type`, a 1–256-character `id`, a valid tool `name`, and an
+object `input`. A user `tool_result` contains only `type`, a 1–256-character
+`tool_use_id`, optional string or non-empty text-block-array `content`, and optional
+Boolean `is_error`.
+
+The parser enforces those shapes and bounds but not the broader conversation grammar:
+it does not require user/assistant turn alternation, and it does not correlate a
+`tool_use`↔`tool_result` ID pair. Tests that need those semantics must assert them in
+the application under test; mockOS does not currently reject an unmatched history ID.
+
+Custom tool definitions accept only:
+
+- unique `[A-Za-z0-9_-]{1,64}` `name`;
+- optional bounded string `description`;
+- required `input_schema` object with `type: "object"`; and
+- optional literal `type: "custom"`.
+
+Built-in/server tools and named/any/none tool choice are unsupported. A
+behavior-selected `tool_use` is served only when its name appears in the request's
+declared tools; otherwise mockOS fails closed with a generic Anthropic `500
+api_error`.
+
+Anthropic uses the same whole-request limits as the OpenAI adapter: 262,144 UTF-8
+bytes, depth 24, 10,000 JSON nodes, 256 messages, 64 tools, and 65,536 UTF-8 bytes per
+text/tool value. Each tool value is additionally bounded to depth 16 and 2,000 nodes;
+each message or tool-result block array is capped at 256 blocks. Response JSON is
+capped at 2,097,152 UTF-8 bytes.
+
+A successful text plan returns a provider-shaped Message:
+
+```json
+{
+  "id": "msg_fresh_transport_identity",
+  "type": "message",
+  "role": "assistant",
+  "model": "mock-agent-1",
+  "content": [
+    {
+      "type": "text",
+      "text": "This response is deterministic.",
+      "citations": null
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 11,
+    "output_tokens": 5,
+    "service_tier": "standard"
+  }
+}
+```
+
+The complete exact response fields and limits are generated in the
+[Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json).
+
 ## Diagnose provider failures
 
-All local request failures use a bounded OpenAI-shaped envelope and fresh
+OpenAI local request failures use a bounded OpenAI-shaped envelope and fresh
 `x-request-id`:
 
 ```json
@@ -11000,19 +11173,45 @@ material, runtime exceptions, or validation-library details.
 | `413 request_too_large` | Body, depth, node, or structural budget was exceeded | Reduce the request; do not retry unchanged |
 | `500 internal_error` | Runtime failed, definition changed repeatedly, output was invalid/oversized, or a tool call was undeclared | Treat as failed source behavior and inspect non-secret local diagnostics |
 
-Configured neutral behavior errors map to the OpenAI-shaped status/type table:
+Anthropic local failures use a bounded envelope and put the same fresh ID in the
+`request-id` header and `request_id` body field:
 
-| Neutral error | HTTP status |
-| --- | --- |
-| `invalid_request` | 400 |
-| `authentication` | 401 |
-| `permission_denied` | 403 |
-| `not_found` | 404 |
-| `request_too_large` | 413 |
-| `rate_limit` | 429 |
-| `timeout` | 408 |
-| `internal` | 500 |
-| `overloaded` | 503 |
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "message": "The request is not valid for this mock Anthropic endpoint."
+  },
+  "request_id": "req_fresh_transport_identity"
+}
+```
+
+| Status/type | Meaning | Recovery |
+| --- | --- | --- |
+| `400 invalid_request_error` | Version/beta header, media type, JSON, request field, role/block, tool, or streaming contract failed | Send only the exact stable non-streaming subset |
+| `401 authentication_error` | `x-api-key` syntax/policy/current verifier failed | Present the Anthropic-scoped Mock Credential; never substitute an Authorization or management key |
+| `404 not_found_error` | Server/dialect, model, or route is unavailable | Probe `/v1/models` and inspect the definition through MCP |
+| `405 invalid_request_error` | A known route used the wrong method | Follow the response `Allow` header |
+| `413 request_too_large` | Body, depth, node, or structural budget was exceeded | Reduce the request; do not retry unchanged |
+| `500 api_error` | Runtime failed, definition changed repeatedly, output was invalid/oversized, or a tool call was undeclared | Treat as failed source behavior and inspect non-secret local diagnostics |
+
+Neither adapter reflects malformed values, credentials, verifier material, runtime
+exceptions, or validation-library details.
+
+Configured neutral behavior errors map to provider-specific status/type tables:
+
+| Neutral error | OpenAI status | Anthropic status/type |
+| --- | --- | --- |
+| `invalid_request` | 400 | `400 invalid_request_error` |
+| `authentication` | 401 | `401 authentication_error` |
+| `permission_denied` | 403 | `403 permission_error` |
+| `not_found` | 404 | `404 not_found_error` |
+| `request_too_large` | 413 | `413 request_too_large` |
+| `rate_limit` | 429 | `429 rate_limit_error` |
+| `timeout` | 408 | `504 timeout_error` |
+| `internal` | 500 | `500 api_error` |
+| `overloaded` | 503 | `529 overloaded_error` |
 
 `Retry-After` appears only when an eligible configured `rate_limit` or `overloaded`
 plan supplies it. Set `maxRetries: 0` during deterministic tests so an SDK does not
@@ -11049,10 +11248,12 @@ migration/export bridge; a source rollback is not a SQLite downgrade.
 After the management put:
 
 1. get the definition through MCP and confirm the intended revision, model, and
-   OpenAI policy;
+   provider policies;
 2. confirm strict auth appears only as `configured: true`;
-3. call provider `GET /models` with the separate Bearer Mock Credential;
-4. run one non-streaming text or declared-tool completion with SDK retries disabled;
+3. call OpenAI `GET /models` with Bearer or Anthropic `GET /v1/models` with
+   `x-api-key` plus the exact stable version;
+4. run one non-streaming text or declared-tool completion/message with SDK retries
+   disabled;
 5. record only source evidence unless an exact deployment record exists; and
 6. delete the definition with the latest positive revision in `finally`.
 
@@ -11068,29 +11269,33 @@ environment cleanup when the whole environment is disposable.
 
 This partial slice does not provide:
 
-- an Anthropic Messages or Models provider route;
 - OpenAI Responses, Assistants, stored/listed Chat Completions, legacy Completions,
   embeddings, audio, images, or other OpenAI APIs;
+- Anthropic beta APIs, legacy Text Completions, Message Batches, token counting,
+  Files, Skills, or other Anthropic APIs;
 - SSE, timed chunk delivery, `stream_options`, mid-stream errors, or stream
-  cancellation;
+  cancellation for either dialect;
 - multimodal messages, JSON response format, sampling/token-control parameters,
   parallel choice counts, named/required/no-tool selection, or general Chat
   Completions compatibility;
+- Anthropic multimodal input, thinking, sampling controls, stop sequences, metadata,
+  built-in/server tools, non-auto tool choice, turn-alternation validation,
+  `tool_use`↔`tool_result` correlation, or real model pagination;
 - implicit sessions, conversation handles, persisted sequence/evaluator state,
   reset, or retry deduplication;
 - LLM-specific request observations, assertions, or provider request-log capture;
 - a mock-LLM management HTTP route, CLI workflow, or console workflow;
-- Anthropic runtime authentication or `anthropic-version` handling;
 - Cloud pinning, private hosted composition, hosted CI qualification, Wrangler
   network qualification, staging, production, or service-level guarantees; or
 - verified-live comparison with OpenAI or Anthropic.
 
 Do not call F2 complete. The strongest current wording is:
 
-> MCP-managed definitions and an OpenAI-only, non-streaming provider data plane are
-> source-qualified locally through package tests and the official OpenAI SDK Worker
-> integration. Anthropic, streaming, state, observations, Cloud integration, and
-> deployment remain unqualified or unavailable.
+> MCP-managed definitions plus bounded OpenAI Chat Completions and Anthropic Messages
+> non-streaming provider data planes are source-qualified locally through package
+> tests and pinned official SDK Worker integrations. Streaming/betas, state,
+> observations, Cloud integration, deployment, and live-provider parity remain
+> unqualified or unavailable.
 
 ## Source ownership and exact reference
 
@@ -11102,15 +11307,596 @@ Do not call F2 complete. The strongest current wording is:
 | [`packages/llm-mock/src/planner.ts`](packages/llm-mock/src/planner.ts) | Provider-neutral deterministic response planning |
 | [`packages/llm-mock/src/openai.ts`](packages/llm-mock/src/openai.ts) | OpenAI JSON and pure SSE-frame projection |
 | [`packages/llm-mock/src/openai-http.ts`](packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, timing, and transport IDs |
+| [`packages/llm-mock/src/anthropic.ts`](packages/llm-mock/src/anthropic.ts) | Anthropic JSON and pure SSE-frame projection |
+| [`packages/llm-mock/src/anthropic-http.ts`](packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, version/auth boundary, bounded Messages adapter, model projection, timing, and fresh transport IDs |
 | [`packages/worker-kit/src/mock-llm-runtime.ts`](packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition authentication, stateless planning, and revision recheck |
 | [`packages/worker-kit/src/edge-router.ts`](packages/worker-kit/src/edge-router.ts) | Environment route composition and edge-owned provider response |
 | [`apps/worker/test/mock-llm.integration.test.ts`](apps/worker/test/mock-llm.integration.test.ts) | MCP-to-Worker official OpenAI SDK source qualification |
+| [`apps/worker/test/mock-llm-anthropic.integration.test.ts`](apps/worker/test/mock-llm-anthropic.integration.test.ts) | MCP-to-Worker official Anthropic SDK 0.115.0 source qualification |
 | [`docs/reference/mock-llm-openai.v1.json`](docs/reference/mock-llm-openai.v1.json) | Generated machine-readable operation, limit, planning, authentication, and evidence contract |
+| [`docs/reference/mock-llm-anthropic.v1.json`](docs/reference/mock-llm-anthropic.v1.json) | Generated machine-readable Anthropic operation, header, limit, planning, authentication, and evidence contract |
 
 The public repository owns this reusable runtime. Private Cloud may consume only a
 merged and independently qualified public revision, then add account, entitlement,
 quota, console, deployment, and go-to-market policy without making the public runtime
 call home.
+
+---
+
+# Source: OpenAI SDK quickstart
+
+Repository path: `docs/quickstarts/openai-sdk.md`
+
+# Test an application with the mock OpenAI SDK surface
+
+Status: OpenAI-only non-streaming source workflow; no hosted or deployed qualification
+Last reviewed: 2026-07-25
+
+This quickstart creates a deterministic model through management MCP, proves the
+separate provider data plane with `GET /models`, and calls non-streaming Chat
+Completions through the official OpenAI JavaScript SDK. It uses path-mode URLs from a
+local source Worker.
+
+The exact source evidence pins `openai` 6.49.0. A newer SDK may work, but it is outside
+this qualification until its own tests pass. Read the
+[canonical mock LLM guide](docs/mock-llm.md) for request bounds, errors, replacement,
+security, and unsupported behavior.
+
+## Prerequisites
+
+You need:
+
+- Node 22.12 or newer and pnpm 10.30.2;
+- a source Worker running at `http://127.0.0.1:8787`;
+- a management MCP client connected to `http://127.0.0.1:8787/mcp`;
+- the local platform management Access Key;
+- the 24-tool registry, including `put_mock_llm_server`,
+  `get_mock_llm_server`, and `delete_mock_llm_server`; and
+- only synthetic provider credentials and prompts.
+
+Keep these two credentials different:
+
+```sh
+export MOCKOS_API_KEY='replace-with-the-local-management-key'
+export MOCKOS_OPENAI_MOCK_CREDENTIAL='synthetic-openai-mock-credential'
+```
+
+The first value authorizes management MCP. The second value is the provider-scoped
+Bearer Mock Credential used by the application under test. Never send the management
+key to the provider URL.
+
+## 1. Create a disposable environment
+
+Through management MCP, call `create_environment`:
+
+```json
+{
+  "name": "Mock OpenAI quickstart",
+  "provider": "entra",
+  "seed": "mock-openai-quickstart"
+}
+```
+
+Retain the returned environment ID and pass it explicitly in every later management
+call:
+
+```sh
+export MOCKOS_ENVIRONMENT_ID='env_replace_me'
+```
+
+Use a `try`/`finally` boundary in automation so the environment is deleted even when
+an SDK assertion fails.
+
+## 2. Define one deterministic model through MCP
+
+Call `put_mock_llm_server` with `expectedRevision: null`. Resolve the provider Mock
+Credential from caller-owned secret storage before sending the call; the
+`<resolved-synthetic-openai-credential>` marker below is not a literal on-wire value.
+
+```json
+{
+  "environmentId": "env_replace_me",
+  "expectedRevision": null,
+  "server": {
+    "version": 1,
+    "slug": "agent-tests",
+    "name": "Agent integration tests",
+    "dialects": {
+      "openai": {
+        "enabled": true,
+        "authentication": {
+          "mode": "strict",
+          "apiKey": "<resolved-synthetic-openai-credential>"
+        }
+      },
+      "anthropic": {
+        "enabled": false
+      }
+    },
+    "models": [
+      {
+        "id": "mock-agent-1",
+        "displayName": "Mock agent model",
+        "createdAtEpochSeconds": 0,
+        "behavior": {
+          "version": 1,
+          "type": "static",
+          "value": "This response is deterministic."
+        }
+      }
+    ],
+    "defaultUsage": {
+      "inputTokens": 11,
+      "outputTokens": 5
+    },
+    "defaultCadence": {
+      "chunkDelayMilliseconds": 0,
+      "chunkSize": 256,
+      "maximumDurationMilliseconds": 60000
+    }
+  }
+}
+```
+
+Require a positive returned revision and:
+
+```json
+{
+  "mode": "strict",
+  "configured": true
+}
+```
+
+for the safe OpenAI authentication view. The result must not contain the plaintext
+credential or `apiKeySha256`.
+
+The four definition tools prove that configuration is available; they do not prove
+that this checkout contains the provider route. Build the provider base and probe it
+next:
+
+```sh
+export MOCKOS_ORIGIN='http://127.0.0.1:8787'
+export MOCKOS_LLM_SLUG='agent-tests'
+export MOCKOS_OPENAI_BASE_URL="${MOCKOS_ORIGIN}/e/${MOCKOS_ENVIRONMENT_ID}/llm-mock/${MOCKOS_LLM_SLUG}/openai/v1"
+
+curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer ${MOCKOS_OPENAI_MOCK_CREDENTIAL}" \
+  "${MOCKOS_OPENAI_BASE_URL}/models"
+```
+
+Success returns an OpenAI-shaped list containing `mock-agent-1`. A `404` means the
+server is absent or OpenAI is disabled; a `401` means the provider Bearer credential
+failed. Do not fall back to the management key.
+
+## 3. Call the official OpenAI SDK
+
+For the exact source-qualified client:
+
+```sh
+pnpm add openai@6.49.0
+```
+
+Create `mock-openai.mjs`:
+
+```js
+import OpenAI from "openai";
+
+const required = (name) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+};
+
+const client = new OpenAI({
+  apiKey: required("MOCKOS_OPENAI_MOCK_CREDENTIAL"),
+  baseURL: required("MOCKOS_OPENAI_BASE_URL"),
+  maxRetries: 0,
+});
+
+const models = await client.models.list();
+if (!models.data.some((model) => model.id === "mock-agent-1")) {
+  throw new Error("mock-agent-1 is not available");
+}
+
+const model = await client.models.retrieve("mock-agent-1");
+if (model.owned_by !== "mockos") {
+  throw new Error("unexpected model owner");
+}
+
+const completion = await client.chat.completions.create({
+  model: "mock-agent-1",
+  messages: [{ role: "user", content: "Hello" }],
+});
+
+const text = completion.choices[0]?.message.content;
+if (text !== "This response is deterministic.") {
+  throw new Error(`unexpected response: ${JSON.stringify(text)}`);
+}
+
+console.log({
+  completionId: completion.id,
+  requestId: completion._request_id,
+  text,
+  usage: completion.usage,
+});
+```
+
+Run it without shell tracing:
+
+```sh
+node mock-openai.mjs
+```
+
+Expect:
+
+- a fresh completion ID beginning `chatcmpl-`;
+- a fresh request ID beginning `req_`;
+- exactly `This response is deterministic.`;
+- prompt usage `11`, completion usage `5`, and total usage `16`; and
+- no credential or internal deterministic `planId` in output.
+
+The usage values are definition-controlled synthetic values. They are not calculated
+by tokenizing the prompt.
+
+## 4. Prove one negative case
+
+Keep `maxRetries: 0`, then choose one bounded negative case:
+
+- call a missing model and require `404 model_not_found`;
+- present a different provider Mock Credential and require `401 invalid_api_key`; or
+- set `stream: true` and require `400 streaming_not_supported`.
+
+Do not submit the credential inside a prompt. The adapter rejects credential
+reflection, and request-log observation is not part of this LLM slice.
+
+## 5. Clean up with the latest revision
+
+In `finally`:
+
+1. call `get_mock_llm_server` with the explicit environment ID and `agent-tests`;
+2. pass its current positive revision to `delete_mock_llm_server`;
+3. accept `deleted: true`, or `deleted: false` only for an exact cleanup retry;
+4. on `409 MOCK_LLM_SERVER_REVISION_CONFLICT`, re-read before deciding whether a
+   concurrent replacement belongs to this test; and
+5. delete the disposable environment and close the MCP transport.
+
+Never echo the safe-view `configured: true` marker into a replacement put. A strict
+replacement must resupply or rotate the raw provider Mock Credential from
+caller-owned secret storage.
+
+## Evidence and limitations
+
+This workflow is source-qualified through package tests and the local Worker
+integration using the official OpenAI JavaScript SDK with injected Fetch. It does not
+prove a Wrangler network round trip, hosted CI, Cloud consumption, staging,
+production, or live OpenAI parity.
+
+This OpenAI workflow does not exercise the separately source-qualified bounded
+Anthropic route. The current F2 slice still has no SSE, Responses API, multimodal
+content, persisted conversation state, reset, LLM observations/assertions, or broad
+Chat Completions parameter support. Use the
+[machine-readable provider manifest](docs/reference/mock-llm-openai.v1.json) instead of
+guessing from OpenAI's broader API.
+
+---
+
+# Source: Anthropic SDK quickstart
+
+Repository path: `docs/quickstarts/anthropic-sdk.md`
+
+# Test an application with the mock Anthropic SDK surface
+
+Status: Anthropic non-streaming source workflow; no hosted or deployed qualification
+Last reviewed: 2026-07-25
+
+This quickstart creates a deterministic model through management MCP, proves the
+separate provider data plane with authenticated `GET /v1/models`, and calls
+non-streaming Messages through the official Anthropic JavaScript SDK. It uses a
+path-mode URL from a local source Worker.
+
+The exact source evidence pins `@anthropic-ai/sdk@0.115.0`. A newer SDK may work, but
+it is outside this qualification until its own tests pass. Read the
+[canonical mock LLM guide](docs/mock-llm.md) for request bounds, provider errors,
+replacement, security, and unsupported behavior. The
+[machine-readable Anthropic manifest](docs/reference/mock-llm-anthropic.v1.json) is
+generated from the executable adapter.
+
+## Prerequisites
+
+You need:
+
+- Node 22.12 or newer and pnpm 10.30.2;
+- a source Worker running at `http://127.0.0.1:8787`;
+- a management MCP client connected to `http://127.0.0.1:8787/mcp`;
+- the local platform management Access Key;
+- the 24-tool registry, including `put_mock_llm_server`,
+  `get_mock_llm_server`, and `delete_mock_llm_server`; and
+- only synthetic provider credentials, model data, and prompts.
+
+Keep the management and provider credentials different:
+
+```sh
+export MOCKOS_API_KEY='replace-with-the-local-management-key'
+export MOCKOS_ANTHROPIC_MOCK_CREDENTIAL='synthetic-anthropic-mock-credential'
+```
+
+The first value authorizes management MCP. The second is the provider-scoped
+`x-api-key` Mock Credential used by the application under test. Never send the
+management Access Key to an Anthropic-shaped provider URL, and never use a real
+Anthropic key in a definition or fixture.
+
+## 1. Create a disposable environment
+
+Through management MCP, call `create_environment`:
+
+```json
+{
+  "name": "Mock Anthropic quickstart",
+  "provider": "entra",
+  "seed": "mock-anthropic-quickstart"
+}
+```
+
+Retain the returned environment ID and pass it explicitly in every later management
+call:
+
+```sh
+export MOCKOS_ENVIRONMENT_ID='env_replace_me'
+```
+
+Use a `try`/`finally` boundary in automation so cleanup still runs after a failed SDK
+assertion.
+
+## 2. Define one deterministic model through MCP
+
+Call `put_mock_llm_server` with `expectedRevision: null`. Resolve the provider Mock
+Credential from caller-owned secret storage before sending the call; the
+`<resolved-synthetic-anthropic-credential>` marker below is not a literal on-wire
+value.
+
+```json
+{
+  "environmentId": "env_replace_me",
+  "expectedRevision": null,
+  "server": {
+    "version": 1,
+    "slug": "agent-tests",
+    "name": "Anthropic agent integration tests",
+    "dialects": {
+      "openai": {
+        "enabled": false
+      },
+      "anthropic": {
+        "enabled": true,
+        "authentication": {
+          "mode": "strict",
+          "apiKey": "<resolved-synthetic-anthropic-credential>"
+        }
+      }
+    },
+    "models": [
+      {
+        "id": "mock-agent-1",
+        "displayName": "Mock agent model",
+        "createdAtEpochSeconds": 0,
+        "behavior": {
+          "version": 1,
+          "type": "static",
+          "value": "This response is deterministic."
+        }
+      }
+    ],
+    "defaultUsage": {
+      "inputTokens": 11,
+      "outputTokens": 5
+    },
+    "defaultCadence": {
+      "chunkDelayMilliseconds": 0,
+      "chunkSize": 256,
+      "maximumDurationMilliseconds": 60000
+    }
+  }
+}
+```
+
+Require a positive returned revision and this safe Anthropic authentication view:
+
+```json
+{
+  "mode": "strict",
+  "configured": true
+}
+```
+
+The result must not contain the plaintext credential or `apiKeySha256`. The
+`configured: true` marker is read-only; it cannot preserve a secret in a later
+replacement. Every changed full-definition put must resupply or rotate the raw key
+from caller-owned secret storage. In `accept_any` mode there is no verifier to compare,
+so every syntactically valid `x-api-key` Mock Credential is accepted; missing,
+malformed, or alternate-channel credentials are still rejected.
+
+The four definition tools prove that MCP configuration exists. They do not prove that
+this checkout serves Anthropic provider traffic. Build and probe the provider base:
+
+```sh
+export MOCKOS_ORIGIN='http://127.0.0.1:8787'
+export MOCKOS_LLM_SLUG='agent-tests'
+export MOCKOS_ANTHROPIC_BASE_URL="${MOCKOS_ORIGIN}/e/${MOCKOS_ENVIRONMENT_ID}/llm-mock/${MOCKOS_LLM_SLUG}/anthropic"
+
+curl --fail-with-body --silent --show-error \
+  -H "x-api-key: ${MOCKOS_ANTHROPIC_MOCK_CREDENTIAL}" \
+  -H "anthropic-version: 2023-06-01" \
+  "${MOCKOS_ANTHROPIC_BASE_URL}/v1/models"
+```
+
+Success returns an Anthropic-shaped single-page list containing `mock-agent-1`.
+A `404` means the server is absent or Anthropic is disabled. A `401
+authentication_error` means the provider Mock Credential failed. A `400
+invalid_request_error` before dispatch usually means the exact
+`anthropic-version: 2023-06-01` header is absent/wrong or beta headers were sent.
+Do not fall back to the management key.
+
+## 3. Call the official Anthropic SDK
+
+Install the exact source-qualified client:
+
+```sh
+pnpm add @anthropic-ai/sdk@0.115.0
+```
+
+Create `mock-anthropic.mjs`:
+
+```js
+import Anthropic from "@anthropic-ai/sdk";
+
+const required = (name) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+};
+
+const client = new Anthropic({
+  apiKey: required("MOCKOS_ANTHROPIC_MOCK_CREDENTIAL"),
+  baseURL: required("MOCKOS_ANTHROPIC_BASE_URL"),
+  maxRetries: 0,
+});
+
+const models = await client.models.list();
+if (!models.data.some((model) => model.id === "mock-agent-1")) {
+  throw new Error("mock-agent-1 is not available");
+}
+
+const model = await client.models.retrieve("mock-agent-1");
+if (model.display_name !== "Mock agent model") {
+  throw new Error("unexpected model metadata");
+}
+
+const message = await client.messages.create({
+  model: "mock-agent-1",
+  max_tokens: 64,
+  messages: [{ role: "user", content: "Hello" }],
+});
+
+const text = message.content.find((block) => block.type === "text")?.text;
+if (text !== "This response is deterministic.") {
+  throw new Error(`unexpected response: ${JSON.stringify(text)}`);
+}
+
+console.log({
+  messageId: message.id,
+  requestId: message._request_id,
+  text,
+  usage: message.usage,
+});
+```
+
+Run it without shell tracing:
+
+```sh
+node mock-anthropic.mjs
+```
+
+Expect:
+
+- a fresh message ID matching `msg_` plus 32 lowercase hexadecimal characters;
+- a fresh `request-id` surfaced by the SDK as `_request_id`, matching `req_` plus
+  32 lowercase hexadecimal characters;
+- exactly `This response is deterministic.`;
+- synthetic usage with `input_tokens: 11` and `output_tokens: 5`; and
+- no provider credential, stored verifier, or internal deterministic `planId`.
+
+The SDK supplies `x-api-key` and the supported stable Anthropic version header.
+mockOS accepts exactly `anthropic-version: 2023-06-01`; it does not negotiate a
+different version. Definition-controlled usage is not calculated by tokenizing the
+prompt.
+
+## 4. Exercise a custom tool
+
+The bounded Messages subset accepts only custom client tools. A tool definition needs
+a unique `[A-Za-z0-9_-]{1,64}` name and an `input_schema` object whose `type` is
+`"object"`. When a configured behavior returns a `tool_use` block, the same tool name
+must be declared in the request or mockOS fails closed.
+
+```js
+const toolMessage = await client.messages.create({
+  model: "mock-tool-1",
+  max_tokens: 64,
+  messages: [{ role: "user", content: "Check Berlin" }],
+  tools: [
+    {
+      name: "get_weather",
+      description: "Return synthetic weather.",
+      input_schema: {
+        type: "object",
+        properties: { location: { type: "string" } },
+      },
+    },
+  ],
+});
+```
+
+Supported history blocks are:
+
+- `text` in either `user` or `assistant` content;
+- `tool_use` only in `assistant` content; and
+- `tool_result` only in `user` content, with string content or an array of text
+  blocks.
+
+This structural acceptance is intentionally narrower and looser than broad Anthropic
+semantics: the first slice does not enforce user/assistant turn alternation or verify
+that a `tool_result.tool_use_id` corresponds to an earlier `tool_use.id`.
+
+## 5. Prove bounded negative cases
+
+Keep `maxRetries: 0`, then require the exact failure:
+
+- with the strict definition above, use a different provider Mock Credential and
+  require `401 authentication_error`;
+- omit or change `anthropic-version: 2023-06-01` on a direct Fetch and require
+  `400 invalid_request_error`;
+- send any `anthropic-beta` or `anthropic-beta-*` header and require
+  `400 invalid_request_error`;
+- set `stream: true` and require `400 invalid_request_error`; or
+- call a missing model and require `404 not_found_error`.
+
+The provider accepts only `x-api-key`. `Authorization`, `x-anthropic-api-key`, an
+OpenAI Bearer Mock Credential, and the platform management Access Key are rejected.
+Do not place either accepted credential in request JSON: request and response
+credential reflection fail closed.
+
+## 6. Clean up with the latest revision
+
+In `finally`:
+
+1. call `get_mock_llm_server` with the explicit environment ID and `agent-tests`;
+2. pass its current positive revision to `delete_mock_llm_server`;
+3. accept `deleted: true`, or `deleted: false` only for an exact cleanup retry;
+4. on `409 MOCK_LLM_SERVER_REVISION_CONFLICT`, re-read before deciding whether a
+   concurrent replacement belongs to this test;
+5. confirm the removed provider route returns stable `404 not_found_error`; and
+6. delete the disposable environment and close the MCP transport.
+
+Never echo the safe-view `configured: true` marker into a replacement put. A strict
+replacement must resupply or rotate the raw Anthropic Mock Credential.
+
+## Evidence and limitations
+
+This workflow is source-qualified through package tests and the local Worker
+integration using official `@anthropic-ai/sdk@0.115.0` with injected Fetch. It gives
+no hosted or deployed qualification and does not prove a Wrangler network round trip,
+Cloud consumption, staging, production, service availability, or live Anthropic
+parity.
+
+The current provider slice has no streaming/SSE, beta APIs, multimodal input,
+thinking, sampling controls, stop sequences, metadata, built-in/server tools,
+non-auto tool choice, durable conversation/evaluator state, reset, or LLM-specific
+observations/assertions. Model-list pagination query parameters are ignored and the
+response is always one page. Required `max_tokens` is validated from `1` through
+`1,000,000,000` and enters the deterministic fingerprint; `max_tokens` does not
+truncate a configured response plan.
+
+Use the generated [Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json)
+instead of guessing from Anthropic's broader API.
 
 ---
 
@@ -11120,7 +11906,7 @@ Repository path: `docs/known-limitations.md`
 
 # Known limitations
 
-Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI F2, and locally qualified F0/F1
+Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI/Anthropic F2, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -11254,30 +12040,36 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
   record/replay is rejected. F1 itself does not define an LLM provider surface; the
-  separate partial F2 slice below owns bounded mock OpenAI. Code Mode, team ACLs,
+  separate partial F2 slice below owns bounded mock OpenAI/Anthropic. Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
-- The partial F2 source has an MCP-only configuration plane and a separate bounded
-  OpenAI data plane; it is not a general mock LLM service. Four MCP operations own
+- The partial F2 source has an MCP-only configuration plane and separate bounded
+  OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
   strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
-  The environment route source-qualifies only ordered model list/retrieve and
-  non-streaming Chat Completions. Both auth modes require a valid provider Bearer Mock
-  Credential: `accept_any` skips verifier comparison, while `strict` checks the
-  current hash-only verifier. The parser accepts only bounded text messages,
+  Environment routes source-qualify ordered model list/retrieve plus non-streaming
+  Chat Completions and Messages. OpenAI requires Bearer and Anthropic requires
+  `x-api-key` plus exactly `anthropic-version: 2023-06-01`; both auth modes require a
+  valid provider Mock Credential. `accept_any` skips verifier comparison, while
+  `strict` checks the dialect's current hash-only verifier. The OpenAI parser accepts
+  only bounded text messages,
   function tools, `n` absent/one, `stream` absent/false, and `tool_choice`
   absent/`auto`; unknown fields, multimodal content, `stream_options`, and the broader
   OpenAI parameter surface fail closed. It derives a stateless turn from prior
   assistant messages and injects fresh request/completion IDs, while content-derived
   plan IDs stay internal. Initial response/error delay is abort-aware, but there is no
-  SSE listener or timed chunk delivery. Anthropic routing, OpenAI Responses and other
-  APIs, conversation/evaluator state, reset, retry deduplication, LLM-specific
+  SSE listener or timed chunk delivery. The Anthropic parser accepts only bounded
+  `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
+  streaming/betas/broad parameters, and deliberately does not enforce turn alternation
+  or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
+  conversation/evaluator state, reset, retry deduplication, LLM-specific
   observation/assertion support, Wrangler-network qualification, hosted CI for this
   tranche, private Cloud pinning, deployment, and verified-live comparison remain
   unavailable or unqualified. Safe `configured` markers remain non-writable, and
   every changed full-definition put must resupply or rotate each enabled strict key
   from caller-owned storage. The complete active platform key is rejected from
   definition keys/string values and provider authentication/body reflection. Use the
-  [generated provider manifest](docs/reference/mock-llm-openai.v1.json), not OpenAI's
+  generated [OpenAI](docs/reference/mock-llm-openai.v1.json) and
+  [Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests, not either
   broader API, as the compatibility boundary.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
   control routes; the other 19 management MCP operations, including all five F1 and
@@ -11401,7 +12193,7 @@ Repository path: `docs/IMPLEMENTATION_STATUS.md`
 
 # Implementation status
 
-Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; partial OpenAI F2 source-qualified locally
+Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; partial OpenAI/Anthropic F2 source-qualified locally
 Last reviewed: 2026-07-25
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
@@ -11435,13 +12227,15 @@ JSON/SSE-frame renderers, and in-process pinned-SDK consumption with strict
 server-definition contracts, four MCP-only operations, schema-v7 environment
 persistence, mandatory revision compare-and-swap, and write-only provider-key views.
 The [task guide](docs/mock-llm.md) records the exact management and provider contracts.
-The bounded OpenAI request adapter, environment runtime, route composition, generated
-provider manifest, and local Worker integration now source-qualify ordered model
-list/retrieve and non-streaming Chat Completions through the pinned official OpenAI
-SDK. Both auth modes require a provider Bearer value; strict mode checks the current
-hash-only verifier. Anthropic routing, SSE, runtime/conversation state or reset, LLM
-observation/assertion, Wrangler-network/deployed conformance, and private Cloud
-pinning remain unavailable. F2 therefore remains incomplete.
+Bounded OpenAI and Anthropic request adapters, the shared environment runtime, route
+composition, generated provider manifests, and local Worker integrations now
+source-qualify ordered model list/retrieve plus non-streaming Chat Completions and
+Messages through pinned official SDKs. Both auth modes require the dialect's valid
+provider credential; strict mode checks only its current hash-only verifier.
+Anthropic additionally requires exactly `anthropic-version: 2023-06-01` and rejects
+beta headers. SSE/betas, runtime/conversation state or reset, LLM
+observation/assertion, Wrangler-network/deployed conformance, and private Cloud pinning
+remain unavailable. F2 therefore remains incomplete.
 
 Evidence tiers are intentionally separate. **Source** means exact-revision local or
 hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
@@ -11453,9 +12247,9 @@ organization. No current fixture or milestone is verified-live.
 | --- | --- | --- |
 | M0 workspace substrate | Complete locally and in hosted CI through M3 | The repository-wide format, types, tests, build, Wrangler-shape, and production/staging dry-run gates pass at exact M3 candidate `8645f405d5e3b922c30d51339b8b27f9fe30d93e`; see [CI run 29886610480](https://github.com/reachjalil/mockos/actions/runs/29886610480). |
 | Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
-| F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 24 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine catalog](docs/reference/management-operations.v1.json), self-hosted HTTP reference, [mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json), and agent-readable indexes with exact-count, link, drift, and inert-secret checks. The provider manifest is generated from its executable operation table and remains separate from management OpenAPI. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
+| F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 24 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine catalog](docs/reference/management-operations.v1.json), self-hosted HTTP reference, [mock OpenAI](docs/reference/mock-llm-openai.v1.json) and [mock Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests, and agent-readable indexes with exact-count, link, drift, and inert-secret checks. Each provider manifest is generated from its executable operation table and remains separate from management OpenAPI. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
 | F1 environment-hosted mock MCP | Locally source-qualified; hosted CI/merge/deployment unqualified | Strict [mock-MCP contracts](packages/contracts/src/mock-mcp.ts), bounded JSON Schema/templates/results, [declarative evaluation](packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/hash-only-session tables, the atomic [repository](packages/core/src/mock-mcp/repository.ts), five MCP-only management operations, and the hand-written [`@mockos/mcp-mock`](packages/mcp-mock) `2025-11-25` adapter pass their focused suites and the complete repository gate. The [path-mode Worker integration](apps/worker/test/mock-mcp.integration.test.ts) configures through management MCP and exercises the routed official SDK, separate credential/session boundary, pagination and all capability kinds, reset, idempotent/revision-changing writes, delete, and redacted MCP observations; host-resolver tests separately cover both endpoint forms. State is capped per value and at 256 rows/2 MiB in aggregate. Identical writes preserve revision/state/sessions; changed replacements and in-flight revision checks prevent stale results; result validation and HTTP-abort handling during configured latency happen before staged sequence commit; scripts fail closed. Resource-template reverse matching is bounded/linear and deterministic for empty, percent-encoded, and adjacent-variable captures. Message-level `notifications/cancelled` remains deliberately unenforced. The [F1 guide](docs/mock-mcp.md) records exact limits and gaps. Hosted CI, merge, package publication, deployment, wildcard TLS, private hosted integration, GET/list-change streaming, a second protocol version, scripts, proxy, and broader client/ecosystem conformance remain unqualified or unavailable. |
-| F2 mock-LLM kernel, management definitions, and OpenAI data plane | Partial source-qualified implementation; hosted/deployed provider evidence unqualified | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, behavior adapter, pure OpenAI/Anthropic projections, and exact provider boundary. The [task guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v7 canonical persistence, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply, hash-only provider credentials, secret-safe validation, and non-round-trippable safe views. The executable OpenAI adapter adds exact path/subdomain routes, model list/retrieve, bounded non-streaming Chat Completions parsing, provider-shaped local/configured errors, fresh transport IDs, alternate/platform-key rejection, credential non-reflection, response limits, and abort-aware initial delay. The environment runtime hashes before reading the current definition, compares strict verifiers without early exit, derives stateless turns from prior assistant messages, and rechecks the revision before plan commit. Package suites plus the [local Worker integration](apps/worker/test/mock-llm.integration.test.ts) configure through MCP and exercise pinned official-SDK model, text, tool, usage, error, isolation, and key-rotation flows. The generated [provider manifest](docs/reference/mock-llm-openai.v1.json) records the exact bounded contract. Management remains 24 MCP tools and five management HTTP routes. Anthropic routing, SSE, conversation/evaluator state, reset, LLM observations/assertions, Wrangler-network, hosted CI, Cloud pinning, deployment, and live-provider parity remain unavailable or unqualified, so the F2 exit gate is not satisfied. |
+| F2 mock-LLM kernel, management definitions, and provider data planes | Partial source-qualified implementation; hosted/deployed provider evidence unqualified | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, behavior adapter, pure OpenAI/Anthropic projections, and exact provider boundary. The [task guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v7 canonical persistence, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply, hash-only provider credentials, secret-safe validation, and non-round-trippable safe views. Executable OpenAI and Anthropic adapters add exact path/subdomain routes, model list/retrieve, bounded non-streaming Chat Completions/Messages parsing, provider-shaped local/configured errors, fresh transport IDs, alternate/platform-key rejection, credential non-reflection, response limits, and abort-aware initial delay. Anthropic additionally owns exact `x-api-key`, `anthropic-version: 2023-06-01`, and beta-header rejection. The environment runtime hashes before reading the current definition, compares strict verifiers without early exit, derives stateless turns from prior assistant messages, and rechecks the revision before plan commit. Package suites plus [OpenAI](apps/worker/test/mock-llm.integration.test.ts) and [Anthropic](apps/worker/test/mock-llm-anthropic.integration.test.ts) local Worker integrations configure through MCP and exercise pinned official-SDK model, text, tool, usage, error, isolation, and key-rotation flows. Generated [OpenAI](docs/reference/mock-llm-openai.v1.json) and [Anthropic](docs/reference/mock-llm-anthropic.v1.json) manifests record the exact bounded contracts. Management remains 24 MCP tools and five management HTTP routes. SSE/betas, conversation/evaluator state, reset, LLM observations/assertions, Wrangler-network, hosted CI, Cloud pinning, deployment, and live-provider parity remain unavailable or unqualified, so the F2 exit gate is not satisfied. |
 | Synchronous SQL store | Accepted through the tested M5 slice | The Node [adapter](packages/testkit/src/sql-store.ts) and [unit test](packages/testkit/src/testkit.test.ts) share the synchronous store contract exercised through SQLite Durable Object Worker integrations. M5 adds append-only provisioning target, staged-run target, run/step, and watermark state, including one active run per app/target; local gates and the controlled-target hosted run passed. |
 | Core migrations and directory repositories | Accepted through M5; bounded M6 source suite and deployed sample green | The accepted [core substrate](packages/core/src/core.test.ts), [directory/lifecycle](packages/core/src/directory-lifecycle.test.ts), [Okta OAuth](packages/core/src/okta.test.ts), and [scenario/log](packages/core/src/scenario-log.test.ts) cover the M3 engine. The M5 [provisioning planner/interpreter](packages/core/src/provisioning) passed focused/full and controlled-target gates. M6 focused tests cover the bounded [Classic Authn service](packages/core/src/authn/okta-authn.ts), deterministic broken-token mutations, active/successor key handling, private-key scrubbing, bounded retention, and stale-instance/sign-rotate races. Authn state retrieval uses a sliding five-minute expiry while session capabilities retain their fixed five-minute issuance expiry. Each table is capped at 10,000 retained rows and each User at 32 retained rows per kind; ordered oldest-expiry eviction and a 256-row-per-table issuance GC pass are index-backed without advancing schema v5, preserving rollback compatibility. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises the externally observable slices, not every source-only retention/concurrency/security assertion. |
 | Deterministic test seams | Complete through M3; bounded M6 token/key paths accepted | The [clock/RNG](packages/testkit/src/determinism.ts) and persisted [scenario service](packages/core/src/scenario/scenario-service.ts) have deterministic unit coverage. The M6 token stream adds exact-only rotation and claim-skew actions with fixed broken-token mutations; the deployed sample exercised rotation, skew, and every mutation. Production signing-key material remains cryptographically generated, and deeper deterministic assertions remain source evidence. |
@@ -11552,10 +12346,10 @@ and F-series runtime activation remain pending.
 
 The bounded F1 transport/runtime is locally source-qualified in the revision carrying
 this document: the focused suites and complete repository gate are green. F2 adds
-focused kernel/definition tests and a bounded routed OpenAI provider runtime that is
+focused kernel/definition tests and bounded routed OpenAI/Anthropic provider runtimes that are
 source-qualified locally through the official SDK Worker integration. It is not a
 hosted or deployed provider runtime. Hosted CI, merge, package publication,
-deployment, private Cloud integration, Anthropic, streaming/state/observation work,
+deployment, private Cloud integration, streaming/state/observation work,
 F3 runtime, F4 authorization/audit, broader client/ecosystem conformance, and F6 Code
 Mode activation remain pending.
 
@@ -11567,7 +12361,7 @@ Repository path: `docs/security/threat-model.md`
 
 # Threat model
 
-Status: M3/M5 accepted, bounded M6 deployed, and F1/partial OpenAI F2 controls source-only
+Status: M3/M5 accepted, bounded M6 deployed, and F1/partial OpenAI/Anthropic F2 controls source-only
 Last reviewed: 2026-07-25
 
 ## Assets and trust boundaries
@@ -11579,8 +12373,8 @@ sessions, revision-bound behavior state, and captured agent traffic. Provider,
 environment mock-MCP, and mock-LLM protocol surfaces are intentionally
 attacker-controllable.
 F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
-schema-v7 definition storage, and an OpenAI-only provider data plane. That data plane
-is an attacker-controlled synthetic protocol surface, not a management API.
+schema-v7 definition storage, and bounded OpenAI/Anthropic provider data planes. Those
+data planes are attacker-controlled synthetic protocol surfaces, not management APIs.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
 boundary.
 
@@ -11614,13 +12408,15 @@ definition access, lost updates, delete/recreate revision reuse, canonicalizatio
 ambiguity, malformed persisted rows/allocator regression, definition-size denial, and
 unsafe rollback after a schema-v7 store has been opened. A safe-view marker mistakenly
 reused as a write also risks an ambiguous credential update, so it must fail rather
-than imply preservation. The OpenAI data plane additionally considers malformed or
+than imply preservation. The provider data planes additionally consider malformed or
 double-decoded route selection, cross-environment or cross-dialect dispatch,
 caller-spoofed internal routing headers, alternate-header/platform-key authentication
 confusion, credential rotation races, credential reflection through request
-fingerprints/errors/logs, oversized or adversarial JSON/tool schemas, unknown OpenAI
+fingerprints/errors/logs, oversized or adversarial JSON/tool schemas, unknown provider
 fields that silently change semantics, undeclared tool output, stale-definition plan
 commit, content-derived transport-ID reuse, and abort/timing resource consumption.
+Anthropic adds version/beta header confusion, authorization-alias confusion, malformed
+tool history, and model-pagination assumptions.
 
 ## Implemented controls and evidence boundaries
 
@@ -11662,7 +12458,8 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   bundle explicitly refuses a v7-touched database as newer than supported. This fails
   closed but means source rollback cannot downgrade the store; recovery must roll
   forward or use a separately reviewed bridge.
-- The mock-LLM resolver recognizes only the exact OpenAI path/subdomain route family,
+- The mock-LLM resolver recognizes only the exact OpenAI and Anthropic
+  path/subdomain route families,
   decodes the slug once, validates the decoded slug, and binds the body to neither an
   environment, slug, nor dialect. The edge strips all caller-supplied `x-mockos-*`
   headers before adding trusted route kind, environment, dialect, and slug metadata.
@@ -11674,6 +12471,12 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   `X-Anthropic-API-Key`, malformed/duplicate authorization, and the active platform
   Access Key as a credential substring fail before runtime dispatch. Provider
   authentication never accepts the management key as a fallback.
+- The Anthropic route requires a bounded provider `x-api-key` Mock Credential even in
+  `accept_any` mode and exactly `anthropic-version: 2023-06-01`. `Authorization`,
+  `X-Anthropic-API-Key`, duplicate/malformed credentials, every beta header, and the
+  active platform Access Key fail before runtime dispatch. Strict mode uses the same
+  hash-before-current-read and fixed-length verifier comparison, scoped only to the
+  Anthropic dialect.
 - Chat Completions accepts only UTF-8 `application/json` with absent/identity content
   encoding, reads at most 256 KiB even without a trustworthy `Content-Length`, and
   applies depth-24/10,000-node structural limits before strict message/tool parsing.
@@ -11683,8 +12486,8 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   JSON/UTF-8, and undeclared behavior-selected tools fail closed. Provider-shaped
   request errors use generic fixed messages and never serialize validation-library
   issues, input values, credentials, or runtime exceptions.
-- The adapter rejects the presented provider credential or active platform key when
-  either appears in a Chat Completions JSON key or string value. The planner receives
+- Each adapter rejects the presented provider credential or active platform key when
+  either appears in a Chat Completions or Messages JSON key or string value. The planner receives
   normalized message/tool material rather than transport or internal routing headers.
   The current slice emits no LLM-specific observation/request-log entry, so it also
   offers no LLM assertion or audit claim; that deliberate absence must not be
@@ -11692,8 +12495,9 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
 - Stateless planning derives the turn only from prior assistant messages. Before
   plan commit, the environment runtime rereads the definition revision and replans
   after a concurrent replacement; repeated instability fails generically. The edge
-  rejects a planned tool call unless the request declared that function. Every
-  invocation receives fresh random request/completion IDs, while content-derived
+  rejects a planned tool call unless the request declared that function/custom tool.
+  Every invocation receives fresh random request/completion or request/message IDs,
+  while content-derived
   deterministic plan IDs remain internal. Initial response/error delay runs outside
   the Environment Durable Object with abort-aware waiting; chunk cadence stays inert
   because the data plane does not stream.
@@ -11849,15 +12653,16 @@ not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 wor
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
 
-The F2 definition and bounded OpenAI controls likewise have source evidence only.
+The F2 definition and bounded OpenAI/Anthropic controls likewise have source evidence only.
 They are not a penetration test, hosted rollback, multi-tenant authorization review,
 load/abuse envelope, deployment, or live-provider evidence. `accept_any` deliberately
-accepts any syntactically valid provider Bearer value without verifier comparison; it
-is suitable only for synthetic tests and is not public/anonymous access or production
-authorization. `strict` compares the current hash-only verifier, but a successful
-mock check still grants only this synthetic provider behavior. Anthropic routing,
-conversation/response state, reset, LLM observation/assertion, paced streaming,
-Wrangler-network qualification, deployment, and private Cloud pinning remain absent.
+accepts any syntactically valid credential through the provider's required channel
+without verifier comparison; it is suitable only for synthetic tests and is not
+public/anonymous access or production authorization. `strict` compares the current
+hash-only verifier, but a successful mock check still grants only this synthetic
+provider behavior. Conversation/response state, reset, LLM observation/assertion,
+paced streaming, Anthropic betas/broad parameters, Wrangler-network qualification,
+deployment, and private Cloud pinning remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
 

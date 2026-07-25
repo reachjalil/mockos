@@ -18,6 +18,7 @@
     "hono": "catalog:"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",

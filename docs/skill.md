@@ -1,12 +1,12 @@
 # mockOS testing skill
 
-Status: Accepted identity workflow plus bounded F1 mock-MCP and F2 mock-OpenAI guidance
+Status: Accepted identity workflow plus bounded F1 mock-MCP and F2 mock-OpenAI/Anthropic guidance
 Last reviewed: 2026-07-25
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
 teaches an agent to capability-negotiate management MCP, create an isolated
 environment, and test an application against the currently qualified identity,
-environment-hosted mock-MCP, or bounded mock-OpenAI surface.
+environment-hosted mock-MCP, or bounded mock-OpenAI/Anthropic surface.
 
 The workflow covers the accepted M5 slice plus bounded M6 recipes:
 
@@ -29,6 +29,10 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
 - MCP-managed OpenAI definitions, an authenticated model-discovery capability probe,
   official-SDK non-streaming Chat Completions, one bounded negative case, and
   revision-safe cleanup without confusing provider traffic for management;
+- MCP-managed Anthropic definitions, authenticated `GET /v1/models`, official
+  `@anthropic-ai/sdk` 0.115.0 non-streaming Messages with `maxRetries: 0`, exact
+  `anthropic-version: 2023-06-01`, one auth/version/stream negative, and the same
+  revision-safe cleanup;
 - deterministic Entra- and Okta-shaped outbound SCIM planning through a durable
   Workflow, with User-before-Group execution, explicit 429 waits/retries, saved or run-
   scoped targets, and the disposable target application;
@@ -62,9 +66,9 @@ fixture corpus into deployed evidence, and it is never verified-live provider ev
 
 All management calls require the fail-closed `API_KEY`; the skill never asks an agent
 to print it. It keeps the management key out of SCIM/Graph/Okta, outbound target, and
-mock-OpenAI provider calls, records explicit environment IDs for automation, clears
-scenarios, deletes environments in a `finally`-style cleanup, and closes the MCP
-client so its server session is terminated. Every identity, password, application
+mock-OpenAI/Anthropic provider calls, records explicit environment IDs for automation,
+clears scenarios, deletes environments in a `finally`-style cleanup, and closes the
+MCP client so its server session is terminated. Every identity, password, application
 secret, directory Bearer/SSWS value, target credential, OpenAI Mock Credential, and
 provider token used as test data must be synthetic.
 
@@ -102,7 +106,9 @@ own synthetic Bearer Mock Credential.
 4. Point the official OpenAI JavaScript SDK at that base URL, set `maxRetries: 0`, and
    call model list/retrieve plus one non-streaming Chat Completion. The exact local
    source evidence pins `openai` 6.49.0.
-5. Prove either wrong strict authentication or `stream: true` rejection. Expect
+5. In `strict` mode, prove either wrong authentication or `stream: true` rejection.
+   `accept_any` accepts every syntactically valid provider Bearer Mock Credential
+   without verifier comparison. Expect
    `401 invalid_api_key` or `400 streaming_not_supported`; do not expect an LLM
    observation because no LLM-specific request-log/assertion surface exists.
 6. In `finally`, read the current definition, pass its latest positive revision to
@@ -110,7 +116,35 @@ own synthetic Bearer Mock Credential.
    delete the disposable environment, and close management MCP.
 
 The source-qualified contract includes model list/retrieve and non-streaming Chat
-Completions only. Anthropic, streaming, conversation state, LLM
-observations/assertions, Cloud pinning, and deployment remain outside that evidence
+Completions only. Streaming, conversation state, LLM observations/assertions, Cloud
+pinning, and deployment remain outside that evidence
 boundary. A passing local source workflow must never be reported as deployed or
 verified-live OpenAI parity.
+
+## Bounded mock-Anthropic recipe
+
+For an Anthropic-shaped dependency, use the
+[Anthropic SDK quickstart](./quickstarts/anthropic-sdk.md). MCP remains the sole
+management interface; `/v1/messages` is the application-under-test data plane.
+
+1. Capability-negotiate the same four mock-LLM tools and create a disposable
+   environment.
+2. Call `put_mock_llm_server` with the explicit environment ID,
+   `expectedRevision: null`, an Anthropic-enabled definition, and a synthetic
+   write-only Mock Credential from caller-owned storage.
+3. Probe authenticated `GET /v1/models` with `x-api-key` and exactly
+   `anthropic-version: 2023-06-01`.
+4. Point official `@anthropic-ai/sdk` 0.115.0 at the provider base without a trailing
+   `/v1`, set `maxRetries: 0`, and call model list/retrieve plus one non-streaming
+   Message.
+5. In `strict` mode, prove `401 authentication_error` for a wrong key. `accept_any`
+   accepts every syntactically valid `x-api-key` Mock Credential without verifier
+   comparison. Alternatively, prove `400 invalid_request_error` for a version/beta
+   header or `stream: true`. Streaming is unsupported; this route does not use the
+   OpenAI `streaming_not_supported` code.
+6. Read the latest revision and call `delete_mock_llm_server` in `finally`; reconcile
+   `MOCK_LLM_SERVER_REVISION_CONFLICT` rather than deleting another agent's
+   replacement.
+
+The source contract does not qualify Anthropic betas, broad parameters, streaming,
+state, observations, deployment, or live-provider parity.

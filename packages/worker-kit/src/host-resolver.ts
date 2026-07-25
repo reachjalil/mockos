@@ -40,7 +40,7 @@ export type ResolvedMockMcpRequest = {
 
 export type ResolvedMockLlmRequest = {
   kind: "mock-llm";
-  dialect: "openai";
+  dialect: "anthropic" | "openai";
   environmentId: string;
   forwardedPath: string;
   locator: Extract<EnvironmentLocator, { type: "environment" }>;
@@ -104,7 +104,11 @@ const mockMcpSlugFromPath = (pathname: string): string | undefined => {
 const mockLlmFromPath = (
   pathname: string
 ): Pick<ResolvedMockLlmRequest, "dialect" | "providerPath" | "slug"> | undefined => {
-  const match = /^\/llm-mock\/([^/]+)\/openai\/v1(\/.*)?$/.exec(pathname);
+  const openAiMatch = /^\/llm-mock\/([^/]+)\/openai\/v1(\/.*)?$/.exec(pathname);
+  const anthropicMatch = /^\/llm-mock\/([^/]+)\/anthropic(\/v1(?:\/.*)?)$/.exec(
+    pathname
+  );
+  const match = openAiMatch ?? anthropicMatch;
   if (!match?.[1]) return undefined;
   const decoded = (() => {
     try {
@@ -115,7 +119,7 @@ const mockLlmFromPath = (
   })();
   if (!decoded || !mockLlmSlugSchema.safeParse(decoded).success) return undefined;
   return {
-    dialect: "openai",
+    dialect: openAiMatch ? "openai" : "anthropic",
     providerPath: match[2] || "/",
     slug: decoded,
   };

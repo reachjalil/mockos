@@ -1,6 +1,6 @@
-# F2 LLM kernel and OpenAI provider source slice
+# F2 LLM kernel and provider source slice
 
-Status: Partial source-qualified OpenAI non-streaming data plane; Anthropic, streaming, state, observations, Cloud, and deployment remain open
+Status: Partial source-qualified OpenAI/Anthropic non-streaming data planes; streaming/betas, state, observations, Cloud, and deployment remain open
 Last reviewed: 2026-07-25
 
 This slice establishes both a provider-neutral seam for deterministic mock LLM
@@ -9,14 +9,16 @@ One normalized behavior result becomes one validated response plan and then
 provider-shaped OpenAI or Anthropic JSON/immediate SSE frames. Strict server
 definitions, four MCP-only operations, environment-local schema-v7 persistence,
 mandatory revision compare-and-swap, and write-only provider credential views own
-configuration. A separate bounded OpenAI request adapter and environment runtime now
-serve model list/retrieve and non-streaming Chat Completions to an application or SDK.
+configuration. Separate bounded OpenAI and Anthropic request adapters plus the shared
+environment runtime now serve model list/retrieve and non-streaming Chat
+Completions/Messages to applications or SDKs.
 
 Read this page as a source-architecture and evidence record. The complete F2 target
 remains in the [F-series roadmap](../F_SERIES_ROADMAP.md), and the current negative
 product boundary remains in [known limitations](../known-limitations.md). Use
-[MCP-managed mock OpenAI](../mock-llm.md) for the task contract and the
-[generated provider manifest](../reference/mock-llm-openai.v1.json) for
+[MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for the task contract and the
+generated [OpenAI](../reference/mock-llm-openai.v1.json) and
+[Anthropic](../reference/mock-llm-anthropic.v1.json) manifests for
 machine-readable operation, limit, auth, planning, and evidence truth.
 
 ## What the source slice proves
@@ -42,13 +44,16 @@ machine-readable operation, limit, auth, planning, and evidence truth.
   list/retrieve, strict bounded Chat Completions parsing, provider-shaped request
   errors, fresh transport identity, declared-tool enforcement, response ceilings,
   and abort-aware initial delay.
-- The environment runtime requires a valid provider Bearer credential in both auth
+- An executable Anthropic adapter owns exact routes, model list/retrieve, bounded
+  Messages parsing, `x-api-key`, exact `anthropic-version: 2023-06-01`, beta rejection,
+  provider-shaped errors, fresh IDs, declared custom tools, limits, and initial delay.
+- The environment runtime requires a valid dialect credential in both auth
   modes, hashes before selecting the current definition, compares strict verifiers
   without early exit, derives stateless turns from prior assistant messages, and
   rechecks the definition revision before committing a plan.
-- The local Worker integration configures two isolated environments through MCP and
+- Local Worker integrations configure isolated environments through MCP and
   drives model, text, tool, usage, error, credential-rotation, and secret-safety cases
-  through pinned official `openai` 6.49.0.
+  through pinned official `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0.
 
 Those are focused local source tests. They are not a Wrangler network round trip,
 hosted CI, deployed, production, or live-provider evidence.
@@ -56,7 +61,7 @@ hosted CI, deployed, production, or live-provider evidence.
 ## What is not available
 
 There is no mock-LLM management HTTP route, CLI command, console workflow,
-Anthropic provider route, conversation/evaluator state, reset operation, SSE network
+conversation/evaluator state, reset operation, SSE network
 stream, LLM observation/assertion support, Wrangler network qualification, Cloud pin,
 or deployed endpoint in this slice.
 
@@ -64,12 +69,12 @@ In particular:
 
 - `/e/{environmentId}/llm-mock/{slug}/openai/v1` and the corresponding environment
   subdomain form are source-implemented for exactly three non-streaming operations;
-- `/e/{environmentId}/llm-mock/{slug}/anthropic/v1` remains target design, not a
-  route in this source;
+- `/e/{environmentId}/llm-mock/{slug}/anthropic` and the corresponding environment
+  subdomain form are source-implemented for exactly three non-streaming operations;
 - management MCP contains 24 tools, including four MCP-only LLM-definition
   operations; self-hosted management HTTP remains at five routes;
 - the Access Key authenticates management MCP and is rejected from the provider data
-  plane; both `accept_any` and `strict` require a valid provider Bearer value, while
+  plane; both `accept_any` and `strict` require a valid dialect credential, while
   only `strict` compares the current hash-only verifier;
 - the OpenAI route rejects `stream: true`; only initial delay is timed, while chunk
   cadence and maximum stream duration remain inert;
@@ -94,15 +99,15 @@ normalized request + BehaviorSpec
           ▼       ▼
   OpenAI wire  Anthropic wire
       │           │
-      │           └── pure source projection only
-      ▼
-bounded OpenAI HTTP adapter
-      │
-      ▼
+      ▼           ▼
+bounded OpenAI  bounded Anthropic
+ HTTP adapter     HTTP adapter
+      └──────┬──────┘
+             ▼
 environment path/subdomain router
       │
       ▼
-official OpenAI SDK Worker test
+official OpenAI/Anthropic SDK Worker tests
 
 management agent
        │
@@ -115,9 +120,9 @@ management agent
 
 The management branch is composed through the Environment Durable Object and persists
 configuration, not responses. The provider branch authenticates and plans in the same
-environment, then lets the edge own initial delay and OpenAI rendering. Anthropic and
-both pure SSE serializers remain in-process source seams; no edge streamer consumes
-their frame arrays.
+environment, then lets the edge own initial delay and provider rendering. Both pure
+SSE serializers remain in-process source seams; no edge streamer consumes their frame
+arrays.
 
 ## Source ownership
 
@@ -133,10 +138,11 @@ their frame arrays.
 | [`packages/llm-mock/src/openai.ts`](../../packages/llm-mock/src/openai.ts) | Pure Chat Completions JSON/error rendering and immediate SSE-frame serialization | HTTP request parsing, authentication, a network stream, or edge timing |
 | [`packages/llm-mock/src/openai-http.ts`](../../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request/model adapter, local provider errors, declared-tool check, fresh transport identity, and response ceiling | Anthropic, SSE delivery, state, observations, or broad OpenAI parameters |
 | [`packages/llm-mock/src/anthropic.ts`](../../packages/llm-mock/src/anthropic.ts) | Pure Messages JSON/error rendering and immediate SSE-frame serialization | Version-header enforcement, authentication, a network stream, or edge timing |
+| [`packages/llm-mock/src/anthropic-http.ts`](../../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, exact version/auth boundary, bounded request/model adapter, local provider errors, declared-tool check, fresh IDs, and response ceiling | Streaming/betas, state, observations, or broad Anthropic parameters |
 | [`packages/mcp/src/index.ts`](../../packages/mcp/src/index.ts) and management worker-kit seams | Management registration, environment existence/isolation, provider-key hashing, safe views, and stable problem mapping | Provider HTTP as a configuration interface |
 | [`packages/worker-kit/src/mock-llm-runtime.ts`](../../packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition auth, stateless planning, secret rejection, and revision-before-commit recheck | Conversation state, retries across invocations, or observations |
 | [`packages/worker-kit/src/host-resolver.ts`](../../packages/worker-kit/src/host-resolver.ts) and [`edge-router.ts`](../../packages/worker-kit/src/edge-router.ts) | Exact environment route classification, trusted metadata replacement, EnvironmentDO RPC, and edge-owned initial wait/render | Wildcard TLS, hosted policy, or streaming |
-| Official-SDK source tests | Exercise pure OpenAI/Anthropic deserialization and the bounded OpenAI local Worker route with inert test credentials | Wrangler network routing, real sockets, remote providers, or broad SDK conformance |
+| Official-SDK source tests | Exercise pure OpenAI/Anthropic deserialization and both bounded local Worker routes with inert test credentials | Wrangler network routing, real sockets, remote providers, or broad SDK conformance |
 
 The public repository owns these reusable contracts and pure provider dialects. The
 private Cloud product may later consume qualified public exports and add hosted
@@ -246,10 +252,10 @@ provider error shape but does not sleep before returning it.
 
 The pure fixtures reuse deterministic `planId` as provider object identity and
 request-ID correlation. Because `planId` is content-derived, identical plans can
-repeat it; this is not a per-invocation uniqueness claim. The current OpenAI HTTP
-adapter overrides both values with fresh random `req_...` and `chatcmpl-...`
-identities for every invocation and never exposes the plan ID. The pure Anthropic seam
-still has no service-level transport identity qualification.
+repeat it; this is not a per-invocation uniqueness claim. Both executable HTTP
+adapters override transport identity on every invocation and never expose the plan
+ID. OpenAI emits fresh random `req_...` and `chatcmpl-...` identities; Anthropic emits
+fresh random `req_...` and `msg_...` identities.
 
 OpenAI SSE begins with the assistant-role delta, chunks text and canonical tool
 arguments by Unicode code point, emits a terminal finish-reason chunk, optionally
@@ -314,7 +320,7 @@ version matrix, or OpenAI parity.
 
 Anthropic's response `anthropic-organization-id` is deliberately absent and
 unqualified. The pure kernel has no authenticated account or organization context;
-there is no Anthropic HTTP/auth adapter to own or qualify that header.
+the bounded adapter does not emit or qualify that account-specific header.
 
 ## MCP-first integration boundary
 
@@ -328,9 +334,9 @@ warning, cleanup, and failures.
 
 There is no reset operation because this slice has no LLM runtime state. It must not
 be presented as a console-only or hidden HTTP configuration path. Applications under
-test call the separate bounded OpenAI data plane documented in the task guide and must
-never send the management Access Key to it. `accept_any` still requires a valid
-provider Bearer Mock Credential.
+test call the separate bounded OpenAI/Anthropic data planes documented in the task
+guide and must never send the management Access Key to them. `accept_any` still
+requires a valid provider Mock Credential through the dialect's required channel.
 
 ## Provider reference baseline
 
@@ -362,16 +368,17 @@ target, or streaming target changes.
 | Planner tests | Behavior-to-plan adaptation, deterministic identifiers/metadata, stateless turns, and validation-before-explicit staged-interface commit | Durable/revision-bound state, runtime transaction ownership, retries, or conversations |
 | Pure renderer tests | Selected provider success/error JSON and immediate text/tool/usage SSE-frame sequences | Request parsing, version-header/auth enforcement, timed streaming, or network behavior |
 | OpenAI HTTP-adapter tests | Exact operation manifest, strict request/tool/auth/body/response limits, model projection, provider errors, fresh identity, initial-delay abort, and no reflection | Environment persistence or hosted routing |
+| Anthropic HTTP-adapter tests | Exact operation manifest, `x-api-key`/stable-version/beta rejection, bounded Messages/tool/model parsing, provider errors, fresh identity, initial-delay abort, and no reflection | Broad Anthropic API or hosted routing |
 | Environment-runtime tests | Current-definition auth, accept-any/strict separation, rotation linearization, stateless planning, revision recheck, and secret rejection | Stateful conversations or multi-tenant hosted authorization |
-| Host-resolution tests | Exact path/subdomain OpenAI classification and trusted internal metadata replacement | Live wildcard TLS or custom-domain routing |
-| Official SDK tests | Pinned clients deserialize pure projections; the OpenAI client also exercises the bounded local Worker route configured through MCP | Wrangler network compatibility, hosted connectability, streaming/cancellation, or ecosystem-wide compatibility |
+| Host-resolution tests | Exact path/subdomain OpenAI/Anthropic classification and trusted internal metadata replacement | Live wildcard TLS or custom-domain routing |
+| Official SDK tests | Pinned clients deserialize pure projections and exercise both bounded local Worker routes configured through MCP | Wrangler network compatibility, hosted connectability, streaming/cancellation, or ecosystem-wide compatibility |
 | Generated provider manifest/drift tests | Machine-readable route, auth, limit, planning, unsupported, and evidence contract remains derived from executable source | Deployment or live-provider parity |
 | Repository checks | Formatting, links, types, focused tests, and builds for the candidate when recorded green | Hosted CI, merge, publication, Cloud consumption, or deployment |
 
 The original response-kernel and management-definition candidates passed their
-focused suites and complete local gates on 2026-07-25. The OpenAI provider tranche
-adds focused adapter/runtime/routing/generation coverage and the official-SDK local
-Worker integration. Its exact source evidence belongs in the implementation ledger
+focused suites and complete local gates on 2026-07-25. The provider tranches add
+focused adapter/runtime/routing/generation coverage and official-SDK local Worker
+integrations. Their exact source evidence belongs in the implementation ledger
 with the revision carrying the final green gate. None of these tranches implies hosted
 CI, merge, publication, Cloud consumption, or deployment.
 
@@ -379,19 +386,18 @@ CI, merge, publication, Cloud consumption, or deployment.
 
 Before a complete F2 claim, the public implementation still needs:
 
-1. an Anthropic request/auth/version/model/Messages route;
-2. edge-owned SSE cadence, mid-stream errors, cancellation, and duration/resource
+1. edge-owned SSE cadence, mid-stream errors, cancellation, and duration/resource
    enforcement for both dialects;
-3. explicit conversation/version/retry semantics if stateful behavior is added;
-4. request observation and LLM-specific assertions;
-5. official SDK clients against Wrangler network routes for normal, error, usage,
+2. explicit conversation/version/retry semantics if stateful behavior is added;
+3. request observation and LLM-specific assertions;
+4. official SDK clients against Wrangler network routes for normal, error, usage,
    tool-call, streaming, and cancellation cases;
-6. broader parameter/version/client conformance only when explicitly chosen;
-7. Cloud pinning only after the public candidate is merged and independently
+5. broader parameter/version/client conformance only when explicitly chosen;
+6. Cloud pinning only after the public candidate is merged and independently
    qualified; and
-8. exact-revision hosted CI, staging, production, and documentation evidence kept as
+7. exact-revision hosted CI, staging, production, and documentation evidence kept as
    separate gates.
 
-Until those steps pass, say “MCP-managed definitions plus an OpenAI-only,
-non-streaming provider data plane are source-qualified locally,” not “mockOS is
-OpenAI-compatible,” not “mockOS supports Anthropic,” and not “F2 is complete.”
+Until those steps pass, say “MCP-managed definitions plus bounded OpenAI and
+Anthropic non-streaming provider data planes are source-qualified locally,” not
+“mockOS is generally OpenAI/Anthropic-compatible” and not “F2 is complete.”

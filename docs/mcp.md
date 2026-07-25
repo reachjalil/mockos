@@ -1,6 +1,6 @@
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with a separate partial OpenAI data plane
+Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with separate partial OpenAI/Anthropic data planes
 Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -21,7 +21,7 @@ test. See the [interface model](./concepts/interface-model.md), begin identity
 workflows with the [MCP-first quickstart](./getting-started/mcp-first.md), and use the
 [mock MCP guide](./mock-mcp.md) for F1. Use the
 [mock LLM guide](./mock-llm.md) for the F2 MCP definition contract and separate
-OpenAI provider data plane.
+OpenAI/Anthropic provider data planes.
 
 ## Authentication fails closed
 
@@ -67,8 +67,10 @@ are generated from the canonical registry in the
 [management-tool reference](./reference/management-tools.md). The corresponding
 [JSON catalog](./reference/management-operations.v1.json) is intended for machine
 readers. The generated
-[mock OpenAI manifest](./reference/mock-llm-openai.v1.json) describes the separate
-application-facing provider operations; those operations are not management tools.
+[mock OpenAI](./reference/mock-llm-openai.v1.json) and
+[mock Anthropic](./reference/mock-llm-anthropic.v1.json) manifests describe the
+separate application-facing provider operations; those operations are not management
+tools.
 
 All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
@@ -85,8 +87,8 @@ idempotent success even when the supplied revision is stale.
 `delete_mock_llm_server` requires a positive current `expectedRevision`, deletes
 atomically on a match, returns the typed revision-conflict `409` on a stale/ABA
 revision, and returns `deleted: false` when the row is already absent. There is no LLM
-reset operation because the current OpenAI provider runtime is stateless and persists
-no conversation, response, or evaluator state.
+reset operation because the current provider runtimes are stateless and persist no
+conversation, response, or evaluator state.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -116,7 +118,10 @@ These are deliberately separate trust boundaries:
   provider Bearer Mock Credential. `accept_any` skips verifier comparison but is not
   unauthenticated; `strict` compares the current stored verifier. The route supports
   only model list/retrieve and non-streaming Chat Completions.
-- No Anthropic mock-LLM provider route exists.
+- `/llm-mock/{slug}/anthropic` under an environment requires a syntactically valid
+  provider `x-api-key` Mock Credential plus exactly
+  `anthropic-version: 2023-06-01`. It supports model list/retrieve and non-streaming
+  Messages; authorization aliases, beta headers, and streaming fail closed.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.

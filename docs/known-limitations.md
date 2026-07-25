@@ -1,8 +1,8 @@
 # Known limitations
 
 Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
-source-qualified F0/F1, partial OpenAI F2, bounded MSAL Node local X/Q, and remaining
-limits; deliberately candid
+source-qualified F0/F1, partial OpenAI/Anthropic F2, bounded MSAL Node local X/Q, and
+remaining limits; deliberately candid
 Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
@@ -161,30 +161,36 @@ slice has sampled H evidence, but no current fixture is V or P.
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
   record/replay is rejected. F1 itself does not define an LLM provider surface; the
-  separate partial F2 slice below owns bounded mock OpenAI. Code Mode, team ACLs,
+  separate partial F2 slice below owns bounded mock OpenAI/Anthropic. Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
-- The partial F2 source has an MCP-only configuration plane and a separate bounded
-  OpenAI data plane; it is not a general mock LLM service. Four MCP operations own
+- The partial F2 source has an MCP-only configuration plane and separate bounded
+  OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
   strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
-  The environment route source-qualifies only ordered model list/retrieve and
-  non-streaming Chat Completions. Both auth modes require a valid provider Bearer Mock
-  Credential: `accept_any` skips verifier comparison, while `strict` checks the
-  current hash-only verifier. The parser accepts only bounded text messages,
+  Environment routes source-qualify ordered model list/retrieve plus non-streaming
+  Chat Completions and Messages. OpenAI requires Bearer and Anthropic requires
+  `x-api-key` plus exactly `anthropic-version: 2023-06-01`; both auth modes require a
+  valid provider Mock Credential. `accept_any` skips verifier comparison, while
+  `strict` checks the dialect's current hash-only verifier. The OpenAI parser accepts
+  only bounded text messages,
   function tools, `n` absent/one, `stream` absent/false, and `tool_choice`
   absent/`auto`; unknown fields, multimodal content, `stream_options`, and the broader
   OpenAI parameter surface fail closed. It derives a stateless turn from prior
   assistant messages and injects fresh request/completion IDs, while content-derived
   plan IDs stay internal. Initial response/error delay is abort-aware, but there is no
-  SSE listener or timed chunk delivery. Anthropic routing, OpenAI Responses and other
-  APIs, conversation/evaluator state, reset, retry deduplication, LLM-specific
+  SSE listener or timed chunk delivery. The Anthropic parser accepts only bounded
+  `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
+  streaming/betas/broad parameters, and deliberately does not enforce turn alternation
+  or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
+  conversation/evaluator state, reset, retry deduplication, LLM-specific
   observation/assertion support, Wrangler-network qualification, hosted CI for this
   tranche, private Cloud pinning, deployment, and verified-live comparison remain
   unavailable or unqualified. Safe `configured` markers remain non-writable, and
   every changed full-definition put must resupply or rotate each enabled strict key
   from caller-owned storage. The complete active platform key is rejected from
   definition keys/string values and provider authentication/body reflection. Use the
-  [generated provider manifest](./reference/mock-llm-openai.v1.json), not OpenAI's
+  generated [OpenAI](./reference/mock-llm-openai.v1.json) and
+  [Anthropic](./reference/mock-llm-anthropic.v1.json) provider manifests, not either
   broader API, as the compatibility boundary.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
   control routes; the other 19 management MCP operations, including all five F1 and

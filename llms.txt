@@ -15,15 +15,20 @@
 - [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
   resources, resource templates, and prompts from an agent under test.
 - [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call
-  its bounded OpenAI-compatible, non-streaming provider data plane.
+  its bounded OpenAI- or Anthropic-shaped non-streaming provider data plane.
 - [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,
   probe models, call Chat Completions, test failures, and clean up safely.
+- [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md): create through
+  MCP, probe models, call Messages, test version/auth failures, and clean up safely.
 - [Management tool reference](docs/reference/management-tools.md): generated
   reference for all 24 current MCP tools.
 - [Machine operation catalog](docs/reference/management-operations.v1.json):
   generated schemas and capability metadata.
 - [Mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json):
   generated route, auth, request-limit, planning, and evidence contract.
+- [Mock Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json):
+  generated route, version-header, auth, request-limit, planning, and evidence
+  contract.
 - [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated
   reference for the 5 implemented HTTP routes.
 
@@ -42,9 +47,9 @@
   `unqualified`.
 - F2 mock LLM definitions: four MCP-only operations are source-implemented with
   schema-v7 environment persistence and write-only provider Mock Credentials.
-- F2 mock LLM provider data plane: a bounded OpenAI-only, non-streaming subset is
-  source-qualified locally; Anthropic, state/reset, observations, paced streaming,
-  Cloud pinning, and deployment remain unavailable or unqualified.
+- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic
+  Messages/model subsets are source-qualified locally; state/reset, observations,
+  streaming/betas, Cloud pinning, and deployment remain unavailable or unqualified.
 - F3 script execution: unavailable; `NoSandbox` fails closed.
 - F6 Code Mode `search` and `execute`: unavailable and disabled.
 - CLI and typed client: unpublished.

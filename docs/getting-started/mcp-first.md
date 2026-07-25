@@ -58,7 +58,7 @@ source exposes exactly 24 tools; use the
 [generated management-tool reference](../reference/management-tools.md) instead of a
 copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
 four F2 tools persist mock-LLM definitions. Those four tools do not prove that the
-connected endpoint serves the separate OpenAI provider route.
+connected endpoint serves either separate provider route.
 
 Stop before creating state when:
 
@@ -124,7 +124,7 @@ global install. The full command workflow and exit-code contract are in the
 
 The management key authenticates management MCP. It must not be reused for SCIM,
 Graph-shaped, Okta directory-shaped, environment mock MCP, outbound provisioning, or
-mock OpenAI application traffic. Those surfaces use separate synthetic Mock Credentials
+mock OpenAI/Anthropic application traffic. Those surfaces use separate synthetic Mock Credentials
 documented in the
 [interface model](../concepts/interface-model.md#trust-boundaries).
 
@@ -137,12 +137,14 @@ minimum safe request evidence.
 This identity workflow does not configure the source-qualified F1 mock MCP server.
 Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for that task.
 It also does not configure the F2 definition/provider workflow. Use the
-[OpenAI SDK quickstart](../quickstarts/openai-sdk.md) for the shortest end-to-end
-path, or [MCP-managed mock OpenAI](../mock-llm.md) for exact revision, credential,
-request, persistence, and cleanup contracts. That partial F2 workflow enables only
-OpenAI model list/retrieve and non-streaming Chat Completions. It does not enable:
+[OpenAI SDK quickstart](../quickstarts/openai-sdk.md) or
+[Anthropic SDK quickstart](../quickstarts/anthropic-sdk.md) for a short end-to-end
+path, or [MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for exact revision,
+credential, request, persistence, and cleanup contracts. That partial F2 workflow
+enables bounded model discovery plus non-streaming OpenAI Chat Completions and
+Anthropic Messages. It does not enable:
 
-- Anthropic provider APIs, the OpenAI Responses API, or SSE;
+- broad Anthropic provider/beta APIs, the OpenAI Responses API, or SSE;
 - LLM conversation state, reset, observations, or assertions;
 - Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);

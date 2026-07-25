@@ -1,7 +1,10 @@
 import type { JsonValue } from "@mockos/contracts/behavior";
 import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
 import {
+  createMockLlmAnthropicFetchHandler,
   createMockLlmOpenAiFetchHandler,
+  type MockLlmAnthropicCatalog,
+  type MockLlmAnthropicRuntimeResult,
   type MockLlmOpenAiCatalog,
   type MockLlmOpenAiRuntimeResult,
 } from "@mockos/llm-mock";
@@ -37,6 +40,18 @@ type MockLlmOpenAiEnvironmentRpc = {
     credential: string,
     request: JsonValue
   ): Promise<MockLlmOpenAiRuntimeResult<MockLlmPlan>>;
+};
+
+type MockLlmAnthropicEnvironmentRpc = {
+  getMockLlmAnthropicCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmAnthropicCatalog>>;
+  planMockLlmAnthropicMessage(
+    slug: string,
+    credential: string,
+    request: JsonValue
+  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmPlan>>;
 };
 
 const resolveEnvironmentId = async (
@@ -75,6 +90,26 @@ export const routeEnvironmentRequest = async (
   const id = bindings.ENVIRONMENTS.idFromName(environmentId);
   const stub = bindings.ENVIRONMENTS.get(id);
   if (resolution.kind === "mock-llm") {
+    if (resolution.dialect === "anthropic") {
+      const mockLlm = stub as unknown as MockLlmAnthropicEnvironmentRpc;
+      const handler = createMockLlmAnthropicFetchHandler({
+        ...(bindings.API_KEY ? { platformApiKey: bindings.API_KEY } : {}),
+        runtime: {
+          getCatalog: (input) =>
+            mockLlm.getMockLlmAnthropicCatalog(input.slug, input.credential),
+          planMessage: (input) =>
+            mockLlm.planMockLlmAnthropicMessage(
+              input.slug,
+              input.credential,
+              input.request
+            ),
+        },
+      });
+      return handler(request, {
+        slug: resolution.slug,
+        providerPath: resolution.providerPath,
+      });
+    }
     const mockLlm = stub as unknown as MockLlmOpenAiEnvironmentRpc;
     const handler = createMockLlmOpenAiFetchHandler({
       ...(bindings.API_KEY ? { platformApiKey: bindings.API_KEY } : {}),
