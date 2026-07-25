@@ -12,6 +12,7 @@ import {
 import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
 export * from "./mock-mcp";
+export * from "./mock-llm";
 export * from "./provisioning";
 export * from "./scim";
 

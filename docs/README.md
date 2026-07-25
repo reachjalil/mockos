@@ -1,6 +1,6 @@
 <h1><span aria-hidden="true">🥸</span> mockOS documentation</h1>
 
-Status: MCP-first public documentation for accepted M5/M6 and locally source-qualified F0/F1
+Status: MCP-first public documentation through F1 plus the partial F2 source kernel
 Last reviewed: 2026-07-25
 
 mockOS is an MCP-first, deterministic identity-platform and agent-dependency test
@@ -19,6 +19,7 @@ support, deployment, or provider-parity claim.
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
+| Understand the source-only mock-LLM response kernel | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
 | Understand MCP, the console, CLI, HTTP, and provider endpoints | [Interface model](./concepts/interface-model.md) |
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
@@ -71,12 +72,18 @@ Access Key.
 - [Requirements traceability](./requirements-traceability.md)
 - [F0 contract, client, and wrapper foundation](./f-series/f0-foundation.md)
 - [F1 mock-MCP source implementation](./f-series/f1-mcp-foundation.md)
+- [Partial F2 LLM response kernel](./f-series/f2-llm-kernel.md)
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 
 The F-series roadmap is target design, not implementation evidence. F1 is locally
 source-qualified for its bounded implementation, while hosted CI, merge, package
-publication, private Cloud consumption, and deployed F1 acceptance remain open. Mock
-LLM APIs, script execution, enforced scoped keys, and Code Mode remain unavailable.
+publication, private Cloud consumption, and deployed F1 acceptance remain open. The
+F2 source slice validates a neutral response plan, behavior adapter, pure
+OpenAI/Anthropic rendering, and in-process official-SDK deserialization. It adds no
+server definition, management MCP operation, route, authentication, persistence,
+network/timed streaming, observation, Worker, or Cloud integration, so mock LLM APIs
+remain unavailable as a product surface. Script execution, enforced scoped keys, and
+Code Mode also remain unavailable.
 
 ## Accepted evidence
 

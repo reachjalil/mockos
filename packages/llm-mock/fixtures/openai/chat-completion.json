@@ -1,0 +1,33 @@
+{
+  "id": "llmp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "object": "chat.completion",
+  "created": 1784973600,
+  "model": "mockos-chat-1",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hi 🧪!",
+        "refusal": null,
+        "tool_calls": [
+          {
+            "id": "call_weather",
+            "type": "function",
+            "function": {
+              "arguments": "{\"location\":{\"city\":\"Berlin\",\"country\":\"DE\"},\"units\":\"celsius\"}",
+              "name": "get_weather"
+            }
+          }
+        ]
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "completion_tokens": 7,
+    "prompt_tokens": 11,
+    "total_tokens": 18
+  }
+}

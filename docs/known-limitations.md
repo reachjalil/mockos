@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally source-qualified F0/F1, and remaining limits; deliberately candid
+Status: Accepted M3/M5, sampled M6, source-only M7, partial F2 kernel, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -130,8 +130,26 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - F1 supports bounded declarative `static`, `template`, `match`, `sequence`, and
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
-  record/replay is rejected. Mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
+  record/replay is rejected. Served mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
+- The partial F2 source slice is a pure response kernel, not a mock LLM service.
+  Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI Chat
+  Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
+  consumption through injected in-process Fetch are source-tested. There is no
+  LLM server definition, management MCP operation, public route, request parser,
+  authentication, persistence or persisted server sequence/conversation owner,
+  edge-paced SSE network stream, observation/assertion support, Worker or Durable
+  Object composition, private Cloud pin, Wrangler round trip, hosted CI, deployment,
+  or verified-live comparison. The official-SDK harness hand-supplies
+  model-list/retrieve fixtures; there is no model renderer or catalog. No listener
+  emits the serialized SSE frames. The 20-tool management registry is unchanged. Do
+  not configure either planned
+  `/e/{environmentId}/llm-mock/{slug}/{provider}/v1` route because neither exists.
+  Pure fixtures reuse content-derived plan IDs for deterministic provider/request
+  correlation, not unique invocation IDs, and omit Anthropic organization identity
+  because no HTTP/auth context exists. A future edge must inject both. Error and
+  stream cadence are bounded inert metadata; no renderer sleeps or paces a network
+  response.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
   control routes; the other 15 management MCP operations, including all five F1
   operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are

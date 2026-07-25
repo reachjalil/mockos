@@ -35,10 +35,12 @@ Repository path: `README.md`
 > parity. The F0 contract/client/OpenAPI foundation and bounded F1 mock-MCP runtime
 > are locally source-qualified in the revision carrying this document: their focused
 > suites and the complete repository `pnpm check` gate are green. Hosted CI/merge, F1
-> deployment, private Cloud consumption, F2-F9 runtimes, and all experimental
-> activation remain pending. The guarded GitHub promotion workflows remain
-> unqualified. This is not yet a stable npm release or a production-SLA service. See
-> the
+> deployment, private Cloud consumption, served F2-F9 runtimes, and all experimental
+> activation remain pending. A partial F2 source kernel now covers neutral response
+> plans, behavior adaptation, pure OpenAI/Anthropic JSON/SSE-frame rendering, and
+> in-process official-SDK deserialization; it is not an endpoint or complete F2
+> runtime. The guarded GitHub promotion workflows remain unqualified. This is not yet
+> a stable npm release or a production-SLA service. See the
 > [evidence ledger](docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -68,7 +70,9 @@ tools, resources, resource templates, and prompts for an agent under test. The b
 F1 source implements that data plane at an environment route while the five
 configuration operations remain part of management MCP. Start with the
 [mock MCP guide](docs/mock-mcp.md). Mock LLM APIs, script execution, enforced scoped
-keys, and Code Mode remain unavailable.
+keys, and Code Mode remain unavailable. The
+[partial F2 LLM kernel](docs/f-series/f2-llm-kernel.md) is source architecture for a
+future provider data plane, not a server an application can call.
 
 The target deployment is Cloudflare-forward: Workers, SQLite Durable Objects,
 Workflows, Queues, KV, and an Agents SDK MCP server. This public repository contains
@@ -136,6 +140,13 @@ private control plane, licensing, billing, or a hosted mockOS account.
   contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
   deliberately do not appear in HTTP/OpenAPI/client projections, and the new packages
   are not yet distribution-qualified
+- A partial F2 source kernel with bounded provider-neutral response-plan schemas,
+  behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
+  JSON/SSE-frame renderers, and pinned official-SDK consumption through
+  injected in-process Fetch. It adds no server definition, management MCP operation,
+  route, auth, persistence, network edge stream/pacing, observation, Worker, Cloud
+  integration, or Wrangler/deployed conformance; model list/retrieve exists only as a
+  hand-supplied SDK test fixture, not a renderer or catalog
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -206,6 +217,7 @@ contracts <- core <- engine-http ---------- worker-kit <- apps/worker
      |          |                               ^
      |          +---- behavior/state ----------+
      +---- mcp-mock (mock data plane) ----------+
+     +---- llm-mock (pure partial F2 kernel) ----+
      +---- mcp (management plane) --------------+
                 testkit
 ```
@@ -7793,7 +7805,7 @@ Repository path: `docs/known-limitations.md`
 
 # Known limitations
 
-Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally source-qualified F0/F1, and remaining limits; deliberately candid
+Status: Accepted M3/M5, sampled M6, source-only M7, partial F2 kernel, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -7923,8 +7935,26 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - F1 supports bounded declarative `static`, `template`, `match`, `sequence`, and
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
-  record/replay is rejected. Mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
+  record/replay is rejected. Served mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
+- The partial F2 source slice is a pure response kernel, not a mock LLM service.
+  Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI Chat
+  Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
+  consumption through injected in-process Fetch are source-tested. There is no
+  LLM server definition, management MCP operation, public route, request parser,
+  authentication, persistence or persisted server sequence/conversation owner,
+  edge-paced SSE network stream, observation/assertion support, Worker or Durable
+  Object composition, private Cloud pin, Wrangler round trip, hosted CI, deployment,
+  or verified-live comparison. The official-SDK harness hand-supplies
+  model-list/retrieve fixtures; there is no model renderer or catalog. No listener
+  emits the serialized SSE frames. The 20-tool management registry is unchanged. Do
+  not configure either planned
+  `/e/{environmentId}/llm-mock/{slug}/{provider}/v1` route because neither exists.
+  Pure fixtures reuse content-derived plan IDs for deterministic provider/request
+  correlation, not unique invocation IDs, and omit Anthropic organization identity
+  because no HTTP/auth context exists. A future edge must inject both. Error and
+  stream cadence are bounded inert metadata; no renderer sleeps or paces a network
+  response.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
   control routes; the other 15 management MCP operations, including all five F1
   operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
@@ -8047,7 +8077,7 @@ Repository path: `docs/IMPLEMENTATION_STATUS.md`
 
 # Implementation status
 
-Status: M0-M3 and tested M5 accepted; bounded M6 deployed; M7/F0 source-complete; F1 locally source-qualified
+Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; F2 partial
 Last reviewed: 2026-07-25
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
@@ -8075,6 +8105,14 @@ layer suites and complete repository `pnpm check` gate are green in the revision
 carrying this document. Hosted CI, merge, package publication, deployment, private
 Cloud consumption, and broader ecosystem compatibility remain separate claims until
 recorded.
+The [partial F2 LLM kernel](docs/f-series/f2-llm-kernel.md) adds provider-neutral
+response-plan schemas, a behavior-to-plan adapter, pure OpenAI/Anthropic
+JSON/SSE-frame renderers, and in-process consumption tests with pinned official SDKs.
+That focused source evidence does not add an LLM server definition, management MCP
+tool, HTTP/provider route, authentication, persistence, edge pacing, observation,
+Worker composition, private Cloud integration, or Wrangler/deployed conformance. F2
+therefore remains incomplete and mock LLM APIs remain unavailable as an operable
+product surface.
 
 Evidence tiers are intentionally separate. **Source** means exact-revision local or
 hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
@@ -8088,6 +8126,7 @@ organization. No current fixture or milestone is verified-live.
 | Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
 | F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 20 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine catalog](docs/reference/management-operations.v1.json), self-hosted HTTP reference, and agent-readable indexes with exact-count, link, drift, and inert-secret checks. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
 | F1 environment-hosted mock MCP | Locally source-qualified; hosted CI/merge/deployment unqualified | Strict [mock-MCP contracts](packages/contracts/src/mock-mcp.ts), bounded JSON Schema/templates/results, [declarative evaluation](packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/hash-only-session tables, the atomic [repository](packages/core/src/mock-mcp/repository.ts), five MCP-only management operations, and the hand-written [`@mockos/mcp-mock`](packages/mcp-mock) `2025-11-25` adapter pass their focused suites and the complete repository gate. The [path-mode Worker integration](apps/worker/test/mock-mcp.integration.test.ts) configures through management MCP and exercises the routed official SDK, separate credential/session boundary, pagination and all capability kinds, reset, idempotent/revision-changing writes, delete, and redacted MCP observations; host-resolver tests separately cover both endpoint forms. State is capped per value and at 256 rows/2 MiB in aggregate. Identical writes preserve revision/state/sessions; changed replacements and in-flight revision checks prevent stale results; result validation and HTTP-abort handling during configured latency happen before staged sequence commit; scripts fail closed. Resource-template reverse matching is bounded/linear and deterministic for empty, percent-encoded, and adjacent-variable captures. Message-level `notifications/cancelled` remains deliberately unenforced. The [F1 guide](docs/mock-mcp.md) records exact limits and gaps. Hosted CI, merge, package publication, deployment, wildcard TLS, private hosted integration, GET/list-change streaming, a second protocol version, scripts, proxy, and broader client/ecosystem conformance remain unqualified or unavailable. |
+| F2 provider-neutral LLM response kernel | Partial local source evidence; no service/runtime qualification | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen mock-LLM plan, staged behavior adapter, pure OpenAI Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK in-process tests. Its focused suites and complete forced repository gate are green locally. The injected Fetch harness alone supplies model-list/retrieve fixtures; there is no model renderer or catalog. No listener, route, parser, auth check, Worker, Durable Object, persistence, network edge stream/pacing, request observation, management MCP operation, or Cloud consumer participates. This is not Wrangler or deployed conformance, does not increase the 20-tool management registry, and does not satisfy the F2 exit gate. |
 | Synchronous SQL store | Accepted through the tested M5 slice | The Node [adapter](packages/testkit/src/sql-store.ts) and [unit test](packages/testkit/src/testkit.test.ts) share the synchronous store contract exercised through SQLite Durable Object Worker integrations. M5 adds append-only provisioning target, staged-run target, run/step, and watermark state, including one active run per app/target; local gates and the controlled-target hosted run passed. |
 | Core migrations and directory repositories | Accepted through M5; bounded M6 source suite and deployed sample green | The accepted [core substrate](packages/core/src/core.test.ts), [directory/lifecycle](packages/core/src/directory-lifecycle.test.ts), [Okta OAuth](packages/core/src/okta.test.ts), and [scenario/log](packages/core/src/scenario-log.test.ts) cover the M3 engine. The M5 [provisioning planner/interpreter](packages/core/src/provisioning) passed focused/full and controlled-target gates. M6 focused tests cover the bounded [Classic Authn service](packages/core/src/authn/okta-authn.ts), deterministic broken-token mutations, active/successor key handling, private-key scrubbing, bounded retention, and stale-instance/sign-rotate races. Authn state retrieval uses a sliding five-minute expiry while session capabilities retain their fixed five-minute issuance expiry. Each table is capped at 10,000 retained rows and each User at 32 retained rows per kind; ordered oldest-expiry eviction and a 256-row-per-table issuance GC pass are index-backed without advancing schema v5, preserving rollback compatibility. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises the externally observable slices, not every source-only retention/concurrency/security assertion. |
 | Deterministic test seams | Complete through M3; bounded M6 token/key paths accepted | The [clock/RNG](packages/testkit/src/determinism.ts) and persisted [scenario service](packages/core/src/scenario/scenario-service.ts) have deterministic unit coverage. The M6 token stream adds exact-only rotation and claim-skew actions with fixed broken-token mutations; the deployed sample exercised rotation, skew, and every mutation. Production signing-key material remains cryptographically generated, and deeper deterministic assertions remain source evidence. |
@@ -8183,10 +8222,11 @@ is green. Hosted CI, merge, deployment, package publication, Worker Loader evide
 and F-series runtime activation remain pending.
 
 The bounded F1 transport/runtime is locally source-qualified in the revision carrying
-this document: the focused suites and complete repository gate are green. Hosted CI,
-merge, package publication, deployment, private Cloud integration, F2-F3 runtimes, F4
-authorization/audit, broader client/ecosystem conformance, and F6 Code Mode activation
-remain pending.
+this document: the focused suites and complete repository gate are green. The partial
+F2 response kernel adds focused source tests only; it is not a routed or hosted
+runtime. Hosted CI, merge, package publication, deployment, private Cloud integration,
+the remaining F2 service, F3 runtime, F4 authorization/audit, broader
+client/ecosystem conformance, and F6 Code Mode activation remain pending.
 
 ---
 

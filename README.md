@@ -21,10 +21,12 @@
 > parity. The F0 contract/client/OpenAPI foundation and bounded F1 mock-MCP runtime
 > are locally source-qualified in the revision carrying this document: their focused
 > suites and the complete repository `pnpm check` gate are green. Hosted CI/merge, F1
-> deployment, private Cloud consumption, F2-F9 runtimes, and all experimental
-> activation remain pending. The guarded GitHub promotion workflows remain
-> unqualified. This is not yet a stable npm release or a production-SLA service. See
-> the
+> deployment, private Cloud consumption, served F2-F9 runtimes, and all experimental
+> activation remain pending. A partial F2 source kernel now covers neutral response
+> plans, behavior adaptation, pure OpenAI/Anthropic JSON/SSE-frame rendering, and
+> in-process official-SDK deserialization; it is not an endpoint or complete F2
+> runtime. The guarded GitHub promotion workflows remain unqualified. This is not yet
+> a stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -54,7 +56,9 @@ tools, resources, resource templates, and prompts for an agent under test. The b
 F1 source implements that data plane at an environment route while the five
 configuration operations remain part of management MCP. Start with the
 [mock MCP guide](./docs/mock-mcp.md). Mock LLM APIs, script execution, enforced scoped
-keys, and Code Mode remain unavailable.
+keys, and Code Mode remain unavailable. The
+[partial F2 LLM kernel](./docs/f-series/f2-llm-kernel.md) is source architecture for a
+future provider data plane, not a server an application can call.
 
 The target deployment is Cloudflare-forward: Workers, SQLite Durable Objects,
 Workflows, Queues, KV, and an Agents SDK MCP server. This public repository contains
@@ -122,6 +126,13 @@ private control plane, licensing, billing, or a hosted mockOS account.
   contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
   deliberately do not appear in HTTP/OpenAPI/client projections, and the new packages
   are not yet distribution-qualified
+- A partial F2 source kernel with bounded provider-neutral response-plan schemas,
+  behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
+  JSON/SSE-frame renderers, and pinned official-SDK consumption through
+  injected in-process Fetch. It adds no server definition, management MCP operation,
+  route, auth, persistence, network edge stream/pacing, observation, Worker, Cloud
+  integration, or Wrangler/deployed conformance; model list/retrieve exists only as a
+  hand-supplied SDK test fixture, not a renderer or catalog
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -192,6 +203,7 @@ contracts <- core <- engine-http ---------- worker-kit <- apps/worker
      |          |                               ^
      |          +---- behavior/state ----------+
      +---- mcp-mock (mock data plane) ----------+
+     +---- llm-mock (pure partial F2 kernel) ----+
      +---- mcp (management plane) --------------+
                 testkit
 ```
