@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M3/M5 accepted, bounded M6 deployed, and F1/partial OpenAI F2 controls source-only
+Status: M3/M5 accepted, bounded M6 deployed, and F1/partial OpenAI/Anthropic F2 controls source-only
 Last reviewed: 2026-07-25
 
 ## Assets and trust boundaries
@@ -12,8 +12,8 @@ sessions, revision-bound behavior state, and captured agent traffic. Provider,
 environment mock-MCP, and mock-LLM protocol surfaces are intentionally
 attacker-controllable.
 F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
-schema-v7 definition storage, and an OpenAI-only provider data plane. That data plane
-is an attacker-controlled synthetic protocol surface, not a management API.
+schema-v7 definition storage, and bounded OpenAI/Anthropic provider data planes. Those
+data planes are attacker-controlled synthetic protocol surfaces, not management APIs.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
 boundary.
 
@@ -47,13 +47,15 @@ definition access, lost updates, delete/recreate revision reuse, canonicalizatio
 ambiguity, malformed persisted rows/allocator regression, definition-size denial, and
 unsafe rollback after a schema-v7 store has been opened. A safe-view marker mistakenly
 reused as a write also risks an ambiguous credential update, so it must fail rather
-than imply preservation. The OpenAI data plane additionally considers malformed or
+than imply preservation. The provider data planes additionally consider malformed or
 double-decoded route selection, cross-environment or cross-dialect dispatch,
 caller-spoofed internal routing headers, alternate-header/platform-key authentication
 confusion, credential rotation races, credential reflection through request
-fingerprints/errors/logs, oversized or adversarial JSON/tool schemas, unknown OpenAI
+fingerprints/errors/logs, oversized or adversarial JSON/tool schemas, unknown provider
 fields that silently change semantics, undeclared tool output, stale-definition plan
 commit, content-derived transport-ID reuse, and abort/timing resource consumption.
+Anthropic adds version/beta header confusion, authorization-alias confusion, malformed
+tool history, and model-pagination assumptions.
 
 ## Implemented controls and evidence boundaries
 
@@ -95,7 +97,8 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   bundle explicitly refuses a v7-touched database as newer than supported. This fails
   closed but means source rollback cannot downgrade the store; recovery must roll
   forward or use a separately reviewed bridge.
-- The mock-LLM resolver recognizes only the exact OpenAI path/subdomain route family,
+- The mock-LLM resolver recognizes only the exact OpenAI and Anthropic
+  path/subdomain route families,
   decodes the slug once, validates the decoded slug, and binds the body to neither an
   environment, slug, nor dialect. The edge strips all caller-supplied `x-mockos-*`
   headers before adding trusted route kind, environment, dialect, and slug metadata.
@@ -107,6 +110,12 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   `X-Anthropic-API-Key`, malformed/duplicate authorization, and the active platform
   Access Key as a credential substring fail before runtime dispatch. Provider
   authentication never accepts the management key as a fallback.
+- The Anthropic route requires a bounded provider `x-api-key` Mock Credential even in
+  `accept_any` mode and exactly `anthropic-version: 2023-06-01`. `Authorization`,
+  `X-Anthropic-API-Key`, duplicate/malformed credentials, every beta header, and the
+  active platform Access Key fail before runtime dispatch. Strict mode uses the same
+  hash-before-current-read and fixed-length verifier comparison, scoped only to the
+  Anthropic dialect.
 - Chat Completions accepts only UTF-8 `application/json` with absent/identity content
   encoding, reads at most 256 KiB even without a trustworthy `Content-Length`, and
   applies depth-24/10,000-node structural limits before strict message/tool parsing.
@@ -116,8 +125,8 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
   JSON/UTF-8, and undeclared behavior-selected tools fail closed. Provider-shaped
   request errors use generic fixed messages and never serialize validation-library
   issues, input values, credentials, or runtime exceptions.
-- The adapter rejects the presented provider credential or active platform key when
-  either appears in a Chat Completions JSON key or string value. The planner receives
+- Each adapter rejects the presented provider credential or active platform key when
+  either appears in a Chat Completions or Messages JSON key or string value. The planner receives
   normalized message/tool material rather than transport or internal routing headers.
   The current slice emits no LLM-specific observation/request-log entry, so it also
   offers no LLM assertion or audit claim; that deliberate absence must not be
@@ -125,8 +134,9 @@ commit, content-derived transport-ID reuse, and abort/timing resource consumptio
 - Stateless planning derives the turn only from prior assistant messages. Before
   plan commit, the environment runtime rereads the definition revision and replans
   after a concurrent replacement; repeated instability fails generically. The edge
-  rejects a planned tool call unless the request declared that function. Every
-  invocation receives fresh random request/completion IDs, while content-derived
+  rejects a planned tool call unless the request declared that function/custom tool.
+  Every invocation receives fresh random request/completion or request/message IDs,
+  while content-derived
   deterministic plan IDs remain internal. Initial response/error delay runs outside
   the Environment Durable Object with abort-aware waiting; chunk cadence stays inert
   because the data plane does not stream.
@@ -282,15 +292,16 @@ not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 wor
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
 
-The F2 definition and bounded OpenAI controls likewise have source evidence only.
+The F2 definition and bounded OpenAI/Anthropic controls likewise have source evidence only.
 They are not a penetration test, hosted rollback, multi-tenant authorization review,
 load/abuse envelope, deployment, or live-provider evidence. `accept_any` deliberately
-accepts any syntactically valid provider Bearer value without verifier comparison; it
-is suitable only for synthetic tests and is not public/anonymous access or production
-authorization. `strict` compares the current hash-only verifier, but a successful
-mock check still grants only this synthetic provider behavior. Anthropic routing,
-conversation/response state, reset, LLM observation/assertion, paced streaming,
-Wrangler-network qualification, deployment, and private Cloud pinning remain absent.
+accepts any syntactically valid credential through the provider's required channel
+without verifier comparison; it is suitable only for synthetic tests and is not
+public/anonymous access or production authorization. `strict` compares the current
+hash-only verifier, but a successful mock check still grants only this synthetic
+provider behavior. Conversation/response state, reset, LLM observation/assertion,
+paced streaming, Anthropic betas/broad parameters, Wrangler-network qualification,
+deployment, and private Cloud pinning remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
 

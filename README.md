@@ -6,7 +6,7 @@
 
 <p align="center"><strong>MCP-first identity and agent-dependency infrastructure for integration tests.</strong></p>
 
-<p align="center">Let agents build deterministic Entra ID, Okta, MCP, and OpenAI-shaped test environments, then run real integrations against their protocol surfaces.</p>
+<p align="center">Let agents build deterministic Entra ID, Okta, MCP, OpenAI, and Anthropic test environments, then run real integrations against their protocol surfaces.</p>
 
 > **Project status:** M0 through M3 are accepted at exact revision
 > `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
@@ -24,10 +24,11 @@
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
 > MCP-only mock-LLM definition operations with environment-local schema-v7 persistence
-> and write-only provider keys plus an OpenAI-only, non-streaming provider data plane.
-> Package tests and the local Worker integration through the pinned official OpenAI
-> SDK qualify that bounded source slice. Anthropic, streaming, conversation state,
-> observations/assertions, and complete F2 remain unavailable. The guarded GitHub promotion
+> and write-only provider keys plus bounded OpenAI Chat Completions and Anthropic
+> Messages/model non-streaming data planes. Package tests and local Worker integrations
+> through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify that bounded
+> source slice. Streaming/betas, conversation state, observations/assertions, and
+> complete F2 remain unavailable. The guarded GitHub promotion
 > workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
@@ -62,11 +63,12 @@ configuration operations remain part of management MCP. Start with the
 [mock MCP guide](./docs/mock-mcp.md). Four
 [mock-LLM definition operations](./docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
-list/retrieve and non-streaming Chat Completions at an environment route through the
-official OpenAI SDK. Anthropic, SSE, conversation state, LLM observations/assertions,
-script execution, enforced scoped keys, Cloud integration, and deployment remain
-unavailable. Start with the
-[OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) and use the
+list/retrieve and non-streaming Chat Completions plus Anthropic model list/retrieve and
+non-streaming Messages at environment routes through pinned official SDKs.
+Streaming/betas, conversation state, LLM observations/assertions, script execution,
+enforced scoped keys, Cloud integration, and deployment remain unavailable. Start with
+the [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) or
+[Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md), and use the
 [partial F2 LLM record](./docs/f-series/f2-llm-kernel.md) for architecture and exact
 evidence boundaries.
 
@@ -142,12 +144,13 @@ private control plane, licensing, billing, or a hosted mockOS account.
   JSON/SSE-frame renderers, pinned official-SDK consumption through injected
   in-process Fetch, strict server-definition contracts, four MCP-only management
   operations, schema-v7 environment persistence, mandatory revision
-  compare-and-swap, safe credential views, and a bounded OpenAI provider request
-  adapter. The local Worker integration configures through MCP and exercises official
-  SDK model list/retrieve, non-streaming text/tool/error completions, provider Bearer
-  auth, isolation, rotation, and fresh transport identity. Anthropic routing, SSE,
-  runtime/conversation state, reset, LLM observation/assertion, Wrangler-network or
-  deployed conformance, and Cloud pinning remain unavailable
+  compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
+  request adapters. Local Worker integrations configure through MCP and exercise
+  official SDK model list/retrieve, non-streaming text/tool/error calls,
+  provider-specific authentication/versioning, isolation, rotation, and fresh
+  transport identity. SSE/betas, runtime/conversation state, reset, LLM
+  observation/assertion, Wrangler-network or deployed conformance, and Cloud pinning
+  remain unavailable
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -165,11 +168,12 @@ configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values
 the Okta API accepts a non-empty synthetic SSWS value. An environment-hosted mock MCP
 server accepts no credential or its own write-only Bearer Mock Credential. A mock-LLM
 definition independently configures write-only OpenAI and Anthropic Mock Credentials.
-The current OpenAI data plane always requires a valid provider Bearer value:
-`accept_any` skips verifier comparison but is not unauthenticated, while `strict`
-compares the current verifier. There is no Anthropic route. Those are synthetic
-protocol boundaries, not production authorization; never forward the management key
-to them.
+The OpenAI data plane requires a valid provider Bearer value. The Anthropic data plane
+requires a valid `x-api-key` Mock Credential plus exactly
+`anthropic-version: 2023-06-01`. For both dialects, `accept_any` skips verifier
+comparison but is not unauthenticated, while `strict` compares only the dialect's
+current verifier. Those are synthetic protocol boundaries, not production
+authorization; never forward the management key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
@@ -210,7 +214,9 @@ pnpm check
 The concrete [local curl walkthrough](./docs/quickstarts/curl.md) uses the implemented
 control and identity-protocol routes. The
 [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) configures a mock LLM
-through MCP and calls the bounded provider data plane. Read
+through MCP and calls its bounded provider data plane; the
+[Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md) does the same for the
+stable non-streaming Messages subset. Read
 [self-hosting](./docs/self-hosting.md) before trying Wrangler and
 [known limitations](./docs/known-limitations.md) before choosing an SDK.
 The sanitized [M6 workers.dev smoke evidence](./docs/evidence/m6-workers-dev-smoke.md)
@@ -225,7 +231,7 @@ contracts <- core <- engine-http ---------- worker-kit <- apps/worker
      |          |                               ^
      |          +---- behavior/state ----------+
      +---- mcp-mock (mock data plane) ----------+
-     +---- llm-mock (partial OpenAI F2 data plane)
+     +---- llm-mock (partial OpenAI/Anthropic F2 data plane)
      +---- mcp (management plane) --------------+
                 testkit
 ```
@@ -239,8 +245,8 @@ and never persisted.
 
 Start at the [documentation index](./docs/README.md). It routes agents and humans by
 task, distinguishes the 24-tool management MCP interface, the environment-hosted mock
-MCP data plane, the MCP-managed OpenAI data plane, and the five-route management HTTP
-subset, and
+MCP data plane, the MCP-managed OpenAI/Anthropic data planes, and the five-route
+management HTTP subset, and
 links support claims to their evidence. Use
 [requirements traceability](./docs/requirements-traceability.md) and the
 [parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from

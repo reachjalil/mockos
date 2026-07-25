@@ -7,6 +7,20 @@ type MockLlmErrorPlan = Extract<MockLlmPlan, { readonly kind: "error" }>;
 type MockLlmErrorKind = MockLlmErrorPlan["error"]["kind"];
 type MockLlmStopReason = MockLlmResponsePlan["stopReason"];
 
+export type RenderAnthropicPlanOptions = RenderLlmPlanOptions & {
+  /**
+   * Provider invocation identity. Pure callers may omit both values and retain
+   * the deterministic plan ID used by the source fixtures.
+   */
+  readonly requestId?: string;
+  readonly responseId?: string;
+};
+
+type AnthropicWireIdentity = {
+  readonly requestId: string;
+  readonly responseId: string;
+};
+
 const ANTHROPIC_ERROR_STATUS = {
   invalid_request: 400,
   authentication: 401,
@@ -48,8 +62,11 @@ const eventStreamHeaders = (planId: string): Readonly<Record<string, string>> =>
   "request-id": planId,
 });
 
-const errorHeaders = (plan: MockLlmErrorPlan): Readonly<Record<string, string>> => ({
-  ...jsonHeaders(plan.planId),
+const errorHeaders = (
+  plan: MockLlmErrorPlan,
+  requestId: string
+): Readonly<Record<string, string>> => ({
+  ...jsonHeaders(requestId),
   ...(plan.error.retryAfterSeconds === undefined
     ? {}
     : { "retry-after": String(plan.error.retryAfterSeconds) }),
@@ -93,12 +110,15 @@ const contentBlocks = (plan: MockLlmResponsePlan) =>
         }
   );
 
-const renderAnthropicJsonResponse = (plan: MockLlmResponsePlan): RenderedLlmWire => ({
+const renderAnthropicJsonResponse = (
+  plan: MockLlmResponsePlan,
+  identity: AnthropicWireIdentity
+): RenderedLlmWire => ({
   kind: "json",
   status: 200,
-  headers: jsonHeaders(plan.planId),
+  headers: jsonHeaders(identity.requestId),
   body: {
-    id: plan.planId,
+    id: identity.responseId,
     container: null,
     content: contentBlocks(plan),
     model: plan.model,
@@ -116,12 +136,15 @@ const anthropicSseFrame = (
   event: Readonly<Record<string, unknown>>
 ): string => `event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`;
 
-const renderAnthropicSseResponse = (plan: MockLlmResponsePlan): RenderedLlmWire => {
+const renderAnthropicSseResponse = (
+  plan: MockLlmResponsePlan,
+  identity: AnthropicWireIdentity
+): RenderedLlmWire => {
   const frames: string[] = [
     anthropicSseFrame("message_start", {
       type: "message_start",
       message: {
-        id: plan.planId,
+        id: identity.responseId,
         container: null,
         content: [],
         model: plan.model,
@@ -215,22 +238,25 @@ const renderAnthropicSseResponse = (plan: MockLlmResponsePlan): RenderedLlmWire 
   return {
     kind: "sse",
     status: 200,
-    headers: eventStreamHeaders(plan.planId),
+    headers: eventStreamHeaders(identity.requestId),
     frames,
   };
 };
 
-const renderAnthropicError = (plan: MockLlmErrorPlan): RenderedLlmWire => ({
+const renderAnthropicError = (
+  plan: MockLlmErrorPlan,
+  requestId: string
+): RenderedLlmWire => ({
   kind: "json",
   status: ANTHROPIC_ERROR_STATUS[plan.error.kind],
-  headers: errorHeaders(plan),
+  headers: errorHeaders(plan, requestId),
   body: {
     type: "error",
     error: {
       type: ANTHROPIC_ERROR_TYPE[plan.error.kind],
       message: plan.error.message,
     },
-    request_id: plan.planId,
+    request_id: requestId,
   },
 });
 
@@ -241,10 +267,14 @@ const renderAnthropicError = (plan: MockLlmErrorPlan): RenderedLlmWire => ({
  */
 export const renderAnthropicPlan = (
   plan: MockLlmPlan,
-  options: RenderLlmPlanOptions
+  options: RenderAnthropicPlanOptions
 ): RenderedLlmWire => {
-  if (plan.kind === "error") return renderAnthropicError(plan);
+  const identity = {
+    requestId: options.requestId ?? plan.planId,
+    responseId: options.responseId ?? plan.planId,
+  };
+  if (plan.kind === "error") return renderAnthropicError(plan, identity.requestId);
   return options.stream
-    ? renderAnthropicSseResponse(plan)
-    : renderAnthropicJsonResponse(plan);
+    ? renderAnthropicSseResponse(plan, identity)
+    : renderAnthropicJsonResponse(plan, identity);
 };

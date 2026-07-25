@@ -6,6 +6,18 @@ import {
   mockosManagementOperations,
 } from "@mockos/contracts/operations";
 import {
+  MOCK_LLM_ANTHROPIC_MAX_CONTENT_BLOCKS,
+  MOCK_LLM_ANTHROPIC_MAX_MESSAGES,
+  MOCK_LLM_ANTHROPIC_MAX_REQUEST_BODY_BYTES,
+  MOCK_LLM_ANTHROPIC_MAX_REQUEST_DEPTH,
+  MOCK_LLM_ANTHROPIC_MAX_REQUEST_NODES,
+  MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES,
+  MOCK_LLM_ANTHROPIC_MAX_TEXT_BYTES,
+  MOCK_LLM_ANTHROPIC_MAX_TOOLS,
+  MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_BYTES,
+  MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_DEPTH,
+  MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_NODES,
+  MOCK_LLM_ANTHROPIC_VERSION,
   MOCK_LLM_OPENAI_MAX_MESSAGES,
   MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES,
   MOCK_LLM_OPENAI_MAX_REQUEST_DEPTH,
@@ -14,6 +26,7 @@ import {
   MOCK_LLM_OPENAI_MAX_TEXT_BYTES,
   MOCK_LLM_OPENAI_MAX_TOOLS,
   MOCK_LLM_OPENAI_MAX_TOOL_VALUE_BYTES,
+  mockLlmAnthropicProviderManifest,
   mockLlmOpenAiProviderManifest,
 } from "@mockos/llm-mock";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
@@ -134,6 +147,93 @@ export type MockLlmOpenAiProviderDocumentation = {
   };
 };
 
+export type MockLlmAnthropicProviderDocumentation = {
+  schemaVersion: 1;
+  generatedFrom: "packages/llm-mock/src/anthropic-http.ts";
+  status: "source-qualified";
+  compatibility: "bounded-anthropic-messages-subset";
+  dialect: "anthropic";
+  routeBases: {
+    pathMode: "/e/{environmentId}/llm-mock/{slug}/anthropic";
+    subdomainMode: "https://{environmentId}.{baseDomain}/llm-mock/{slug}/anthropic";
+  };
+  capabilityProbe: "GET /v1/models";
+  authentication: {
+    scheme: "x-api-key";
+    credential: "provider-scoped-mock-credential";
+    acceptAny: "valid-mock-credential-required-no-verifier-comparison";
+    strict: "current-sha256-verifier-constant-time";
+    platformManagementAccessKey: "rejected";
+    alternateAuthenticationHeaders: "rejected";
+  };
+  providerHeaders: {
+    anthropicVersion: "required-exact-2023-06-01";
+    betaHeaders: "rejected";
+  };
+  operations: Array<{
+    id: "create_message" | "list_models" | "retrieve_model";
+    method: "GET" | "POST";
+    path: "/v1/messages" | "/v1/models" | "/v1/models/{model}";
+    streaming: false;
+  }>;
+  request: {
+    mediaType: "application/json";
+    encoding: "utf-8";
+    maxBodyBytes: number;
+    maxDepth: number;
+    maxNodes: number;
+    maxMessages: number;
+    maxContentBlocksPerMessage: number;
+    maxTools: number;
+    maxTextBytes: number;
+    maxToolValueBytes: number;
+    maxToolValueDepth: number;
+    maxToolValueNodes: number;
+    modelId: "1-256-visible-ascii-excluding-dot-segments";
+    maxTokens: "integer-1-through-1000000000";
+    maxTokensEffect: "validated-fingerprint-input-not-response-truncation";
+    messageRoles: readonly ["user", "assistant"];
+    messageContent: "text-or-supported-content-block-array";
+    turnAlternation: "not-validated";
+    toolUseResultCorrelation: "not-validated";
+    system: "optional-bounded-string";
+    toolDefinitions: "unique-custom-tools-with-object-input-schema";
+    toolChoice: "absent-or-auto";
+    streaming: "rejected";
+    multimodal: "unsupported";
+    betaFeatures: "unsupported";
+    unknownTopLevelFields: "rejected";
+  };
+  modelPagination: "query-parameters-ignored-single-page";
+  response: {
+    maxBodyBytes: number;
+    requestIdHeader: "request-id";
+    messageIdPrefix: "msg_";
+    transportIds: "fresh-per-invocation";
+    deterministicPlanIdExposure: "never";
+  };
+  planning: {
+    conversationState: "stateless";
+    turnIndex: "prior-assistant-message-count";
+    stateKey: "server-slug+dialect+model";
+    definitionRevision: "rechecked-before-plan-commit";
+    initialDelay: "abort-aware";
+    chunkCadence: "inert-without-streaming";
+  };
+  security: {
+    requestCredentialReflection: "rejected";
+    responseCredentialReflection: "rejected";
+  };
+  evidence: {
+    packageTests: "qualified";
+    officialSdkVersion: "0.115.0";
+    localWorkerOfficialAnthropicSdk: "qualified";
+    cloudPin: "unqualified";
+    hostedDeployment: "unqualified";
+    liveProviderParity: "unqualified";
+  };
+};
+
 export type MockosManagementDocumentationCatalog = {
   schemaVersion: 1;
   generatedFrom: "packages/contracts/src/operations/management.ts";
@@ -213,11 +313,14 @@ export type MockosManagementDocumentationCatalog = {
       };
       guide: "docs/mock-llm.md";
       providerDataPlane: {
-        status: "openai-non-streaming-source-qualified";
+        status: "openai-and-anthropic-non-streaming-source-qualified";
         managementConfiguration: "MCP-only";
-        manifest: "docs/reference/mock-llm-openai.v1.json";
+        manifests: readonly [
+          "docs/reference/mock-llm-openai.v1.json",
+          "docs/reference/mock-llm-anthropic.v1.json",
+        ];
         openAi: MockLlmOpenAiProviderDocumentation;
-        anthropic: "unavailable";
+        anthropic: MockLlmAnthropicProviderDocumentation;
         responsesApi: "unavailable";
         conversationState: "unavailable";
         observationsAndAssertions: "unavailable";
@@ -291,6 +394,91 @@ export const generateMockLlmOpenAiProviderDocumentation =
     evidence: {
       packageTests: "qualified",
       localWorkerOfficialOpenAiSdk: "qualified",
+      cloudPin: "unqualified",
+      hostedDeployment: "unqualified",
+      liveProviderParity: "unqualified",
+    },
+  });
+
+export const generateMockLlmAnthropicProviderDocumentation =
+  (): MockLlmAnthropicProviderDocumentation => ({
+    schemaVersion: 1,
+    generatedFrom: "packages/llm-mock/src/anthropic-http.ts",
+    status: "source-qualified",
+    compatibility: "bounded-anthropic-messages-subset",
+    dialect: mockLlmAnthropicProviderManifest.dialect,
+    routeBases: {
+      pathMode: "/e/{environmentId}/llm-mock/{slug}/anthropic",
+      subdomainMode: "https://{environmentId}.{baseDomain}/llm-mock/{slug}/anthropic",
+    },
+    capabilityProbe: "GET /v1/models",
+    authentication: {
+      scheme: "x-api-key",
+      credential: "provider-scoped-mock-credential",
+      acceptAny: "valid-mock-credential-required-no-verifier-comparison",
+      strict: "current-sha256-verifier-constant-time",
+      platformManagementAccessKey: "rejected",
+      alternateAuthenticationHeaders: "rejected",
+    },
+    providerHeaders: {
+      anthropicVersion: `required-exact-${MOCK_LLM_ANTHROPIC_VERSION}`,
+      betaHeaders: "rejected",
+    },
+    operations: mockLlmAnthropicProviderManifest.operations.map((operation) => ({
+      ...operation,
+    })),
+    request: {
+      mediaType: "application/json",
+      encoding: "utf-8",
+      maxBodyBytes: MOCK_LLM_ANTHROPIC_MAX_REQUEST_BODY_BYTES,
+      maxDepth: MOCK_LLM_ANTHROPIC_MAX_REQUEST_DEPTH,
+      maxNodes: MOCK_LLM_ANTHROPIC_MAX_REQUEST_NODES,
+      maxMessages: MOCK_LLM_ANTHROPIC_MAX_MESSAGES,
+      maxContentBlocksPerMessage: MOCK_LLM_ANTHROPIC_MAX_CONTENT_BLOCKS,
+      maxTools: MOCK_LLM_ANTHROPIC_MAX_TOOLS,
+      maxTextBytes: MOCK_LLM_ANTHROPIC_MAX_TEXT_BYTES,
+      maxToolValueBytes: MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_BYTES,
+      maxToolValueDepth: MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_DEPTH,
+      maxToolValueNodes: MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_NODES,
+      modelId: "1-256-visible-ascii-excluding-dot-segments",
+      maxTokens: "integer-1-through-1000000000",
+      maxTokensEffect: "validated-fingerprint-input-not-response-truncation",
+      messageRoles: ["user", "assistant"],
+      messageContent: "text-or-supported-content-block-array",
+      turnAlternation: "not-validated",
+      toolUseResultCorrelation: "not-validated",
+      system: "optional-bounded-string",
+      toolDefinitions: "unique-custom-tools-with-object-input-schema",
+      toolChoice: "absent-or-auto",
+      streaming: "rejected",
+      multimodal: "unsupported",
+      betaFeatures: "unsupported",
+      unknownTopLevelFields: "rejected",
+    },
+    modelPagination: "query-parameters-ignored-single-page",
+    response: {
+      maxBodyBytes: MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES,
+      requestIdHeader: "request-id",
+      messageIdPrefix: "msg_",
+      transportIds: "fresh-per-invocation",
+      deterministicPlanIdExposure: "never",
+    },
+    planning: {
+      conversationState: "stateless",
+      turnIndex: "prior-assistant-message-count",
+      stateKey: "server-slug+dialect+model",
+      definitionRevision: "rechecked-before-plan-commit",
+      initialDelay: "abort-aware",
+      chunkCadence: "inert-without-streaming",
+    },
+    security: {
+      requestCredentialReflection: "rejected",
+      responseCredentialReflection: "rejected",
+    },
+    evidence: {
+      packageTests: "qualified",
+      officialSdkVersion: "0.115.0",
+      localWorkerOfficialAnthropicSdk: "qualified",
       cloudPin: "unqualified",
       hostedDeployment: "unqualified",
       liveProviderParity: "unqualified",
@@ -490,11 +678,14 @@ export const generateMockosManagementDocumentationCatalog =
           },
           guide: "docs/mock-llm.md",
           providerDataPlane: {
-            status: "openai-non-streaming-source-qualified",
+            status: "openai-and-anthropic-non-streaming-source-qualified",
             managementConfiguration: "MCP-only",
-            manifest: "docs/reference/mock-llm-openai.v1.json",
+            manifests: [
+              "docs/reference/mock-llm-openai.v1.json",
+              "docs/reference/mock-llm-anthropic.v1.json",
+            ],
             openAi: generateMockLlmOpenAiProviderDocumentation(),
-            anthropic: "unavailable",
+            anthropic: generateMockLlmAnthropicProviderDocumentation(),
             responsesApi: "unavailable",
             conversationState: "unavailable",
             observationsAndAssertions: "unavailable",

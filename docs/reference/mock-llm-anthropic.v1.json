@@ -1,0 +1,100 @@
+{
+  "authentication": {
+    "acceptAny": "valid-mock-credential-required-no-verifier-comparison",
+    "alternateAuthenticationHeaders": "rejected",
+    "credential": "provider-scoped-mock-credential",
+    "platformManagementAccessKey": "rejected",
+    "scheme": "x-api-key",
+    "strict": "current-sha256-verifier-constant-time"
+  },
+  "capabilityProbe": "GET /v1/models",
+  "compatibility": "bounded-anthropic-messages-subset",
+  "dialect": "anthropic",
+  "evidence": {
+    "cloudPin": "unqualified",
+    "hostedDeployment": "unqualified",
+    "liveProviderParity": "unqualified",
+    "localWorkerOfficialAnthropicSdk": "qualified",
+    "officialSdkVersion": "0.115.0",
+    "packageTests": "qualified"
+  },
+  "generatedFrom": "packages/llm-mock/src/anthropic-http.ts",
+  "modelPagination": "query-parameters-ignored-single-page",
+  "operations": [
+    {
+      "id": "create_message",
+      "method": "POST",
+      "path": "/v1/messages",
+      "streaming": false
+    },
+    {
+      "id": "list_models",
+      "method": "GET",
+      "path": "/v1/models",
+      "streaming": false
+    },
+    {
+      "id": "retrieve_model",
+      "method": "GET",
+      "path": "/v1/models/{model}",
+      "streaming": false
+    }
+  ],
+  "planning": {
+    "chunkCadence": "inert-without-streaming",
+    "conversationState": "stateless",
+    "definitionRevision": "rechecked-before-plan-commit",
+    "initialDelay": "abort-aware",
+    "stateKey": "server-slug+dialect+model",
+    "turnIndex": "prior-assistant-message-count"
+  },
+  "providerHeaders": {
+    "anthropicVersion": "required-exact-2023-06-01",
+    "betaHeaders": "rejected"
+  },
+  "request": {
+    "betaFeatures": "unsupported",
+    "encoding": "utf-8",
+    "maxBodyBytes": 262144,
+    "maxContentBlocksPerMessage": 256,
+    "maxDepth": 24,
+    "maxMessages": 256,
+    "maxNodes": 10000,
+    "maxTextBytes": 65536,
+    "maxTokens": "integer-1-through-1000000000",
+    "maxTokensEffect": "validated-fingerprint-input-not-response-truncation",
+    "maxToolValueBytes": 65536,
+    "maxToolValueDepth": 16,
+    "maxToolValueNodes": 2000,
+    "maxTools": 64,
+    "mediaType": "application/json",
+    "messageContent": "text-or-supported-content-block-array",
+    "messageRoles": ["user", "assistant"],
+    "modelId": "1-256-visible-ascii-excluding-dot-segments",
+    "multimodal": "unsupported",
+    "streaming": "rejected",
+    "system": "optional-bounded-string",
+    "toolChoice": "absent-or-auto",
+    "toolDefinitions": "unique-custom-tools-with-object-input-schema",
+    "toolUseResultCorrelation": "not-validated",
+    "turnAlternation": "not-validated",
+    "unknownTopLevelFields": "rejected"
+  },
+  "response": {
+    "deterministicPlanIdExposure": "never",
+    "maxBodyBytes": 2097152,
+    "messageIdPrefix": "msg_",
+    "requestIdHeader": "request-id",
+    "transportIds": "fresh-per-invocation"
+  },
+  "routeBases": {
+    "pathMode": "/e/{environmentId}/llm-mock/{slug}/anthropic",
+    "subdomainMode": "https://{environmentId}.{baseDomain}/llm-mock/{slug}/anthropic"
+  },
+  "schemaVersion": 1,
+  "security": {
+    "requestCredentialReflection": "rejected",
+    "responseCredentialReflection": "rejected"
+  },
+  "status": "source-qualified"
+}

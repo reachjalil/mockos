@@ -1,6 +1,6 @@
 # Hosting modes
 
-Status: Bounded M6 path-mode sample deployed; F1 and partial OpenAI F2 routes are source-only; wildcard live mode remains open
+Status: Bounded M6 path-mode sample deployed; F1 and partial OpenAI/Anthropic F2 routes are source-only; wildcard live mode remains open
 Last reviewed: 2026-07-25
 
 ## Path mode
@@ -34,6 +34,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
   `/e/<env>/mcp-mock/<slug>`
 - Environment-hosted mock OpenAI:
   `/e/<env>/llm-mock/<slug>/openai/v1`
+- Environment-hosted mock Anthropic:
+  `/e/<env>/llm-mock/<slug>/anthropic`
 
 The Graph, Okta directory, and SCIM paths are accepted for the bounded M3 scope. The
 M3 deployed smoke sampled both SCIM profiles, an Entra Graph read, and an Okta directory
@@ -53,13 +55,14 @@ configured for that slug. It negotiates MCP `2025-11-25` over POST-only Streamab
 HTTP. The path resolver and local Worker integration are source evidence only; neither
 recorded workers.dev origin has F1 deployment acceptance.
 
-The partial F2 OpenAI route always requires a syntactically valid provider Bearer Mock
-Credential. `accept_any` accepts any valid provider value without a verifier
-comparison; `strict` compares the current stored verifier. The source-qualified
-operations are `GET /models`, `GET /models/{model}`, and non-streaming
-`POST /chat/completions`. The local Worker integration uses the official OpenAI SDK;
-neither recorded workers.dev origin has F2 deployment acceptance. Anthropic and SSE
-remain unavailable. See [MCP-managed mock OpenAI](./mock-llm.md).
+The partial F2 routes always require a syntactically valid dialect Mock Credential.
+OpenAI uses Bearer; Anthropic uses `x-api-key` plus exactly
+`anthropic-version: 2023-06-01`. `accept_any` skips verifier comparison and `strict`
+compares the current dialect verifier. Source-qualified operations are model
+list/retrieve plus non-streaming Chat Completions/Messages. Local Worker integrations
+use pinned official SDKs; neither recorded workers.dev origin has F2 deployment
+acceptance. SSE/betas remain unavailable. See
+[MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
 
 Path mode works without an account-owned zone, but some SDKs assume provider-shaped
 hosts. Configure explicit authorities and never infer broad SDK compatibility from a
@@ -91,6 +94,7 @@ the resolved environment:
 - `https://<environment>.<base-domain>/graph/v1.0`
 - `https://<environment>.<base-domain>/mcp-mock/<slug>`
 - `https://<environment>.<base-domain>/llm-mock/<slug>/openai/v1`
+- `https://<environment>.<base-domain>/llm-mock/<slug>/anthropic`
 
 Unit tests cover this split for management-MCP direct minting, well-known URL results,
 routed group-overage claim sources, mock-MCP and mock-LLM route classification, and

@@ -1,6 +1,6 @@
 # Self-hosting
 
-Status: Source-build guide with F1 and partial OpenAI F2 local routes plus sampled M6 deployment evidence
+Status: Source-build guide with F1 and partial OpenAI/Anthropic F2 local routes plus sampled M6 deployment evidence
 Last reviewed: 2026-07-25
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
@@ -59,16 +59,19 @@ for that slug. The local adapter supports MCP `2025-11-25`, POST, and DELETE; GE
 returns `405`. See [Environment-hosted mock MCP](./mock-mcp.md). Neither listed
 workers.dev deployment has recorded F1 acceptance.
 
-The current partial F2 source route is
-`/e/<environment>/llm-mock/<slug>/openai/v1`. Configure the complete definition only
-through management MCP, then give the application under test a separate provider
-Bearer Mock Credential. Both `accept_any` and `strict` require a syntactically valid
-Bearer value; only `strict` compares its stored verifier. The bounded source supports
-model list/retrieve and non-streaming Chat Completions through the official OpenAI
-SDK. See [the OpenAI SDK quickstart](./quickstarts/openai-sdk.md) and
-[MCP-managed mock OpenAI](./mock-llm.md). The listed workers.dev deployments have no
-F2 acceptance; Anthropic, SSE, state, LLM observations/assertions, and Cloud
-integration remain unavailable.
+Current partial F2 source routes are
+`/e/<environment>/llm-mock/<slug>/openai/v1` and
+`/e/<environment>/llm-mock/<slug>/anthropic`. Configure the complete definition only
+through management MCP, then give the application under test a separate
+dialect-scoped Mock Credential. OpenAI uses Bearer; Anthropic uses `x-api-key` plus
+exactly `anthropic-version: 2023-06-01`. Both `accept_any` and `strict` require a valid
+credential; only `strict` compares its stored verifier. The bounded source supports
+model list/retrieve plus non-streaming Chat Completions/Messages through pinned
+official SDKs. See the [OpenAI](./quickstarts/openai-sdk.md) and
+[Anthropic](./quickstarts/anthropic-sdk.md) SDK quickstarts and
+[MCP-managed mock OpenAI and Anthropic](./mock-llm.md). The listed workers.dev
+deployments have no F2 acceptance; SSE/betas, state, LLM observations/assertions, and
+Cloud integration remain unavailable.
 
 Save a local CLI profile without putting the key directly in the command line:
 
