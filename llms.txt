@@ -14,8 +14,10 @@
   provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.
 - [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
   resources, resource templates, and prompts from an agent under test.
+- [Mock LLM guide](docs/mock-llm.md): configure source-implemented management
+  definitions and understand why the provider data plane remains unavailable.
 - [Management tool reference](docs/reference/management-tools.md): generated
-  reference for all 20 current MCP tools.
+  reference for all 24 current MCP tools.
 - [Machine operation catalog](docs/reference/management-operations.v1.json):
   generated schemas and capability metadata.
 - [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated
@@ -24,7 +26,7 @@
 ## Current capability boundary
 
 - Management MCP: implemented at `/mcp` with
-  20 tools over Streamable HTTP.
+  24 tools over Streamable HTTP.
 - Tested MCP revision: `2025-11-25`;
   standalone GET streaming is unsupported.
 - Self-hosted management HTTP: 5 implemented
@@ -34,7 +36,10 @@
   `/e/{environmentId}/mcp-mock/{slug}` or
   `https://{environmentId}.{baseDomain}/mcp-mock/{slug}`; deployed acceptance is
   `unqualified`.
-- F2 mock LLM APIs: unavailable.
+- F2 mock LLM definitions: four MCP-only operations are source-implemented with
+  schema-v7 environment persistence and write-only provider Mock Credentials.
+- F2 mock LLM provider data plane: unavailable; there is no callable OpenAI or
+  Anthropic route, model renderer, state/reset surface, paced stream, or deployment.
 - F3 script execution: unavailable; `NoSandbox` fails closed.
 - F6 Code Mode `search` and `execute`: unavailable and disabled.
 - CLI and typed client: unpublished.

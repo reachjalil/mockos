@@ -177,6 +177,34 @@ export type MockLlmUsage = z.infer<typeof mockLlmUsageSchema>;
 /**
  * chunkSize is measured in Unicode code points, not UTF-16 code units or bytes.
  */
+const mockLlmCadenceDefaultsShape = {
+  chunkDelayMilliseconds: z
+    .number()
+    .int()
+    .min(0)
+    .max(MOCK_LLM_MAX_CHUNK_DELAY_MILLISECONDS),
+  chunkSize: z.number().int().min(1).max(MOCK_LLM_MAX_CHUNK_SIZE),
+  maximumDurationMilliseconds: z
+    .number()
+    .int()
+    .min(1)
+    .max(MOCK_LLM_MAXIMUM_DURATION_MILLISECONDS),
+};
+
+export const mockLlmCadenceDefaultsSchema = z
+  .object(mockLlmCadenceDefaultsShape)
+  .strict()
+  .superRefine((cadence, context) => {
+    if (cadence.chunkDelayMilliseconds > cadence.maximumDurationMilliseconds) {
+      context.addIssue({
+        code: "custom",
+        path: ["chunkDelayMilliseconds"],
+        message: "Chunk delay cannot exceed maximum stream duration.",
+      });
+    }
+  });
+export type MockLlmCadenceDefaults = z.infer<typeof mockLlmCadenceDefaultsSchema>;
+
 export const mockLlmCadenceSchema = z
   .object({
     initialDelayMilliseconds: z
@@ -184,17 +212,7 @@ export const mockLlmCadenceSchema = z
       .int()
       .min(0)
       .max(MOCK_LLM_MAX_INITIAL_DELAY_MILLISECONDS),
-    chunkDelayMilliseconds: z
-      .number()
-      .int()
-      .min(0)
-      .max(MOCK_LLM_MAX_CHUNK_DELAY_MILLISECONDS),
-    chunkSize: z.number().int().min(1).max(MOCK_LLM_MAX_CHUNK_SIZE),
-    maximumDurationMilliseconds: z
-      .number()
-      .int()
-      .min(1)
-      .max(MOCK_LLM_MAXIMUM_DURATION_MILLISECONDS),
+    ...mockLlmCadenceDefaultsShape,
   })
   .strict()
   .superRefine((cadence, context) => {
@@ -214,6 +232,26 @@ export const mockLlmCadenceSchema = z
     }
   });
 export type MockLlmCadence = z.infer<typeof mockLlmCadenceSchema>;
+
+export const mockLlmResponseDirectiveSchema = z
+  .object({
+    segments: z.array(mockLlmSegmentSchema).min(1).max(MOCK_LLM_MAX_SEGMENTS),
+    stopReason: mockLlmStopReasonSchema.optional(),
+    stopSequence: z.string().min(1).max(MOCK_LLM_MAX_STOP_SEQUENCE_LENGTH).optional(),
+    usage: mockLlmUsageSchema.optional(),
+    cadence: z
+      .object({
+        chunkDelayMilliseconds:
+          mockLlmCadenceDefaultsShape.chunkDelayMilliseconds.optional(),
+        chunkSize: mockLlmCadenceDefaultsShape.chunkSize.optional(),
+        maximumDurationMilliseconds:
+          mockLlmCadenceDefaultsShape.maximumDurationMilliseconds.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type MockLlmResponseDirective = z.infer<typeof mockLlmResponseDirectiveSchema>;
 
 const mockLlmPlanBaseShape = {
   version: z.literal(1),

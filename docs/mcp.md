@@ -1,6 +1,6 @@
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 registry is locally source-qualified
+Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry
 Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -13,12 +13,14 @@ the exact tested slice: public revision
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
 
-The current source appends five F1 management tools without changing that historical
-acceptance claim. Management MCP controls mockOS; it is not a simulated MCP workload.
+The current source appends five F1 and four F2 management tools without changing that
+historical acceptance claim. Management MCP controls mockOS; it is not a simulated
+MCP workload.
 Environment-hosted mock MCP servers are separate dependencies for an agent under
 test. See the [interface model](./concepts/interface-model.md), begin identity
 workflows with the [MCP-first quickstart](./getting-started/mcp-first.md), and use the
-[mock MCP guide](./mock-mcp.md) for F1.
+[mock MCP guide](./mock-mcp.md) for F1. Use the
+[mock LLM guide](./mock-llm.md) for the F2 management-only definition boundary.
 
 ## Authentication fails closed
 
@@ -55,19 +57,32 @@ cursor does not cross sessions.
 
 ## Exact current tool registry
 
-The current source exposes 20 tools: the accepted 15-tool M5 set plus five F1
-operations for creating/replacing, listing, reading, deleting, and resetting
-environment-hosted mock MCP servers. Their IDs, descriptions, input/output JSON
-Schemas, MCP annotations, effects, retry policies, secret policies, and exact HTTP
-availability are generated from the canonical registry in the
+The current source exposes 24 tools: the accepted 15-tool M5 set, five F1 operations
+for creating/replacing, listing, reading, deleting, and resetting environment-hosted
+mock MCP servers, and four F2 operations for creating/replacing, listing, reading, and
+deleting mock-LLM definitions. Their IDs, descriptions, input/output JSON Schemas, MCP
+annotations, effects, retry policies, secret policies, and exact HTTP availability
+are generated from the canonical registry in the
 [management-tool reference](./reference/management-tools.md). The corresponding
 [JSON catalog](./reference/management-operations.v1.json) is intended for machine
 readers.
 
-All five F1 operations are MCP-only. The self-hosted HTTP surface remains exactly five
-routes, and the OpenAPI/typed client projections remain limited to those routes.
+All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
+remains exactly five routes, and the OpenAPI/typed client projections remain limited
+to those routes.
 `put_mock_mcp_server` is the only F1 operation that accepts a Bearer Mock Credential;
 the handler redacts it and every read view omits both token and verifier.
+`put_mock_llm_server` requires explicit `expectedRevision` compare-and-swap intent and
+accepts independent strict OpenAI/Anthropic Mock Credentials as write-only fields.
+They are hashed before persistence; safe put/get views expose only `configured: true`,
+while list summaries omit authentication. That marker is read-only, not a write
+shape. Every changed full-definition put must resupply or rotate the raw key for each
+enabled strict provider from caller-owned secret storage. Canonical replay is an
+idempotent success even when the supplied revision is stale.
+`delete_mock_llm_server` requires a positive current `expectedRevision`, deletes
+atomically on a match, returns the typed revision-conflict `409` on a stale/ABA
+revision, and returns `deleted: false` when the row is already absent. There is no LLM
+reset operation because there is no response, conversation, or evaluator state.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -93,6 +108,8 @@ These are deliberately separate trust boundaries:
 - `/mcp` requires the configured management Access Key.
 - `/mcp-mock/{slug}` under an environment accepts no credential or its configured
   server-specific Bearer Mock Credential.
+- No OpenAI/Anthropic mock-LLM provider route exists. Provider keys in an F2
+  definition currently authenticate no data-plane request.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
@@ -103,7 +120,8 @@ These are deliberately separate trust boundaries:
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
 authorization. Never reuse or forward the MCP Access Key as a directory or mock-MCP
-credential.
+credential. For mock-LLM puts, any definition JSON key or string value containing the
+complete active platform key as a substring is rejected before persistence.
 The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
 ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
 PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct

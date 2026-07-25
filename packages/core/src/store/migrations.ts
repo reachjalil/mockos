@@ -335,6 +335,36 @@ const migrationV6 = [
   `ALTER TABLE request_log ADD COLUMN mcp_tool_is_error INTEGER`,
 ] as const;
 
+const migrationV7 = [
+  `CREATE TABLE IF NOT EXISTS mock_llm_servers (
+    slug TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL
+      CHECK (revision >= 1 AND revision <= 9007199254740991),
+    spec_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS mock_llm_servers_updated_idx
+    ON mock_llm_servers(updated_at DESC, slug)`,
+  `CREATE TABLE IF NOT EXISTS mock_llm_revision_allocator (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    last_revision INTEGER NOT NULL
+      CHECK (last_revision >= 0 AND last_revision <= 9007199254740991)
+  ) WITHOUT ROWID`,
+  `INSERT OR IGNORE INTO mock_llm_revision_allocator (singleton, last_revision)
+    VALUES (1, 0)`,
+  `UPDATE mock_llm_revision_allocator
+    SET last_revision = COALESCE(
+      (SELECT MAX(revision) FROM mock_llm_servers),
+      0
+    )
+    WHERE singleton = 1
+      AND last_revision < COALESCE(
+        (SELECT MAX(revision) FROM mock_llm_servers),
+        0
+      )`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
   { version: 2, statements: migrationV2 },
@@ -342,6 +372,7 @@ export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 4, statements: migrationV4 },
   { version: 5, statements: migrationV5 },
   { version: 6, statements: migrationV6 },
+  { version: 7, statements: migrationV7 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };

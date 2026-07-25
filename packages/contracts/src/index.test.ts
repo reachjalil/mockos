@@ -403,8 +403,12 @@ describe("wire contracts", () => {
       "get_mock_mcp_server",
       "delete_mock_mcp_server",
       "reset_mock_mcp_state",
+      "put_mock_llm_server",
+      "list_mock_llm_servers",
+      "get_mock_llm_server",
+      "delete_mock_llm_server",
     ]);
-    expect(mockosMcpToolNames).toHaveLength(20);
+    expect(mockosMcpToolNames).toHaveLength(24);
   });
 
   it("locks M3 SCIM and lifecycle wire shapes", () => {

@@ -580,7 +580,7 @@ describe("Okta Classic Authn core", () => {
     const { store } = await setup("authn-version-neutral-indexes");
     expect(
       store.get<{ user_version: number }>("PRAGMA user_version")?.user_version
-    ).toBe(6);
+    ).toBe(7);
     expect(
       store
         .all<{ name: string }>(

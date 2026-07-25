@@ -9,6 +9,7 @@
     "./behavior": "./src/behavior.ts",
     "./features": "./src/features.ts",
     "./mock-llm": "./src/mock-llm.ts",
+    "./mock-llm-server": "./src/mock-llm-server.ts",
     "./mock-mcp": "./src/mock-mcp.ts",
     "./operations": "./src/operations/index.ts"
   },

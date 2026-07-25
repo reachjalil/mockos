@@ -1,8 +1,8 @@
 # Known limitations
 
 Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
-source-qualified F0/F1, the partial F2 kernel, bounded MSAL Node local X/Q, and
-remaining limits; deliberately candid
+source-qualified F0/F1, management-only F2, bounded MSAL Node local X/Q, and remaining
+limits; deliberately candid
 Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
@@ -142,6 +142,9 @@ slice has sampled H evidence, but no current fixture is V or P.
   runtime rather than those standalone credentials.
   F1 appends five locally source-qualified tools for environment-hosted mock MCP
   definitions and state. Those five have no inherited M5 hosted/deployed acceptance.
+  F2 appends four source-implemented tools for mock-LLM definitions, bringing the
+  current source registry to 24. Those four likewise inherit no hosted/deployed
+  evidence.
 - The locally source-qualified F1 implementation supports only MCP `2025-11-25` over POST-only Streamable
   HTTP. `GET` returns `405`; there are no `listChanged` notifications, JSON-RPC
   batches, legacy HTTP+SSE fallback, or second protocol-version adapter. The route is
@@ -159,18 +162,22 @@ slice has sampled H evidence, but no current fixture is V or P.
   declarative fallback or fail closed because no executor is installed. `proxy`
   record/replay is rejected. Served mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
-- The partial F2 source slice is a pure response kernel, not a mock LLM service.
-  Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI Chat
-  Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
-  consumption through injected in-process Fetch are source-tested. There is no
-  LLM server definition, management MCP operation, public route, request parser,
-  authentication, persistence or persisted server sequence/conversation owner,
-  edge-paced SSE network stream, observation/assertion support, Worker or Durable
-  Object composition, private Cloud pin, Wrangler round trip, hosted CI, deployment,
-  or verified-live comparison. The official-SDK harness hand-supplies
-  model-list/retrieve fixtures; there is no model renderer or catalog. No listener
-  emits the serialized SSE frames. The 20-tool management registry is unchanged. Do
-  not configure either planned
+- The partial F2 source slice has a management-only configuration plane, not a mock
+  LLM service. Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI
+  Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
+  consumption through injected in-process Fetch are joined by strict definitions,
+  four MCP-only management operations, schema-v7 persistence, mandatory changed-write
+  revision CAS, canonical replay, atomic revision-bound delete, and write-only
+  provider-key views. Safe `configured` markers are not write shapes: every changed
+  full-definition put must resupply or rotate each enabled strict provider key from
+  caller-owned storage. Bounded definition JSON keys/string values containing the
+  complete platform key as a substring fail closed. There is no
+  provider route/request parser/auth enforcement, model renderer/catalog,
+  response/evaluator state, reset, conversation owner, edge-paced SSE network stream,
+  observation/assertion support, Wrangler round trip, private Cloud pin, hosted CI
+  qualification for this tranche, deployment, or verified-live comparison. The
+  official-SDK harness hand-supplies model-list/retrieve fixtures. No listener emits
+  the serialized SSE frames. Do not configure either planned
   `/e/{environmentId}/llm-mock/{slug}/{provider}/v1` route because neither exists.
   Pure fixtures reuse content-derived plan IDs for deterministic provider/request
   correlation, not unique invocation IDs, and omit Anthropic organization identity
@@ -178,8 +185,8 @@ slice has sampled H evidence, but no current fixture is V or P.
   stream cadence are bounded inert metadata; no renderer sleeps or paces a network
   response.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
-  control routes; the other 15 management MCP operations, including all five F1
-  operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
+  control routes; the other 19 management MCP operations, including all five F1 and
+  all four F2 operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
   contract metadata until F4 implements scoped-key/role/ACL enforcement. Code Mode has
   no Worker import, flag, `LOADER`, or `worker_loaders` binding, and `NoSandbox` always
   rejects JavaScript. The client, Code Mode, sandbox, and mock-MCP packages remain

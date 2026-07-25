@@ -62,6 +62,8 @@ export type MockosManagementDocumentationCatalog = {
     managementAccessKey: "$MOCKOS_API_KEY";
     mcpEndpoint: "$MOCKOS_MCP_ENDPOINT";
     protocolMockCredential: "$MOCKOS_SYNTHETIC_CREDENTIAL";
+    openAiMockCredential: "$MOCKOS_OPENAI_MOCK_CREDENTIAL";
+    anthropicMockCredential: "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL";
   };
   managementMcp: {
     status: "implemented";
@@ -97,6 +99,42 @@ export type MockosManagementDocumentationCatalog = {
     mockLlmApis: {
       status: "unavailable";
       phase: "F2";
+      managementDefinitions: {
+        status: "source-implemented";
+        interface: "MCP-only";
+        toolIds: readonly [
+          "put_mock_llm_server",
+          "list_mock_llm_servers",
+          "get_mock_llm_server",
+          "delete_mock_llm_server",
+        ];
+        persistence: "environment-schema-v7";
+        strictCredentials: "write-only-provider-scoped";
+        putContract: {
+          expectedRevision: "required-null-create-or-positive-replace";
+          replacement: "full-definition";
+          strictCredentialReplacement: "resupply-or-rotate-every-enabled-provider";
+          safeViewWriteShape: "unsupported";
+        };
+        deleteContract: {
+          expectedRevision: "required-positive";
+          behavior: "atomic-cas";
+          missingOrReplay: "deleted-false";
+          revisionMismatch: "typed-409";
+        };
+        validation: {
+          staticBehavior: "bounded-neutral-plan";
+          topLevelArguments: "strict-secret-safe";
+          platformAccessKey: "reject-substring-in-definition-keys-and-string-values";
+        };
+        schemaCompatibility: {
+          upgrade: "v6-to-v7";
+          rollback: "v6-refuses-v7";
+        };
+      };
+      guide: "docs/mock-llm.md";
+      providerDataPlane: "unavailable";
+      deployedAcceptance: "unqualified";
     };
     codeMode: {
       status: "unavailable";
@@ -231,6 +269,8 @@ export const generateMockosManagementDocumentationCatalog =
         managementAccessKey: "$MOCKOS_API_KEY",
         mcpEndpoint: "$MOCKOS_MCP_ENDPOINT",
         protocolMockCredential: "$MOCKOS_SYNTHETIC_CREDENTIAL",
+        openAiMockCredential: "$MOCKOS_OPENAI_MOCK_CREDENTIAL",
+        anthropicMockCredential: "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL",
       },
       managementMcp: {
         status: "implemented",
@@ -257,7 +297,47 @@ export const generateMockosManagementDocumentationCatalog =
           subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}",
           deployedAcceptance: "unqualified",
         },
-        mockLlmApis: { status: "unavailable", phase: "F2" },
+        mockLlmApis: {
+          status: "unavailable",
+          phase: "F2",
+          managementDefinitions: {
+            status: "source-implemented",
+            interface: "MCP-only",
+            toolIds: [
+              "put_mock_llm_server",
+              "list_mock_llm_servers",
+              "get_mock_llm_server",
+              "delete_mock_llm_server",
+            ],
+            persistence: "environment-schema-v7",
+            strictCredentials: "write-only-provider-scoped",
+            putContract: {
+              expectedRevision: "required-null-create-or-positive-replace",
+              replacement: "full-definition",
+              strictCredentialReplacement: "resupply-or-rotate-every-enabled-provider",
+              safeViewWriteShape: "unsupported",
+            },
+            deleteContract: {
+              expectedRevision: "required-positive",
+              behavior: "atomic-cas",
+              missingOrReplay: "deleted-false",
+              revisionMismatch: "typed-409",
+            },
+            validation: {
+              staticBehavior: "bounded-neutral-plan",
+              topLevelArguments: "strict-secret-safe",
+              platformAccessKey:
+                "reject-substring-in-definition-keys-and-string-values",
+            },
+            schemaCompatibility: {
+              upgrade: "v6-to-v7",
+              rollback: "v6-refuses-v7",
+            },
+          },
+          guide: "docs/mock-llm.md",
+          providerDataPlane: "unavailable",
+          deployedAcceptance: "unqualified",
+        },
         codeMode: { status: "unavailable", phase: "F6" },
       },
     };

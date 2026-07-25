@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { assertBehaviorSpecBounds, jsonValueSchema } from "./behavior";
 import {
+  type MockLlmDeleteServerResult,
+  type MockLlmServerList,
+  type MockLlmServerView,
+  mockLlmServerWriteSchema,
+  mockLlmSlugSchema,
+} from "./mock-llm-server";
+import {
   type MockMcpDeleteServerResult,
   type MockMcpResetStateResult,
   type MockMcpServerList,
@@ -11,8 +18,9 @@ import {
 } from "./mock-mcp";
 import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
-export * from "./mock-mcp";
 export * from "./mock-llm";
+export * from "./mock-llm-server";
+export * from "./mock-mcp";
 export * from "./provisioning";
 export * from "./scim";
 
@@ -753,6 +761,64 @@ export type DeleteMockMcpServerToolInput = MockMcpServerRefToolInput;
 export const resetMockMcpStateToolInputSchema = mockMcpServerRefToolInputSchema;
 export type ResetMockMcpStateToolInput = MockMcpServerRefToolInput;
 
+export const mockLlmRevisionSchema = z.number().int().safe().min(1);
+export type MockLlmRevision = z.infer<typeof mockLlmRevisionSchema>;
+
+export const mockLlmExpectedRevisionSchema = z.union([z.null(), mockLlmRevisionSchema]);
+export type MockLlmExpectedRevision = z.infer<typeof mockLlmExpectedRevisionSchema>;
+
+const putMockLlmServerToolInputShape = {
+  environmentId: environmentIdSchema.optional(),
+  expectedRevision: mockLlmExpectedRevisionSchema,
+  server: mockLlmServerWriteSchema.nonoptional(),
+};
+const putMockLlmServerToolInputKeys = new Set(
+  Object.keys(putMockLlmServerToolInputShape)
+);
+export const putMockLlmServerToolInputSchema = z
+  .looseObject(putMockLlmServerToolInputShape)
+  .superRefine((input, context) => {
+    if (Object.keys(input).some((key) => !putMockLlmServerToolInputKeys.has(key))) {
+      context.addIssue({
+        code: "custom",
+        message: "Unknown top-level mock LLM tool arguments are not allowed.",
+      });
+    }
+  })
+  .meta({ additionalProperties: false });
+export type PutMockLlmServerToolInput = z.infer<typeof putMockLlmServerToolInputSchema>;
+
+export const listMockLlmServersToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+  })
+  .strict();
+export type ListMockLlmServersToolInput = z.infer<
+  typeof listMockLlmServersToolInputSchema
+>;
+
+export const mockLlmServerRefToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    slug: mockLlmSlugSchema,
+  })
+  .strict();
+export type MockLlmServerRefToolInput = z.infer<typeof mockLlmServerRefToolInputSchema>;
+
+export const getMockLlmServerToolInputSchema = mockLlmServerRefToolInputSchema;
+export type GetMockLlmServerToolInput = MockLlmServerRefToolInput;
+
+export const deleteMockLlmServerToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    slug: mockLlmSlugSchema,
+    expectedRevision: mockLlmRevisionSchema,
+  })
+  .strict();
+export type DeleteMockLlmServerToolInput = z.infer<
+  typeof deleteMockLlmServerToolInputSchema
+>;
+
 export const setCurrentEnvironmentToolInputSchema = z
   .object({ environmentId: environmentIdSchema.nullable() })
   .strict();
@@ -802,6 +868,10 @@ export const mockosMcpToolNames = [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "put_mock_llm_server",
+  "list_mock_llm_servers",
+  "get_mock_llm_server",
+  "delete_mock_llm_server",
 ] as const;
 export type MockosMcpToolName = (typeof mockosMcpToolNames)[number];
 
@@ -826,6 +896,10 @@ export type MockosMcpToolInputs = {
   get_mock_mcp_server: GetMockMcpServerToolInput;
   delete_mock_mcp_server: DeleteMockMcpServerToolInput;
   reset_mock_mcp_state: ResetMockMcpStateToolInput;
+  put_mock_llm_server: PutMockLlmServerToolInput;
+  list_mock_llm_servers: ListMockLlmServersToolInput;
+  get_mock_llm_server: GetMockLlmServerToolInput;
+  delete_mock_llm_server: DeleteMockLlmServerToolInput;
 };
 
 export type MockosMcpToolData = {
@@ -849,6 +923,10 @@ export type MockosMcpToolData = {
   get_mock_mcp_server: MockMcpServerView;
   delete_mock_mcp_server: MockMcpDeleteServerResult;
   reset_mock_mcp_state: MockMcpResetStateResult;
+  put_mock_llm_server: MockLlmServerView;
+  list_mock_llm_servers: MockLlmServerList;
+  get_mock_llm_server: MockLlmServerView;
+  delete_mock_llm_server: MockLlmDeleteServerResult;
 };
 
 export type MockosMcpToolOutputs = {

@@ -1,7 +1,8 @@
 # Threat model
 
 Status: M3/M5 controls accepted; bounded M6 deployed sample retained; F1 controls are
-source-only; OAuth evidence redaction has local MSAL X/Q and Worker source proof
+source-only; F2 management controls are source-only; OAuth evidence redaction has local
+MSAL X/Q and Worker source proof
 Last reviewed: 2026-07-26
 
 ## Assets and trust boundaries
@@ -11,6 +12,8 @@ authority, hashed application secrets and OAuth tokens, signing keys, and isolat
 between mock environments. F1 adds mock-MCP Bearer verifiers, opaque transport
 sessions, revision-bound behavior state, and captured agent traffic. Provider and
 environment mock-MCP protocol surfaces are intentionally attacker-controllable.
+F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
+and a schema-v7 definition store; it does not add an LLM provider surface.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
 boundary.
 
@@ -39,6 +42,13 @@ session fixation or cross-server replay, stale sessions/cursors after definition
 replacement or delete/recreate, pathological JSON Schema and URI-template input,
 prototype traversal, configured error-map ambiguity, sequence-state races, aborted
 latency that commits state, and secret reflection through observations.
+F2 definition threats add platform-key confusion with either provider key, plaintext
+or verifier reflection through safe reads/behavior material, cross-environment
+definition access, lost updates, delete/recreate revision reuse, canonicalization
+ambiguity, malformed persisted rows/allocator regression, definition-size denial, and
+unsafe rollback after a schema-v7 store has been opened. A safe-view marker mistakenly
+reused as a write also risks an ambiguous credential update, so it must fail rather
+than imply preservation.
 
 ## Implemented controls and evidence boundaries
 
@@ -48,6 +58,38 @@ latency that commits state, and secret reflection through observations.
   platform key before persistence. The write credential is hashed; list/get views
   return only `configured: true`, and their strict schemas cannot contain token or
   verifier material.
+- `put_mock_llm_server` independently rejects the complete active self-host platform
+  key as a substring anywhere in a bounded submitted definition's JSON keys or string
+  values at Worker ingress and again inside the Environment Durable Object. Each
+  strict provider key is write-only and hashed before repository entry. Put/get views
+  represent it only as `configured: true`; list summaries omit authentication
+  entirely, and neither plaintext nor verifier can be copied into other definition
+  material.
+- Every mock-LLM put requires explicit compare-and-swap intent. `null` is create-only,
+  a changed replacement must name the current positive revision, and every changed
+  write consumes one environment-wide monotonic safe-integer revision. Canonically
+  identical replay is checked first and returns the existing record without consuming
+  a revision, making an ambiguous successful retry safe. Replacement is a complete
+  write: safe-view `configured` markers are rejected, and every enabled strict
+  provider key must be resupplied or rotated from caller-owned secret storage. Server
+  count, model count, byte/depth/node, slug, credential, and behavior bounds fail
+  before persistence.
+- Unknown top-level put arguments collapse to one secret-safe generic validation issue
+  rather than reflecting their key or value. Static text/directives additionally pass
+  bounded neutral response-plan validation before persistence. Focused MCP tests put a
+  strict key into duplicate IDs, malformed nested input, and an unknown top-level key
+  and prove it is absent from serialized pre-handler failures.
+- Mock-LLM delete also requires a positive expected revision. The repository validates
+  and deletes in one transaction with both slug and revision in the final predicate.
+  A stale or delete/recreate ABA revision returns the typed `409` without mutation;
+  an absent row or a retry after successful delete returns `deleted: false`.
+- Schema v7 creates only the definition and monotonic allocator tables. New writes
+  use canonical JSON; persisted reads validate the contract, slug identity, and
+  canonical byte form. Transactional parsing verifies the allocator's monotonicity.
+  Focused tests prove v6 upgrades to v7 while preserving F1 rows and prove an older v6
+  bundle explicitly refuses a v7-touched database as newer than supported. This fails
+  closed but means source rollback cannot downgrade the store; recovery must roll
+  forward or use a separately reviewed bridge.
 - Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
   persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
   revision, negotiated version, initialization state, expiry, and termination.
@@ -226,6 +268,15 @@ management key, while a mock MCP Bearer value is a synthetic per-server credenti
 not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 work.
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
+
+The F2 definition controls likewise have source evidence only. They are not hosted
+rollback, multi-tenant, deployment, or provider-authentication evidence. `accept_any`
+and `strict` are persisted future data-plane policy; because no OpenAI/Anthropic route
+exists, neither mode currently authorizes a request. There is no model renderer,
+conversation/response state, reset, observation, paced stream, Wrangler qualification,
+deployment, or private Cloud pin. The absence of a data plane is a capability
+boundary, not permission to expose the definition store or treat its provider Mock
+Credentials as production secrets.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment

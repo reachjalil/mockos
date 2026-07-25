@@ -1,4 +1,5 @@
 import {
+  assertMockLlmServerSpecBounds,
   environmentIdSchema,
   type Problem,
   type ProvisioningWorkflowParams,
@@ -186,6 +187,23 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+const containsSecret = (root: unknown, secret: string): boolean => {
+  const pending: unknown[] = [root];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object") continue;
+    for (const [key, child] of Object.entries(value)) {
+      if (key.includes(secret)) return true;
+      if (typeof child === "string") {
+        if (child.includes(secret)) return true;
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+};
+
 const isPlatformCredentialToolCall = (
   value: unknown,
   platformApiKey: string
@@ -198,7 +216,17 @@ const isPlatformCredentialToolCall = (
     const server = record(arguments_?.server);
     const authentication = record(server?.authentication);
     const token = authentication?.mode === "bearer" ? authentication.token : undefined;
-    return typeof token === "string" && sameSecret(token, platformApiKey);
+    return typeof token === "string" && token.includes(platformApiKey);
+  }
+  if (params?.name === "put_mock_llm_server") {
+    const server = record(arguments_?.server);
+    if (!server) return false;
+    try {
+      assertMockLlmServerSpecBounds(server);
+    } catch {
+      return false;
+    }
+    return containsSecret(server, platformApiKey);
   }
   if (params?.name !== "run_provisioning_cycle") return false;
   const target = record(arguments_?.target);
@@ -206,7 +234,7 @@ const isPlatformCredentialToolCall = (
   const inlineTarget = record(target.target);
   const auth = record(inlineTarget?.auth);
   const token = auth?.kind === "bearer" ? auth.token : undefined;
-  return typeof token === "string" && sameSecret(token.trim(), platformApiKey);
+  return typeof token === "string" && token.trim().includes(platformApiKey);
 };
 
 const mcpBodyUsesPlatformCredential = (
@@ -257,8 +285,8 @@ const serveMcp = async (context: Context<WorkerHonoEnv>) => {
   if (platformApiKey && mcpBodyUsesPlatformCredential(bounded.body, platformApiKey)) {
     const body = problem(
       400,
-      "Outbound credential rejected",
-      "The platform Access Key cannot be used as an outbound target credential.",
+      "Platform credential rejected",
+      "The platform Access Key cannot be used as a Mock Credential or outbound target credential.",
       "PLATFORM_CREDENTIAL_NOT_ALLOWED",
       context.req.raw
     );

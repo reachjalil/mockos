@@ -5,6 +5,7 @@ export * from "./directory";
 export * from "./engine";
 export * from "./keys";
 export * from "./log";
+export * from "./mock-llm";
 export * from "./mock-mcp";
 export * from "./oauth";
 export * from "./oidc";

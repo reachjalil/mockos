@@ -1,6 +1,6 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; F0/F1 local evidence and partial F2 source kernel
+Status: Approved target design; F0/F1 local evidence and management-only F2 source slice
 Last reviewed: 2026-07-25
 
 This document turns the approved F-series product direction into an executable
@@ -12,8 +12,9 @@ contract/client/OpenAPI foundation and the locally source-qualified bounded F1
 implementation described in the
 [F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
 CI/merge/deployment remain open. A
-[partial F2 response kernel](./f-series/f2-llm-kernel.md) now has focused local source
-tests, but the served F2 runtime and every F3-F9 phase remain open.
+[partial F2 slice](./f-series/f2-llm-kernel.md) now has focused response-kernel tests
+plus strict definitions, four MCP-only operations, and schema-v7 persistence, but the
+served provider data plane and every F3-F9 phase remain open.
 
 ## Outcome
 
@@ -91,10 +92,15 @@ implementation interpretation.
 
 Current-source note: the partial F2 slice freezes a neutral response-plan seam,
 behavior adapter, pure JSON/SSE-frame renderers, and in-process official-SDK
-deserialization. Every operable surface below remains target design: there is no
-server definition, MCP management operation, route, auth, persistence, network stream
-or pacing, observation, Worker, or Cloud integration yet. Model list/retrieve objects
-are supplied only by the SDK test harness; no model renderer or catalog exists.
+deserialization. It also source-implements strict server definitions, four MCP-only
+management operations, schema-v7 environment persistence, mandatory changed-write
+revision CAS, atomic revision-bound delete, and safe write-only provider-key views.
+Changed full-definition writes must resupply or rotate every enabled strict key;
+safe-view markers are not write shapes. Every provider data-plane
+surface below remains target design: there is no route/auth enforcement, model
+renderer/catalog, runtime state/reset/conversation, network stream or pacing,
+observation, Wrangler, deployment, or Cloud integration. Model list/retrieve objects
+are supplied only by the SDK test harness.
 
 - Serve OpenAI-compatible `/v1/chat/completions` and model discovery plus Anthropic
   `/v1/messages` and model discovery under each environment's LLM route prefix.
@@ -384,7 +390,7 @@ the open-core package.
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
 | F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, and complete repository gates are green. The July 28 version checkpoint and all hosted/deployed evidence remain open. |
-| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, edge streaming, tools and errors. Partial source kernel exists; no service/runtime slice. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
+| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The management-only source slice exists; no provider service/runtime. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
 | F5 | Public blueprint core, export/import planner, hosted install integration | F1/F2 schema freeze; hosted apply also gates on F4 slugs/idempotency | Public no-secrets and deterministic hash corpus passes; hosted installs are idempotent and scripts remain disabled. |
@@ -397,15 +403,16 @@ F1, F2, and F3 may run in parallel after F0. F4 may run in the private cloud lan
 after M4. Per-area contract files, append-only migration ownership, and table-driven
 route registration remain the merge choke-point rules.
 
-The current source covers the six-variant `BehaviorSpec`, an exhaustive 20-operation
+The current source covers the six-variant `BehaviorSpec`, an exhaustive 24-operation
 management registry consumed by MCP, deterministic OpenAPI and client
 artifacts for the five HTTP routes that actually exist, a validated fetch client, and
 default-off Code Mode/sandbox wrappers with exact dependency guards. The full local
 F0 repository gate is green. F1 locally qualifies only the bounded
 environment-hosted mock-MCP runtime and five MCP-only management operations; it does
 not add HTTP management routes or activate Code Mode, scripts, or proxy. The partial
-F2 source kernel adds neutral schemas, behavior adaptation, pure provider rendering,
-and injected-Fetch SDK deserialization, but no user-operable mock LLM runtime.
+F2 adds neutral schemas, behavior adaptation, pure provider rendering, injected-Fetch
+SDK deserialization, and MCP-only persisted definitions, but no user-operable mock LLM
+provider runtime.
 Hosted CI, merge, package publication, private Cloud consumption, and deployment
 remain separate.
 
@@ -471,9 +478,10 @@ held back for hosted governance.
 
 ### Mock LLM
 
-The current F2 response kernel satisfies none of the runtime gates below. Its pinned
-official SDK tests consume selected JSON/SSE-frame responses through injected
-in-process Fetch; they do not run against Wrangler or a network endpoint.
+The current F2 management slice satisfies the configuration prerequisite but none of
+the provider runtime gates below. Its pinned official SDK tests consume selected
+JSON/SSE-frame responses through injected in-process Fetch; they do not run against
+Wrangler or a network endpoint.
 
 - Real `openai` and `@anthropic-ai/sdk` clients run against `wrangler dev` and deployed
   staging for non-streaming, streaming, tool calls, provider errors, and cancellation.

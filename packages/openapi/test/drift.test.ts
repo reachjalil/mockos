@@ -54,10 +54,10 @@ describe("management OpenAPI generation", () => {
     }
   });
 
-  it("documents exactly the 20 management tools and five implemented HTTP routes", () => {
+  it("documents exactly the 24 management tools and five implemented HTTP routes", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
-    expect(catalog.managementMcp.toolCount).toBe(20);
+    expect(catalog.managementMcp.toolCount).toBe(24);
     expect(catalog.managementMcp.tools.map(({ operationId }) => operationId)).toEqual(
       mockosMcpToolNames
     );
@@ -74,7 +74,7 @@ describe("management OpenAPI generation", () => {
     ).toHaveLength(5);
   });
 
-  it("keeps F1 source-qualified, later workloads unavailable, and placeholders inert", () => {
+  it("keeps F1 qualified, F2 management-only, later workloads unavailable, and placeholders inert", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
     expect(catalog.managementMcp.scopeEnforcement).toBe("metadata-only");
@@ -86,11 +86,53 @@ describe("management OpenAPI generation", () => {
       subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}",
       deployedAcceptance: "unqualified",
     });
+    expect(catalog.future.mockLlmApis).toEqual({
+      status: "unavailable",
+      phase: "F2",
+      managementDefinitions: {
+        status: "source-implemented",
+        interface: "MCP-only",
+        toolIds: [
+          "put_mock_llm_server",
+          "list_mock_llm_servers",
+          "get_mock_llm_server",
+          "delete_mock_llm_server",
+        ],
+        persistence: "environment-schema-v7",
+        strictCredentials: "write-only-provider-scoped",
+        putContract: {
+          expectedRevision: "required-null-create-or-positive-replace",
+          replacement: "full-definition",
+          strictCredentialReplacement: "resupply-or-rotate-every-enabled-provider",
+          safeViewWriteShape: "unsupported",
+        },
+        deleteContract: {
+          expectedRevision: "required-positive",
+          behavior: "atomic-cas",
+          missingOrReplay: "deleted-false",
+          revisionMismatch: "typed-409",
+        },
+        validation: {
+          staticBehavior: "bounded-neutral-plan",
+          topLevelArguments: "strict-secret-safe",
+          platformAccessKey: "reject-substring-in-definition-keys-and-string-values",
+        },
+        schemaCompatibility: {
+          upgrade: "v6-to-v7",
+          rollback: "v6-refuses-v7",
+        },
+      },
+      guide: "docs/mock-llm.md",
+      providerDataPlane: "unavailable",
+      deployedAcceptance: "unqualified",
+    });
     expect(catalog.future.codeMode.status).toBe("unavailable");
     expect(Object.values(catalog.placeholders)).toEqual([
       "$MOCKOS_API_KEY",
       "$MOCKOS_MCP_ENDPOINT",
       "$MOCKOS_SYNTHETIC_CREDENTIAL",
+      "$MOCKOS_OPENAI_MOCK_CREDENTIAL",
+      "$MOCKOS_ANTHROPIC_MOCK_CREDENTIAL",
     ]);
     for (const placeholder of Object.values(catalog.placeholders)) {
       expect(placeholder).toMatch(/^\$[A-Z][A-Z0-9_]+$/);

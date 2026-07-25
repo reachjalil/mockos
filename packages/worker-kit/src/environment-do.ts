@@ -18,10 +18,13 @@ import {
   type ManagementListQuery,
   type MintedToken,
   type MintTokenRequest,
+  type MockLlmServerSummary,
+  type MockLlmServerView,
   type MockMcpServerSummary,
   type MockMcpServerView,
   managementListQuerySchema,
   mintTokenRequestSchema,
+  mockLlmServerWriteSchema,
   mockMcpServerWriteSchema,
   mockMcpSlugSchema,
   type ProvisioningHttpOperation,
@@ -43,6 +46,7 @@ import {
   type ScenarioListPage,
   type ScenarioSpec,
   scenarioListPageSchema,
+  toMockLlmServerView,
   toMockMcpServerView,
   type WellKnownUrls,
   wellKnownUrlsSchema,
@@ -56,6 +60,7 @@ import {
   Engine,
   hashSecret,
   MAX_REQUEST_LOG_BODY_BYTES,
+  MockLlmRepository,
   MockMcpRepository,
   OAuthError,
   type RenderedProviderError,
@@ -867,6 +872,7 @@ export class UnknownProvisioningApplicationError extends Error {
 /** One isolated identity engine and SQLite database per mock environment. */
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
+  readonly #mockLlm: MockLlmRepository;
   readonly #mockMcp: MockMcpRepository;
   readonly #provisioning: ProvisioningPersistence;
   readonly #provisioningEnvironment: ProvisioningEnvironmentVariables;
@@ -890,6 +896,7 @@ export class EnvironmentDurableObject extends DurableObject {
     super(ctx, env);
     this.#store = new DoSqlStore(ctx.storage);
     this.#ensureSchema();
+    this.#mockLlm = new MockLlmRepository(this.#store);
     this.#mockMcp = new MockMcpRepository(this.#store);
     this.#provisioning = new ProvisioningPersistence(this.#store);
     this.#provisioningEnvironment = asProvisioningEnvironment(env);
@@ -902,14 +909,26 @@ export class EnvironmentDurableObject extends DurableObject {
 
   #assertNotPlatformCredential(bearerToken: string | undefined): void {
     const platformApiKey = this.#provisioningEnvironment.API_KEY?.trim();
-    if (
-      bearerToken &&
-      platformApiKey &&
-      sameProvisioningSecret(bearerToken, platformApiKey)
-    ) {
+    if (bearerToken && platformApiKey && bearerToken.includes(platformApiKey)) {
       throw new Error(
-        "The platform Access Key cannot be used as an outbound target credential."
+        "The platform Access Key cannot be used as a Mock Credential or outbound target credential."
       );
+    }
+  }
+
+  #assertNoPlatformCredentialInValue(root: unknown): void {
+    const pending: unknown[] = [root];
+    while (pending.length > 0) {
+      const value = pending.pop();
+      if (!value || typeof value !== "object") continue;
+      for (const [key, child] of Object.entries(value)) {
+        this.#assertNotPlatformCredential(key);
+        if (typeof child === "string") {
+          this.#assertNotPlatformCredential(child);
+        } else {
+          pending.push(child);
+        }
+      }
     }
   }
 
@@ -1094,6 +1113,59 @@ export class EnvironmentDurableObject extends DurableObject {
     const cleared = this.#mockMcp.resetState(slug);
     await this.#touch();
     return cleared;
+  }
+
+  async putMockLlmServer(
+    input: unknown,
+    expectedRevision: number | null
+  ): Promise<MockLlmServerView> {
+    const server = mockLlmServerWriteSchema.parse(input);
+    this.#assertNoPlatformCredentialInValue(server);
+
+    const persistDialect = async (
+      dialect: typeof server.dialects.openai | typeof server.dialects.anthropic
+    ) => {
+      if (!dialect.enabled) return dialect;
+      if (dialect.authentication.mode === "accept_any") return dialect;
+      return {
+        enabled: true as const,
+        authentication: {
+          mode: "strict" as const,
+          apiKeySha256: await hashSecret(dialect.authentication.apiKey),
+        },
+      };
+    };
+    const [openai, anthropic] = await Promise.all([
+      persistDialect(server.dialects.openai),
+      persistDialect(server.dialects.anthropic),
+    ]);
+    const persisted = this.#mockLlm.put(
+      {
+        ...server,
+        dialects: { openai, anthropic },
+      },
+      expectedRevision
+    );
+    await this.#touch();
+    return toMockLlmServerView(persisted);
+  }
+
+  async listMockLlmServers(): Promise<MockLlmServerSummary[]> {
+    const servers = this.#mockLlm.list();
+    await this.#touch();
+    return servers;
+  }
+
+  async getMockLlmServer(slug: string): Promise<MockLlmServerView | undefined> {
+    const server = this.#mockLlm.get(slug);
+    if (server) await this.#touch();
+    return server ? toMockLlmServerView(server) : undefined;
+  }
+
+  async deleteMockLlmServer(slug: string, expectedRevision: number): Promise<boolean> {
+    const deleted = this.#mockLlm.delete(slug, expectedRevision);
+    if (deleted) await this.#touch();
+    return deleted;
   }
 
   async #appendMockMcpObservation(
