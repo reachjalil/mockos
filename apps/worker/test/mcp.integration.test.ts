@@ -1,4 +1,5 @@
 import { env, exports } from "cloudflare:workers";
+import { mockosMcpToolNames } from "@mockos/contracts";
 import { describe, expect, it } from "vitest";
 
 const apiKey = "mockos-integration-test-key";
@@ -248,6 +249,39 @@ describe("management MCP", () => {
     });
   });
 
+  it("rejects the platform key as a mock MCP bearer credential before tool dispatch", async () => {
+    const sessionId = await initialize();
+    const response = await mcpRequest(
+      {
+        jsonrpc: "2.0",
+        id: 100,
+        method: "tools/call",
+        params: {
+          name: "put_mock_mcp_server",
+          arguments: {
+            environmentId: "env_missing01",
+            server: {
+              version: 1,
+              slug: "platform-key",
+              serverInfo: { name: "Rejected server", version: "1.0.0" },
+              authentication: { mode: "bearer", token: apiKey },
+            },
+          },
+        },
+      },
+      sessionId
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    const body = await response.text();
+    expect(body).not.toContain(apiKey);
+    expect(JSON.parse(body)).toMatchObject({
+      code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+      status: 400,
+    });
+  });
+
   it("keeps reserved and deleting catalog entries out of active listings", async () => {
     const environment = {
       id: "catalog-state-01",
@@ -294,23 +328,7 @@ describe("management MCP", () => {
     const [listMessage] = await parseMessages(listResponse);
     const tools = (listMessage?.result?.tools ?? []) as Array<{ name: string }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(
-      [
-        "assert_requests",
-        "clear_scenario",
-        "configure_environment",
-        "create_application",
-        "create_environment",
-        "delete_environment",
-        "get_request_log",
-        "get_wellknown_urls",
-        "list_environments",
-        "mint_token",
-        "run_provisioning_cycle",
-        "seed_identities",
-        "set_current_environment",
-        "set_scenario",
-        "simulate_lifecycle",
-      ].sort()
+      [...mockosMcpToolNames].sort()
     );
 
     const created = await callTool(sessionId, 3, "create_environment", {

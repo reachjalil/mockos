@@ -12,6 +12,9 @@ import {
   type LifecycleResult,
   type MintedToken,
   type MintTokenRequest,
+  type MockMcpServerSummary,
+  type MockMcpServerView,
+  type MockMcpServerWrite,
   mockosMcpToolNames,
   type ProvisioningRun,
   type RequestLogPage,
@@ -41,6 +44,7 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   readonly accountId = "acct_test";
   readonly environments = new Map<string, EnvironmentConfig>();
   readonly calls: Array<{ environmentId: string; operation: string }> = [];
+  readonly mockMcpServers = new Map<string, MockMcpServerView>();
   currentEnvironmentId: string | null = null;
   lastLogQuery: RequestLogQuery | undefined;
 
@@ -263,6 +267,98 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
       jwksUri: `${issuer}/discovery/v2.0/keys`,
       scimBaseUrl: `${issuer}/scim/v2`,
     };
+  }
+
+  async putMockMcpServer(
+    environmentId: string,
+    server: MockMcpServerWrite,
+    _context: MockosToolRequestContext
+  ): Promise<MockMcpServerView> {
+    this.requireEnvironment(environmentId);
+    const existing = this.mockMcpServers.get(server.slug);
+    const view: MockMcpServerView = {
+      spec: {
+        ...server,
+        authentication:
+          server.authentication.mode === "none"
+            ? { mode: "none" }
+            : { mode: "bearer", configured: true },
+      },
+      revision: (existing?.revision ?? 0) + 1,
+      createdAt: existing?.createdAt ?? CREATED_AT,
+      updatedAt: CREATED_AT,
+    };
+    this.mockMcpServers.set(server.slug, view);
+    this.calls.push({ environmentId, operation: `put-mock-mcp:${server.slug}` });
+    return view;
+  }
+
+  async listMockMcpServers(
+    environmentId: string,
+    _context: MockosToolRequestContext
+  ): Promise<MockMcpServerSummary[]> {
+    this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: "list-mock-mcp" });
+    return [...this.mockMcpServers.values()].map(({ spec, revision, updatedAt }) => ({
+      slug: spec.slug,
+      name: spec.serverInfo.name,
+      version: spec.serverInfo.version,
+      revision,
+      toolCount: spec.tools.length,
+      resourceCount: spec.resources.length,
+      resourceTemplateCount: spec.resourceTemplates.length,
+      promptCount: spec.prompts.length,
+      stateful: spec.transport.stateful,
+      getEnabled: spec.transport.enableGet,
+      updatedAt,
+    }));
+  }
+
+  async getMockMcpServer(
+    environmentId: string,
+    slug: string,
+    _context: MockosToolRequestContext
+  ): Promise<MockMcpServerView> {
+    this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: `get-mock-mcp:${slug}` });
+    const server = this.mockMcpServers.get(slug);
+    if (!server) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-not-found",
+        title: "Mock MCP server not found",
+        status: 404,
+        code: "MOCK_MCP_SERVER_NOT_FOUND",
+      });
+    }
+    return server;
+  }
+
+  async deleteMockMcpServer(
+    environmentId: string,
+    slug: string,
+    _context: MockosToolRequestContext
+  ): Promise<boolean> {
+    this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: `delete-mock-mcp:${slug}` });
+    return this.mockMcpServers.delete(slug);
+  }
+
+  async resetMockMcpState(
+    environmentId: string,
+    slug: string,
+    _context: MockosToolRequestContext
+  ): Promise<number> {
+    this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: `reset-mock-mcp:${slug}` });
+    if (!this.mockMcpServers.has(slug)) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-not-found",
+        title: "Mock MCP server not found",
+        status: 404,
+        code: "MOCK_MCP_SERVER_NOT_FOUND",
+      });
+    }
+    return 0;
   }
 
   async getCurrentEnvironmentId(
@@ -493,6 +589,59 @@ describe("registerMockosTools", () => {
     const urls = await callData<WellKnownUrls>(client, "get_wellknown_urls", {});
     expect(urls.issuer).toContain(ENVIRONMENT_ID);
 
+    const mockCredential = "synthetic-mock-mcp-credential";
+    const mockServer = await callData<MockMcpServerView>(
+      client,
+      "put_mock_mcp_server",
+      {
+        server: {
+          version: 1,
+          slug: "crm-sandbox",
+          serverInfo: { name: "CRM sandbox", version: "1.0.0" },
+          authentication: { mode: "bearer", token: mockCredential },
+          tools: [
+            {
+              name: "lookup_contact",
+              behavior: {
+                version: 1,
+                type: "static",
+                value: {
+                  content: [{ type: "text", text: "Synthetic contact" }],
+                },
+              },
+            },
+          ],
+        },
+      }
+    );
+    expect(mockServer).toMatchObject({
+      spec: {
+        slug: "crm-sandbox",
+        authentication: { mode: "bearer", configured: true },
+      },
+      revision: 1,
+    });
+    expect(JSON.stringify(mockServer)).not.toContain(mockCredential);
+    expect(JSON.stringify(mockServer)).not.toContain("tokenSha256");
+
+    const mockServers = await callData<{ servers: MockMcpServerSummary[] }>(
+      client,
+      "list_mock_mcp_servers",
+      {}
+    );
+    expect(mockServers.servers).toMatchObject([{ slug: "crm-sandbox", toolCount: 1 }]);
+    expect(
+      await callData<MockMcpServerView>(client, "get_mock_mcp_server", {
+        slug: "crm-sandbox",
+      })
+    ).toEqual(mockServer);
+    expect(
+      await callData(client, "reset_mock_mcp_state", { slug: "crm-sandbox" })
+    ).toEqual({ slug: "crm-sandbox", cleared: 0 });
+    expect(
+      await callData(client, "delete_mock_mcp_server", { slug: "crm-sandbox" })
+    ).toEqual({ slug: "crm-sandbox", deleted: true });
+
     expect(
       await callData<ClearScenarioResult>(client, "clear_scenario", {
         scenarioId: "force_mfa",
@@ -517,6 +666,11 @@ describe("registerMockosTools", () => {
       "assert-requests",
       "lifecycle:disable:user_1",
       "get-well-known",
+      "put-mock-mcp:crm-sandbox",
+      "list-mock-mcp",
+      "get-mock-mcp:crm-sandbox",
+      "reset-mock-mcp:crm-sandbox",
+      "delete-mock-mcp:crm-sandbox",
       "clear-scenario:force_mfa",
       "delete",
     ]);

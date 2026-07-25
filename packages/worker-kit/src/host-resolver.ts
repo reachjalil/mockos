@@ -1,4 +1,4 @@
-import { environmentIdSchema } from "@mockos/contracts";
+import { environmentIdSchema, mockMcpSlugSchema } from "@mockos/contracts";
 
 export type HostingMode = "path" | "subdomain";
 
@@ -13,7 +13,8 @@ export type EnvironmentLocator =
   | { environmentId: string; type: "environment" }
   | { tenantId: string; type: "tenant" };
 
-export type ResolvedEnvironmentRequest = {
+export type ResolvedIdentityRequest = {
+  kind: "identity";
   environmentId?: string;
   forwardedPath: string;
   graphBaseUrl?: string;
@@ -23,6 +24,19 @@ export type ResolvedEnvironmentRequest = {
   publicBase: string;
   tenantId?: string;
 };
+
+export type ResolvedMockMcpRequest = {
+  kind: "mock-mcp";
+  environmentId: string;
+  forwardedPath: string;
+  locator: Extract<EnvironmentLocator, { type: "environment" }>;
+  publicBase: string;
+  slug: string;
+};
+
+export type ResolvedEnvironmentRequest =
+  | ResolvedIdentityRequest
+  | ResolvedMockMcpRequest;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -58,6 +72,19 @@ const classifyPath = (pathname: string) => {
   return undefined;
 };
 
+const mockMcpSlugFromPath = (pathname: string): string | undefined => {
+  const match = /^\/mcp-mock\/([^/]+)$/.exec(pathname);
+  if (!match?.[1]) return undefined;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
+  })();
+  return decoded && mockMcpSlugSchema.safeParse(decoded).success ? decoded : undefined;
+};
+
 const pathModeResolution = (
   url: URL,
   config: HostResolverConfig
@@ -70,9 +97,20 @@ const pathModeResolution = (
   const environmentId = rest.slice(0, slash);
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
   const forwardedPath = rest.slice(slash) || "/";
+  const mockMcpSlug = mockMcpSlugFromPath(forwardedPath);
+  const publicBase = `${url.origin}${prefix}/${environmentId}`;
+  if (mockMcpSlug) {
+    return {
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath,
+      locator: { type: "environment", environmentId },
+      publicBase,
+      slug: mockMcpSlug,
+    };
+  }
   const classification = classifyPath(forwardedPath);
   if (!classification) return undefined;
-  const publicBase = `${url.origin}${prefix}/${environmentId}`;
   const issuerBase =
     classification.provider === "entra"
       ? `${publicBase}/${classification.tenantId}/v2.0`
@@ -80,6 +118,7 @@ const pathModeResolution = (
         ? `${publicBase}/oauth2/default`
         : publicBase;
   return {
+    kind: "identity",
     environmentId,
     forwardedPath,
     ...(classification.provider === "entra"
@@ -107,6 +146,7 @@ const subdomainModeResolution = (
   if (hostname === entraHost) {
     if (classification?.provider !== "entra") return undefined;
     return {
+      kind: "identity",
       forwardedPath: url.pathname,
       issuerBase: `${url.origin}/${classification.tenantId}/v2.0`,
       locator: { type: "tenant", tenantId: classification.tenantId },
@@ -119,8 +159,20 @@ const subdomainModeResolution = (
   if (!hostname.endsWith(suffix)) return undefined;
   const environmentId = hostname.slice(0, -suffix.length);
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
+  const mockMcpSlug = mockMcpSlugFromPath(url.pathname);
+  if (mockMcpSlug) {
+    return {
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath: url.pathname,
+      locator: { type: "environment", environmentId },
+      publicBase: url.origin,
+      slug: mockMcpSlug,
+    };
+  }
   if (!classification || classification.provider === "entra") return undefined;
   return {
+    kind: "identity",
     environmentId,
     forwardedPath: url.pathname,
     issuerBase:
@@ -156,6 +208,7 @@ export const graphBaseUrlForEnvironment = (
   environmentId: string,
   config: HostResolverConfig
 ): string | undefined => {
+  if (resolution.kind === "mock-mcp") return undefined;
   if (resolution.provider !== "entra") return undefined;
   if (!environmentIdSchema.safeParse(environmentId).success) {
     throw new Error("A valid environment ID is required for the Graph base URL.");
@@ -181,10 +234,15 @@ export const forwardEnvironmentRequest = (
   for (const name of [...headers.keys()]) {
     if (name.toLowerCase().startsWith("x-mockos-")) headers.delete(name);
   }
-  headers.set("x-mockos-issuer-base", resolution.issuerBase);
+  headers.set("x-mockos-route-kind", resolution.kind);
   headers.set("x-mockos-public-path", new URL(request.url).pathname);
-  if (resolution.graphBaseUrl) {
-    headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
+  if (resolution.kind === "identity") {
+    headers.set("x-mockos-issuer-base", resolution.issuerBase);
+    if (resolution.graphBaseUrl) {
+      headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
+    }
+  } else {
+    headers.set("x-mockos-mcp-slug", resolution.slug);
   }
   if (resolution.environmentId) {
     headers.set("x-mockos-env", resolution.environmentId);
@@ -197,5 +255,6 @@ export const forwardEnvironmentRequest = (
     headers,
     method: request.method,
     redirect: request.redirect,
+    signal: request.signal,
   });
 };

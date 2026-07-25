@@ -54,10 +54,10 @@ describe("management OpenAPI generation", () => {
     }
   });
 
-  it("documents exactly the 15 management tools and five implemented HTTP routes", () => {
+  it("documents exactly the 20 management tools and five implemented HTTP routes", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
-    expect(catalog.managementMcp.toolCount).toBe(15);
+    expect(catalog.managementMcp.toolCount).toBe(20);
     expect(catalog.managementMcp.tools.map(({ operationId }) => operationId)).toEqual(
       mockosMcpToolNames
     );
@@ -74,13 +74,17 @@ describe("management OpenAPI generation", () => {
     ).toHaveLength(5);
   });
 
-  it("keeps future MCP workloads unavailable and uses inert secret placeholders", () => {
+  it("keeps F1 source-qualified, later workloads unavailable, and placeholders inert", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
     expect(catalog.managementMcp.scopeEnforcement).toBe("metadata-only");
     expect(catalog.future.mockMcpServers).toEqual({
-      status: "unavailable",
+      status: "source-qualified",
       phase: "F1",
+      testedProtocolVersion: "2025-11-25",
+      pathEndpoint: "/e/{environmentId}/mcp-mock/{slug}",
+      subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}",
+      deployedAcceptance: "unqualified",
     });
     expect(catalog.future.codeMode.status).toBe("unavailable");
     expect(Object.values(catalog.placeholders)).toEqual([

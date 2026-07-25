@@ -1,15 +1,17 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; F0 foundation source-complete locally, hosted CI/merge pending
-Last reviewed: 2026-07-22
+Status: Approved target design; F0 complete locally and F1 locally source-qualified
+Last reviewed: 2026-07-25
 
 This document turns the approved F-series product direction into an executable
 roadmap. Target sections are not implementation evidence; the current evidence ledger
 remains [Implementation status](./IMPLEMENTATION_STATUS.md). The exact M2 candidate
 passed local/hosted gates and staging/production workers.dev smoke, satisfying the F0
 entry gate. The revision carrying this document contains a locally green F0
-contract/client/OpenAPI foundation. Hosted CI/merge evidence and every F1-F9 runtime
-phase remain open.
+contract/client/OpenAPI foundation and the locally source-qualified bounded F1
+implementation described in the
+[F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
+CI/merge/deployment and every F2-F9 runtime phase remain open.
 
 ## Outcome
 
@@ -368,7 +370,7 @@ the open-core package.
 | Design-0 | This roadmap, ADRs, sourced fixture research, spike plans | Current M0-M2 candidate | Docs checks pass; no F-series runtime or dependency change is merged. |
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
-| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Official SDK client passes in-process and Worker tests; July 28 version checkpoint recorded. |
+| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, and complete repository gates are green. The July 28 version checkpoint and all hosted/deployed evidence remain open. |
 | F2 | Neutral LLM planner, OpenAI and Anthropic dialects, edge streaming, tools and errors | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
@@ -382,13 +384,15 @@ F1, F2, and F3 may run in parallel after F0. F4 may run in the private cloud lan
 after M4. Per-area contract files, append-only migration ownership, and table-driven
 route registration remain the merge choke-point rules.
 
-The F0 source candidate now covers the six-variant `BehaviorSpec`, an exhaustive
-15-operation management registry consumed by MCP, deterministic OpenAPI and client
+The current source covers the six-variant `BehaviorSpec`, an exhaustive 20-operation
+management registry consumed by MCP, deterministic OpenAPI and client
 artifacts for the five HTTP routes that actually exist, a validated fetch client, and
 default-off Code Mode/sandbox wrappers with exact dependency guards. The full local
-repository gate is green. This is not hosted CI or merge evidence, does not advertise
-MCP-only operations as HTTP, and does not activate Code Mode, scripts, mock MCP, or
-mock LLM runtimes.
+F0 repository gate is green. F1 locally qualifies only the bounded
+environment-hosted mock-MCP runtime and five MCP-only management operations; it does
+not add HTTP management routes or activate Code Mode, scripts, proxy, or mock LLM
+runtimes. Hosted CI, merge, package publication, private Cloud consumption, and
+deployment remain separate.
 
 ### July 28 MCP checkpoint
 

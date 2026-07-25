@@ -276,17 +276,36 @@ const migrationV5 = [
 const migrationV6 = [
   `CREATE TABLE IF NOT EXISTS mock_mcp_servers (
     slug TEXT PRIMARY KEY,
-    revision INTEGER NOT NULL CHECK (revision >= 1),
+    revision INTEGER NOT NULL
+      CHECK (revision >= 1 AND revision <= 9007199254740991),
     spec_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   ) WITHOUT ROWID`,
   `CREATE INDEX IF NOT EXISTS mock_mcp_servers_updated_idx
     ON mock_mcp_servers(updated_at DESC, slug)`,
+  `CREATE TABLE IF NOT EXISTS mock_mcp_revision_allocator (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    last_revision INTEGER NOT NULL
+      CHECK (last_revision >= 0 AND last_revision <= 9007199254740991)
+  ) WITHOUT ROWID`,
+  `INSERT OR IGNORE INTO mock_mcp_revision_allocator (singleton, last_revision)
+    VALUES (1, 0)`,
+  `UPDATE mock_mcp_revision_allocator
+    SET last_revision = COALESCE(
+      (SELECT MAX(revision) FROM mock_mcp_servers),
+      0
+    )
+    WHERE singleton = 1
+      AND last_revision < COALESCE(
+        (SELECT MAX(revision) FROM mock_mcp_servers),
+        0
+      )`,
   `CREATE TABLE IF NOT EXISTS mock_state (
     server_slug TEXT NOT NULL
       REFERENCES mock_mcp_servers(slug) ON DELETE CASCADE,
-    server_revision INTEGER NOT NULL CHECK (server_revision >= 1),
+    server_revision INTEGER NOT NULL
+      CHECK (server_revision >= 1 AND server_revision <= 9007199254740991),
     state_key TEXT NOT NULL,
     value_json TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -296,7 +315,8 @@ const migrationV6 = [
     session_hash TEXT PRIMARY KEY,
     server_slug TEXT NOT NULL
       REFERENCES mock_mcp_servers(slug) ON DELETE CASCADE,
-    server_revision INTEGER NOT NULL CHECK (server_revision >= 1),
+    server_revision INTEGER NOT NULL
+      CHECK (server_revision >= 1 AND server_revision <= 9007199254740991),
     protocol_version TEXT NOT NULL,
     initialized INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,

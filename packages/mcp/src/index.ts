@@ -13,6 +13,9 @@ import {
   type LifecycleResult,
   type MintedToken,
   type MintTokenRequest,
+  type MockMcpServerSummary,
+  type MockMcpServerView,
+  type MockMcpServerWrite,
   type MockosMcpToolName,
   type Problem,
   type ProvisioningRun,
@@ -110,6 +113,30 @@ export type MockosToolDependencies = {
     environmentId: string,
     context: MockosToolRequestContext
   ): Promise<WellKnownUrls>;
+  putMockMcpServer(
+    environmentId: string,
+    server: MockMcpServerWrite,
+    context: MockosToolRequestContext
+  ): Promise<MockMcpServerView>;
+  listMockMcpServers(
+    environmentId: string,
+    context: MockosToolRequestContext
+  ): Promise<MockMcpServerSummary[]>;
+  getMockMcpServer(
+    environmentId: string,
+    slug: string,
+    context: MockosToolRequestContext
+  ): Promise<MockMcpServerView>;
+  deleteMockMcpServer(
+    environmentId: string,
+    slug: string,
+    context: MockosToolRequestContext
+  ): Promise<boolean>;
+  resetMockMcpState(
+    environmentId: string,
+    slug: string,
+    context: MockosToolRequestContext
+  ): Promise<number>;
   getCurrentEnvironmentId(context: MockosToolRequestContext): Promise<string | null>;
   setCurrentEnvironmentId(
     environmentId: string | null,
@@ -546,6 +573,122 @@ export const registerMockosTools = (
     }
   );
 
+  const putMockMcpServer = server.registerTool(
+    "put_mock_mcp_server",
+    {
+      title: mockosManagementOperations.put_mock_mcp_server.title,
+      description: mockosManagementOperations.put_mock_mcp_server.description,
+      ...mockosManagementOperations.put_mock_mcp_server.mcp,
+    },
+    async ({ environmentId, server: mockServer }, extra) => {
+      const context = requestContext(dependencies, extra);
+      const secrets =
+        mockServer.authentication.mode === "bearer"
+          ? [mockServer.authentication.token]
+          : [];
+      return execute(
+        context,
+        async () => {
+          const resolvedId = await requireEnvironmentId(
+            environmentId,
+            dependencies,
+            context
+          );
+          return dependencies.putMockMcpServer(resolvedId, mockServer, context);
+        },
+        secrets
+      );
+    }
+  );
+
+  const listMockMcpServers = server.registerTool(
+    "list_mock_mcp_servers",
+    {
+      title: mockosManagementOperations.list_mock_mcp_servers.title,
+      description: mockosManagementOperations.list_mock_mcp_servers.description,
+      ...mockosManagementOperations.list_mock_mcp_servers.mcp,
+    },
+    async ({ environmentId }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return {
+          servers: await dependencies.listMockMcpServers(resolvedId, context),
+        };
+      });
+    }
+  );
+
+  const getMockMcpServer = server.registerTool(
+    "get_mock_mcp_server",
+    {
+      title: mockosManagementOperations.get_mock_mcp_server.title,
+      description: mockosManagementOperations.get_mock_mcp_server.description,
+      ...mockosManagementOperations.get_mock_mcp_server.mcp,
+    },
+    async ({ environmentId, slug }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return dependencies.getMockMcpServer(resolvedId, slug, context);
+      });
+    }
+  );
+
+  const deleteMockMcpServer = server.registerTool(
+    "delete_mock_mcp_server",
+    {
+      title: mockosManagementOperations.delete_mock_mcp_server.title,
+      description: mockosManagementOperations.delete_mock_mcp_server.description,
+      ...mockosManagementOperations.delete_mock_mcp_server.mcp,
+    },
+    async ({ environmentId, slug }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return {
+          slug,
+          deleted: await dependencies.deleteMockMcpServer(resolvedId, slug, context),
+        };
+      });
+    }
+  );
+
+  const resetMockMcpState = server.registerTool(
+    "reset_mock_mcp_state",
+    {
+      title: mockosManagementOperations.reset_mock_mcp_state.title,
+      description: mockosManagementOperations.reset_mock_mcp_state.description,
+      ...mockosManagementOperations.reset_mock_mcp_state.mcp,
+    },
+    async ({ environmentId, slug }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        return {
+          slug,
+          cleared: await dependencies.resetMockMcpState(resolvedId, slug, context),
+        };
+      });
+    }
+  );
+
   return {
     create_environment: createEnvironment,
     list_environments: listEnvironments,
@@ -562,6 +705,11 @@ export const registerMockosTools = (
     simulate_lifecycle: simulateLifecycle,
     get_wellknown_urls: getWellKnownUrls,
     set_current_environment: setCurrentEnvironment,
+    put_mock_mcp_server: putMockMcpServer,
+    list_mock_mcp_servers: listMockMcpServers,
+    get_mock_mcp_server: getMockMcpServer,
+    delete_mock_mcp_server: deleteMockMcpServer,
+    reset_mock_mcp_state: resetMockMcpState,
   };
 };
 

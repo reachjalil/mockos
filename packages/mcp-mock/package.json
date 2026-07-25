@@ -1,7 +1,7 @@
 {
-  "name": "@mockos/worker-kit",
+  "name": "@mockos/mcp-mock",
   "version": "0.0.0",
-  "description": "Cloudflare Durable Object composition for mockOS.",
+  "description": "SDK-independent MCP data-plane adapter for mockOS environments.",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -14,16 +14,11 @@
   },
   "dependencies": {
     "@mockos/contracts": "workspace:*",
-    "@mockos/core": "workspace:*",
-    "@mockos/engine-http": "workspace:*",
-    "@mockos/mcp": "workspace:*",
-    "@mockos/mcp-mock": "workspace:*",
-    "@modelcontextprotocol/sdk": "catalog:",
-    "agents": "catalog:",
-    "hono": "catalog:"
+    "@mockos/core": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@mockos/testkit": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

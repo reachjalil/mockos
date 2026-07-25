@@ -1,7 +1,7 @@
 # MCP-first quickstart
 
-Status: Current 15-tool management workflow; package publication remains unavailable
-Last reviewed: 2026-07-23
+Status: Current 20-tool management workflow; package publication remains unavailable
+Last reviewed: 2026-07-24
 
 Use management MCP to create a deterministic identity environment, obtain its
 provider-shaped endpoints, exercise your application, assert what it sent, and remove
@@ -52,9 +52,9 @@ back to the legacy HTTP+SSE transport.
 
 Call `tools/list` before any mutation. Require only the tools needed by the planned
 workflow and tolerate additional tools from a newer compatible server. The current
-source exposes exactly 15 tools; use the
+source exposes exactly 20 tools; use the
 [generated management-tool reference](../reference/management-tools.md) instead of a
-copied list.
+copied list. Five F1 tools configure environment-hosted mock MCP dependencies.
 
 Stop before creating state when:
 
@@ -119,8 +119,9 @@ global install. The full command workflow and exit-code contract are in the
 ## Credentials do not cross interfaces
 
 The management key authenticates management MCP. It must not be reused for SCIM,
-Graph-shaped, Okta directory-shaped, outbound provisioning, or application login
-traffic. Those surfaces use separate synthetic Mock Credentials documented in the
+Graph-shaped, Okta directory-shaped, environment mock MCP, outbound provisioning, or
+application login traffic. Those surfaces use separate synthetic Mock Credentials
+documented in the
 [interface model](../concepts/interface-model.md#trust-boundaries).
 
 Captured protocol bodies can contain synthetic passwords, client credentials, or
@@ -129,9 +130,10 @@ minimum safe request evidence.
 
 ## What this quickstart does not enable
 
-This workflow does not enable:
+This identity workflow does not configure the source-qualified F1 mock MCP server.
+Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for that task.
+It also does not enable:
 
-- future mock MCP servers inside an environment (F1);
 - mock OpenAI or Anthropic APIs (F2);
 - user-script execution or Worker Loader (F3);
 - enforced `env:ro` or `env:rw` key scopes (F4);

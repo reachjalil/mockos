@@ -1,15 +1,17 @@
 # Threat model
 
-Status: M3/M5 controls accepted; bounded M6 controls have sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: M3/M5 accepted, bounded M6 deployed, and F1 controls source-only
+Last reviewed: 2026-07-24
 
 ## Assets and trust boundaries
 
 Protected assets are platform Access Keys, Cloudflare credentials, environment control
 authority, hashed application secrets and OAuth tokens, signing keys, and isolation
-between mock environments. The provider protocol surface is intentionally
-attacker-controllable. MCP and `/__mockos/v1/*` control operations cross a stronger
-authorization boundary.
+between mock environments. F1 adds mock-MCP Bearer verifiers, opaque transport
+sessions, revision-bound behavior state, and captured agent traffic. Provider and
+environment mock-MCP protocol surfaces are intentionally attacker-controllable.
+Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
+boundary.
 
 The control credential authenticates the operator, not a provider-protocol client. It
 must never be sent to an environment's OIDC, OAuth, SCIM, Graph, Okta directory, or
@@ -29,12 +31,65 @@ hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, authentication-state user enumeration, Authn
 state/session capability theft or replay, parser or body resource exhaustion, secret
 leakage through logs, unbounded SQLite growth, denial of service, and SSRF through
-outbound provisioning targets.
+outbound provisioning targets. F1 additionally considers forged internal routing
+metadata, platform-key confusion with a mock Bearer value, raw session disclosure,
+  session fixation or cross-server replay, stale sessions/cursors after definition
+  replacement or delete/recreate, pathological JSON Schema and URI-template input,
+  prototype traversal, configured error-map ambiguity, sequence-state races, aborted
+  latency that commits state, and secret reflection through observations.
 
 ## Implemented controls and evidence boundaries
 
 - Authenticated MCP and HTTP control routes compare against the configured Access Key,
   fail closed when it is absent, and remove control credentials before forwarding.
+- `put_mock_mcp_server` rejects a Bearer Mock Credential equal to the active self-host
+  platform key before persistence. The write credential is hashed; list/get views
+  return only `configured: true`, and their strict schemas cannot contain token or
+  verifier material.
+- Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
+  persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
+  revision, negotiated version, initialization state, expiry, and termination.
+  Every non-idempotent definition write consumes one safe environment-wide revision
+  from a single durable allocator row. Replacement makes old sessions stale, delete
+  cascades them without resetting that allocator, active sessions are capped at 100
+  per server, and cleanup is bounded.
+- F1 definitions, schemas, behavior/results, fixed/returned resource URIs, templates,
+  state, pages, capabilities, error maps, and sessions have explicit
+  byte/depth/node/count ceilings. Current-revision state is capped at 256 rows and 2
+  MiB per server; capacity failure is atomic and uses dedicated JSON-RPC `-32050`,
+  which user-defined error maps cannot claim. Unsupported
+  schema vocabularies, `$ref`, `pattern`, `format`, unsafe property names, non-Level-1
+  templates, dangerous URI schemes, relative identifiers, userinfo, and implicit
+  prototype error-map lookups fail validation.
+- Safe Level-1 resource-template reverse matching compares literals without regular
+  expression backtracking. Source tests exercise a worst-shape near miss with all 20
+  adjacent variables and verify bounded linear work; empty expansions,
+  percent-decoding, and leftmost-minimal adjacent captures remain deterministic.
+- JSON Schema assertion work has one sticky per-validation budget shared across
+  speculative branches, object/array traversal, path construction, string scans,
+  uniqueness checks, and canonical comparisons. Exhaustion fails closed with one root
+  issue; `tools/call` input exhaustion returns a bounded HTTP-`200` tool-error result,
+  does not run behavior, and does not advance state. The budget value is an internal
+  availability policy, not an advertised compatibility entitlement.
+- Behavior evaluation memoizes repeated match-path reads and canonical values only
+  for the current request. Source regression covers 100 cases repeatedly comparing a
+  12,000-property value with one path read and one canonical enumeration. Template
+  rendering incrementally enforces a 256-KiB UTF-8 output ceiling and reuses
+  evaluation-local canonical/byte-length work; source tests cover 200 repeated
+  12,000-property placeholders and exact/over-limit multibyte boundaries.
+- Pagination cursors carry kind/revision/session correctness context and reject
+  malformed or wrong-scope values. Their checksum is public and unkeyed, so neither
+  the cursor nor its checksum is treated as authorization or cryptographic tamper
+  protection.
+- The edge removes every caller-supplied `x-mockos-*` header before adding a
+  discriminated identity or mock-MCP route kind, environment ID, public path, and
+  validated slug. A mock-MCP route does not receive identity issuer or Graph metadata.
+- Declarative latency happens outside the SQLite transaction. An HTTP Fetch
+  abort/disconnect observed during latency and invalid results do not commit staged
+  sequence movement, and an expected-state comparison prevents stale concurrent plans
+  from overwriting newer state. This does not implement message-level cancellation:
+  there is no in-flight request-ID registry, and `notifications/cancelled` is accepted
+  and ignored. Clients must not infer cancellation enforcement from the HTTP `202`.
 - Outbound provisioning rejects a target credential equal to the current self-hosted
   `API_KEY` regardless of prefix. The CLI checks file/stdin input before MCP, Worker
   ingress checks the authenticated request, and the Environment Durable Object checks
@@ -93,6 +148,14 @@ outbound provisioning targets.
   endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
+- F1 captures MCP method, tool, canonical arguments, top-level error code, and
+  tool-level `isError` as bounded synthetic test evidence. Authorization and session
+  headers are redacted, trusted routing headers are omitted, and raw JSON-RPC request
+  and response bodies are not persisted. Bounded synthetic argument values may
+  intentionally remain observable after recursive secret-key redaction. Unsupported
+  top-level argument-key lengths collapse the whole observed argument object to a
+  fixed redaction marker, and the log schema includes the adapter's `-32800` HTTP-abort
+  error.
 
 The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) exercises a bounded
 authenticated MCP, environment isolation, OIDC/JWKS, refresh/lifecycle, directory,
@@ -126,6 +189,14 @@ Environment logs intentionally retain test protocol bodies and mock tokens becau
 assertion is the product. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
+
+The F1 threat controls currently have source tests only. They are not a penetration
+test, load/abuse envelope, hosted multi-tenant authorization review, wildcard-route
+qualification, or deployment acceptance. The public self-host still uses one coarse
+management key, while a mock MCP Bearer value is a synthetic per-server credential,
+not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 work.
+POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
+deliberate capability reductions, not controls that may be silently bypassed.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment

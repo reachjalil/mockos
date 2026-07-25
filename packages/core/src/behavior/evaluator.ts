@@ -6,10 +6,12 @@ import type {
   SeededLatency,
 } from "@mockos/contracts/behavior";
 import { SeededRng } from "../determinism";
-import { canonicalJson } from "../security";
+import { canonicalJson, utf8Encode } from "../security";
 
 const PROHIBITED_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 const TEMPLATE_EXPRESSION = /\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g;
+
+export const BEHAVIOR_TEMPLATE_MAX_OUTPUT_BYTES = 256 * 1024;
 
 export type BehaviorStateAccess = {
   read(key: string): JsonValue | undefined;
@@ -75,6 +77,7 @@ export class BehaviorEvaluationError extends Error {
       | "invalid_match"
       | "invalid_sequence_state"
       | "sequence_exhausted"
+      | "template_output_limit"
       | "template_value_missing"
       | "script_unavailable"
       | "script_failed",
@@ -91,11 +94,33 @@ type StagedEvaluation = {
   readonly delayMilliseconds: number;
 };
 
+type BehaviorEvaluationCache = {
+  readonly canonicalValues: Map<JsonValue, string>;
+  readonly inputPathValues: Map<string, JsonValue | undefined>;
+  readonly utf8Lengths: Map<string, number>;
+};
+
 const cloneJson = (value: JsonValue): JsonValue =>
   JSON.parse(canonicalJson(value)) as JsonValue;
 
-const exactJsonEqual = (left: JsonValue | undefined, right: JsonValue): boolean =>
-  left !== undefined && canonicalJson(left) === canonicalJson(right);
+const cachedCanonicalJson = (
+  value: JsonValue,
+  cache: BehaviorEvaluationCache
+): string => {
+  const cached = cache.canonicalValues.get(value);
+  if (cached !== undefined) return cached;
+  const canonical = canonicalJson(value);
+  cache.canonicalValues.set(value, canonical);
+  return canonical;
+};
+
+const exactMatchJsonEqual = (
+  left: JsonValue | undefined,
+  right: JsonValue,
+  cache: BehaviorEvaluationCache
+): boolean =>
+  left !== undefined &&
+  cachedCanonicalJson(left, cache) === cachedCanonicalJson(right, cache);
 
 const exactStateEqual = (
   left: JsonValue | undefined,
@@ -136,11 +161,63 @@ const readPath = (
   return current;
 };
 
+const readMatchInputPath = (
+  input: Readonly<Record<string, JsonValue>>,
+  dottedPath: string,
+  cache: BehaviorEvaluationCache
+): JsonValue | undefined => {
+  if (cache.inputPathValues.has(dottedPath)) {
+    return cache.inputPathValues.get(dottedPath);
+  }
+  const value = readPath(input, dottedPath);
+  cache.inputPathValues.set(dottedPath, value);
+  return value;
+};
+
+const cachedUtf8Length = (value: string, cache: BehaviorEvaluationCache): number => {
+  const cached = cache.utf8Lengths.get(value);
+  if (cached !== undefined) return cached;
+  const length = utf8Encode(value).byteLength;
+  cache.utf8Lengths.set(value, length);
+  return length;
+};
+
+const appendTemplateFragment = (
+  fragments: string[],
+  fragment: string,
+  renderedBytes: number,
+  cache: BehaviorEvaluationCache
+): number => {
+  if (fragment.length === 0) return renderedBytes;
+  const fragmentBytes = cachedUtf8Length(fragment, cache);
+  if (fragmentBytes > BEHAVIOR_TEMPLATE_MAX_OUTPUT_BYTES - renderedBytes) {
+    throw new BehaviorEvaluationError(
+      "template_output_limit",
+      `Template output exceeds the ${BEHAVIOR_TEMPLATE_MAX_OUTPUT_BYTES}-byte UTF-8 limit.`
+    );
+  }
+  fragments.push(fragment);
+  return renderedBytes + fragmentBytes;
+};
+
 const renderTemplate = (
   template: string,
-  values: Readonly<Record<string, JsonValue>>
-): string =>
-  template.replace(TEMPLATE_EXPRESSION, (_expression, path: string) => {
+  values: Readonly<Record<string, JsonValue>>,
+  cache: BehaviorEvaluationCache
+): string => {
+  const fragments: string[] = [];
+  let renderedBytes = 0;
+  let cursor = 0;
+  for (const match of template.matchAll(TEMPLATE_EXPRESSION)) {
+    const index = match.index;
+    const path = match[1];
+    if (path === undefined) continue;
+    renderedBytes = appendTemplateFragment(
+      fragments,
+      template.slice(cursor, index),
+      renderedBytes,
+      cache
+    );
     const value = readPath(values, path);
     if (value === undefined) {
       throw new BehaviorEvaluationError(
@@ -148,8 +225,19 @@ const renderTemplate = (
         `Template value ${path} is missing.`
       );
     }
-    return typeof value === "string" ? value : canonicalJson(value);
-  });
+    const renderedValue =
+      typeof value === "string" ? value : cachedCanonicalJson(value, cache);
+    renderedBytes = appendTemplateFragment(
+      fragments,
+      renderedValue,
+      renderedBytes,
+      cache
+    );
+    cursor = index + match[0].length;
+  }
+  appendTemplateFragment(fragments, template.slice(cursor), renderedBytes, cache);
+  return fragments.join("");
+};
 
 const latencyFor = (
   latency: SeededLatency | undefined,
@@ -196,6 +284,7 @@ const evaluate = async (
   context: BehaviorEvaluationContext,
   stagedWrites: Map<string, JsonValue>,
   expectedReads: Map<string, JsonValue | undefined>,
+  evaluationCache: BehaviorEvaluationCache,
   behaviorPath: string
 ): Promise<StagedEvaluation> => {
   const ownDelay = latencyFor(
@@ -218,7 +307,7 @@ const evaluate = async (
       return {
         outcome: {
           kind: "value",
-          value: renderTemplate(behavior.template, values),
+          value: renderTemplate(behavior.template, values, evaluationCache),
         },
         delayMilliseconds: ownDelay,
       };
@@ -231,7 +320,11 @@ const evaluate = async (
     case "match": {
       const matchIndex = behavior.cases.findIndex(({ when }) =>
         Object.entries(when).every(([path, expected]) =>
-          exactJsonEqual(readPath(context.input, path), expected)
+          exactMatchJsonEqual(
+            readMatchInputPath(context.input, path, evaluationCache),
+            expected,
+            evaluationCache
+          )
         )
       );
       const selected =
@@ -247,6 +340,7 @@ const evaluate = async (
         context,
         stagedWrites,
         expectedReads,
+        evaluationCache,
         `${behaviorPath}.${matchIndex >= 0 ? `case-${matchIndex}` : "fallback"}`
       );
       return {
@@ -286,6 +380,7 @@ const evaluate = async (
         context,
         stagedWrites,
         expectedReads,
+        evaluationCache,
         `${behaviorPath}.step-${selectedIndex}`
       );
       if (behavior.mode !== "hold_last" || index < behavior.steps.length - 1) {
@@ -304,6 +399,7 @@ const evaluate = async (
             context,
             stagedWrites,
             expectedReads,
+            evaluationCache,
             `${behaviorPath}.script-fallback`
           );
           return {
@@ -334,6 +430,7 @@ const evaluate = async (
             context,
             stagedWrites,
             expectedReads,
+            evaluationCache,
             `${behaviorPath}.script-fallback`
           );
           return {
@@ -355,11 +452,17 @@ export const evaluateBehavior = async (
 ): Promise<BehaviorEvaluationPlan> => {
   const stagedWrites = new Map<string, JsonValue>();
   const expectedReads = new Map<string, JsonValue | undefined>();
+  const evaluationCache: BehaviorEvaluationCache = {
+    canonicalValues: new Map(),
+    inputPathValues: new Map(),
+    utf8Lengths: new Map(),
+  };
   const evaluated = await evaluate(
     behavior,
     context,
     stagedWrites,
     expectedReads,
+    evaluationCache,
     "root"
   );
   const stateWrites = Object.freeze(Object.fromEntries(stagedWrites));

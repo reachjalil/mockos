@@ -1,7 +1,7 @@
 # Management MCP interface
 
-Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact deployed versions
-Last reviewed: 2026-07-23
+Status: M5 management runtime accepted; 20-tool F1 registry is locally source-qualified
+Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
@@ -13,10 +13,12 @@ the exact tested slice: public revision
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
 
-Management MCP controls mockOS; it is not a simulated MCP workload. Environment-hosted
-mock MCP servers for testing an agent are an unavailable F1 target. See the
-[interface model](./concepts/interface-model.md) and begin new workflows with the
-[MCP-first quickstart](./getting-started/mcp-first.md).
+The current source appends five F1 management tools without changing that historical
+acceptance claim. Management MCP controls mockOS; it is not a simulated MCP workload.
+Environment-hosted mock MCP servers are separate dependencies for an agent under
+test. See the [interface model](./concepts/interface-model.md), begin identity
+workflows with the [MCP-first quickstart](./getting-started/mcp-first.md), and use the
+[mock MCP guide](./mock-mcp.md) for F1.
 
 ## Authentication fails closed
 
@@ -51,14 +53,21 @@ environment clears it. Most tools accept an explicit `environmentId` and otherwi
 resolve the session cursor. Prefer the explicit ID in saved automation because the
 cursor does not cross sessions.
 
-## Exact M5 tool registry
+## Exact current tool registry
 
-The M5 source exposes 15 tools. Their IDs, descriptions, input/output JSON Schemas,
-MCP annotations, effects, retry policies, secret policies, and exact HTTP availability
-are generated from the canonical registry in the
+The current source exposes 20 tools: the accepted 15-tool M5 set plus five F1
+operations for creating/replacing, listing, reading, deleting, and resetting
+environment-hosted mock MCP servers. Their IDs, descriptions, input/output JSON
+Schemas, MCP annotations, effects, retry policies, secret policies, and exact HTTP
+availability are generated from the canonical registry in the
 [management-tool reference](./reference/management-tools.md). The corresponding
 [JSON catalog](./reference/management-operations.v1.json) is intended for machine
 readers.
+
+All five F1 operations are MCP-only. The self-hosted HTTP surface remains exactly five
+routes, and the OpenAPI/typed client projections remain limited to those routes.
+`put_mock_mcp_server` is the only F1 operation that accepts a Bearer Mock Credential;
+the handler redacts it and every read view omits both token and verifier.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -82,6 +91,8 @@ through typed Durable Object calls; they do not accept a caller-provided source 
 These are deliberately separate trust boundaries:
 
 - `/mcp` requires the configured management Access Key.
+- `/mcp-mock/{slug}` under an environment accepts no credential or its configured
+  server-specific Bearer Mock Credential.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
@@ -91,7 +102,8 @@ These are deliberately separate trust boundaries:
 
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
-authorization. Never reuse or forward the MCP Access Key as a directory credential.
+authorization. Never reuse or forward the MCP Access Key as a directory or mock-MCP
+credential.
 The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
 ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
 PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct
@@ -213,12 +225,19 @@ status, duration, provider, timestamp, correlation ID, and request ID. Paginatio
 newest-first and cursor-bound to its filters. The row ring and byte budget are bounded;
 capturing a log is fail-open for protocol availability.
 
-`get_request_log` filters by `source`, `provider`, normalized method, exact path, and
-exact status. `assert_requests` supports:
+Environment-hosted mock MCP uses a stricter F1 capture shape: it stores bounded,
+redacted request headers and MCP method/tool/argument/error metadata, but leaves raw
+JSON-RPC request bodies, response headers, and response bodies empty. See the
+[mock MCP guide](./mock-mcp.md#observe-and-assert-what-the-agent-did).
+
+`get_request_log` filters by `source`, `provider`, protocol, normalized method, exact
+path, exact status, MCP method, and MCP tool. `assert_requests` supports:
 
 - exact `source`, method, path, and status matching (method is normalized to uppercase),
 - case-sensitive literal `bodyIncludes` and `responseBodyIncludes` substrings of the
   stored request and response bodies,
+- exact `mcpMethod`, `mcpTool`, and canonical-JSON `mcpArguments` matching for
+  environment-hosted mock MCP traffic,
 - an optional two-to-100-step ordered `sequence`; top-level filters constrain every
   step, unrelated requests may appear between steps, and complete non-overlapping
   sequences are counted in append order, and

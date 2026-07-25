@@ -123,6 +123,12 @@ describe("core substrate", () => {
          WHERE type = 'index' AND name = 'provisioning_runs_active_target_idx'`
       )?.name
     ).toBe("provisioning_runs_active_target_idx");
+    expect(
+      store.get<{ count: number; last_revision: number }>(
+        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
+         FROM mock_mcp_revision_allocator`
+      )
+    ).toEqual({ count: 1, last_revision: 0 });
   });
 
   it("upgrades a v4 database to provisioning persistence schema without rewriting runs", () => {

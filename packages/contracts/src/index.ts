@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { assertBehaviorSpecBounds, jsonValueSchema } from "./behavior";
-import { mockMcpCapabilityNameSchema } from "./mock-mcp";
+import {
+  type MockMcpDeleteServerResult,
+  type MockMcpResetStateResult,
+  type MockMcpServerList,
+  type MockMcpServerView,
+  mockMcpCapabilityNameSchema,
+  mockMcpServerWriteSchema,
+  mockMcpSlugSchema,
+} from "./mock-mcp";
 import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
 export * from "./mock-mcp";
@@ -288,8 +296,9 @@ export type ScenarioListPage = z.infer<typeof scenarioListPageSchema>;
 export const requestLogSourceSchema = z.enum(["inbound", "outbound", "control"]);
 export const requestLogProviderSchema = z.union([providerIdSchema, z.literal("mcp")]);
 export const requestLogProtocolSchema = z.enum(["http", "mcp"]);
+export const REQUEST_LOG_MCP_ARGUMENT_KEY_MAX_LENGTH = 256;
 const requestLogMcpArgumentsValueSchema = z.record(
-  z.string().min(1).max(256),
+  z.string().min(1).max(REQUEST_LOG_MCP_ARGUMENT_KEY_MAX_LENGTH),
   jsonValueSchema
 );
 export const requestLogMcpArgumentsSchema: z.ZodType<Record<string, unknown>> =
@@ -322,7 +331,7 @@ export const requestLogEntrySchema = z
     mcpMethod: z.string().min(1).max(256).optional(),
     mcpTool: mockMcpCapabilityNameSchema.optional(),
     mcpArguments: requestLogMcpArgumentsSchema.optional(),
-    mcpErrorCode: z.number().int().min(-32_768).max(32_767).optional(),
+    mcpErrorCode: z.number().int().min(-32_800).max(32_767).optional(),
     mcpToolIsError: z.boolean().optional(),
   })
   .strict()
@@ -709,6 +718,40 @@ export const wellKnownUrlsSchema = z
   .strict();
 export type WellKnownUrls = z.infer<typeof wellKnownUrlsSchema>;
 
+export const putMockMcpServerToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    server: mockMcpServerWriteSchema,
+  })
+  .strict();
+export type PutMockMcpServerToolInput = z.infer<typeof putMockMcpServerToolInputSchema>;
+
+export const listMockMcpServersToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+  })
+  .strict();
+export type ListMockMcpServersToolInput = z.infer<
+  typeof listMockMcpServersToolInputSchema
+>;
+
+export const mockMcpServerRefToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    slug: mockMcpSlugSchema,
+  })
+  .strict();
+export type MockMcpServerRefToolInput = z.infer<typeof mockMcpServerRefToolInputSchema>;
+
+export const getMockMcpServerToolInputSchema = mockMcpServerRefToolInputSchema;
+export type GetMockMcpServerToolInput = MockMcpServerRefToolInput;
+
+export const deleteMockMcpServerToolInputSchema = mockMcpServerRefToolInputSchema;
+export type DeleteMockMcpServerToolInput = MockMcpServerRefToolInput;
+
+export const resetMockMcpStateToolInputSchema = mockMcpServerRefToolInputSchema;
+export type ResetMockMcpStateToolInput = MockMcpServerRefToolInput;
+
 export const setCurrentEnvironmentToolInputSchema = z
   .object({ environmentId: environmentIdSchema.nullable() })
   .strict();
@@ -753,6 +796,11 @@ export const mockosMcpToolNames = [
   "simulate_lifecycle",
   "get_wellknown_urls",
   "set_current_environment",
+  "put_mock_mcp_server",
+  "list_mock_mcp_servers",
+  "get_mock_mcp_server",
+  "delete_mock_mcp_server",
+  "reset_mock_mcp_state",
 ] as const;
 export type MockosMcpToolName = (typeof mockosMcpToolNames)[number];
 
@@ -772,6 +820,11 @@ export type MockosMcpToolInputs = {
   simulate_lifecycle: SimulateLifecycleToolInput;
   get_wellknown_urls: EnvironmentRefToolInput;
   set_current_environment: SetCurrentEnvironmentToolInput;
+  put_mock_mcp_server: PutMockMcpServerToolInput;
+  list_mock_mcp_servers: ListMockMcpServersToolInput;
+  get_mock_mcp_server: GetMockMcpServerToolInput;
+  delete_mock_mcp_server: DeleteMockMcpServerToolInput;
+  reset_mock_mcp_state: ResetMockMcpStateToolInput;
 };
 
 export type MockosMcpToolData = {
@@ -790,6 +843,11 @@ export type MockosMcpToolData = {
   simulate_lifecycle: LifecycleResult;
   get_wellknown_urls: WellKnownUrls;
   set_current_environment: CurrentEnvironmentCursor;
+  put_mock_mcp_server: MockMcpServerView;
+  list_mock_mcp_servers: MockMcpServerList;
+  get_mock_mcp_server: MockMcpServerView;
+  delete_mock_mcp_server: MockMcpDeleteServerResult;
+  reset_mock_mcp_state: MockMcpResetStateResult;
 };
 
 export type MockosMcpToolOutputs = {

@@ -1,7 +1,9 @@
+import { z } from "zod";
+import { jsonValueSchema } from "../behavior";
 import {
   applicationRegistrationSchema,
-  assertRequestsToolInputSchema,
   assertionResultSchema,
+  assertRequestsToolInputSchema,
   clearScenarioResultSchema,
   clearScenarioToolInputSchema,
   configureEnvironmentToolInputSchema,
@@ -10,20 +12,30 @@ import {
   createEnvironmentToolInputSchema,
   currentEnvironmentCursorSchema,
   deleteEnvironmentResultSchema,
+  deleteMockMcpServerToolInputSchema,
   emptyToolInputSchema,
   envelopeSchema,
   environmentConfigSchema,
   environmentIdSchema,
   environmentListSchema,
   environmentRefToolInputSchema,
+  getMockMcpServerToolInputSchema,
   getRequestLogToolInputSchema,
   identitySeedSchema,
   lifecycleResultSchema,
+  listMockMcpServersToolInputSchema,
+  type MockosMcpToolName,
   mintedTokenSchema,
   mintTokenToolInputSchema,
+  mockMcpDeleteServerResultSchema,
+  mockMcpResetStateResultSchema,
+  mockMcpServerListSchema,
+  mockMcpServerViewSchema,
   problemSchema,
   provisioningRunSchema,
+  putMockMcpServerToolInputSchema,
   requestLogPageSchema,
+  resetMockMcpStateToolInputSchema,
   runProvisioningCycleToolInputSchema,
   scenarioSpecSchema,
   seedIdentitiesResultSchema,
@@ -32,10 +44,7 @@ import {
   setScenarioToolInputSchema,
   simulateLifecycleToolInputSchema,
   wellKnownUrlsSchema,
-  type MockosMcpToolName,
 } from "../index";
-import { jsonValueSchema } from "../behavior";
-import { z } from "zod";
 import {
   defineMockosManagementOperation,
   type MockosHttpOperation,
@@ -71,6 +80,11 @@ const idempotentMutationAnnotations = {
 const destructiveAnnotations = {
   ...mutationAnnotations,
   destructiveHint: true,
+} as const satisfies MockosToolAnnotations;
+
+const idempotentDestructiveAnnotations = {
+  ...destructiveAnnotations,
+  idempotentHint: true,
 } as const satisfies MockosToolAnnotations;
 
 const environmentPathSchema = z.object({ environmentId: environmentIdSchema }).strict();
@@ -385,6 +399,86 @@ export const mockosManagementOperations = {
       inputSchema: setCurrentEnvironmentToolInputSchema,
       outputSchema: envelopeSchema(currentEnvironmentCursorSchema),
       annotations: idempotentMutationAnnotations,
+    },
+  }),
+  put_mock_mcp_server: defineMockosManagementOperation({
+    operationId: "put_mock_mcp_server",
+    title: "Create or replace a mock MCP server",
+    description:
+      "Creates or atomically replaces one environment-local mock MCP server. Bearer Mock Credentials are accepted only in this write operation and are never returned.",
+    requiredScopes: ["env:rw"],
+    effect: "mutation",
+    retry: "idempotent",
+    requestSecrets: "redact",
+    responseSecrets: "none",
+    mcp: {
+      inputSchema: putMockMcpServerToolInputSchema,
+      outputSchema: envelopeSchema(mockMcpServerViewSchema),
+      annotations: idempotentMutationAnnotations,
+    },
+  }),
+  list_mock_mcp_servers: defineMockosManagementOperation({
+    operationId: "list_mock_mcp_servers",
+    title: "List mock MCP servers",
+    description:
+      "Lists safe summaries of the mock MCP servers in the current or named environment.",
+    requiredScopes: ["env:ro"],
+    effect: "read",
+    retry: "safe",
+    requestSecrets: "none",
+    responseSecrets: "none",
+    mcp: {
+      inputSchema: listMockMcpServersToolInputSchema,
+      outputSchema: envelopeSchema(mockMcpServerListSchema),
+      annotations: readOnlyAnnotations,
+    },
+  }),
+  get_mock_mcp_server: defineMockosManagementOperation({
+    operationId: "get_mock_mcp_server",
+    title: "Get mock MCP server",
+    description:
+      "Returns a mock MCP server definition without bearer credential material or its verifier.",
+    requiredScopes: ["env:ro"],
+    effect: "read",
+    retry: "safe",
+    requestSecrets: "none",
+    responseSecrets: "none",
+    mcp: {
+      inputSchema: getMockMcpServerToolInputSchema,
+      outputSchema: envelopeSchema(mockMcpServerViewSchema),
+      annotations: readOnlyAnnotations,
+    },
+  }),
+  delete_mock_mcp_server: defineMockosManagementOperation({
+    operationId: "delete_mock_mcp_server",
+    title: "Delete mock MCP server",
+    description:
+      "Deletes a mock MCP server and its revision-bound sessions and application state.",
+    requiredScopes: ["env:rw"],
+    effect: "destructive",
+    retry: "idempotent",
+    requestSecrets: "none",
+    responseSecrets: "none",
+    mcp: {
+      inputSchema: deleteMockMcpServerToolInputSchema,
+      outputSchema: envelopeSchema(mockMcpDeleteServerResultSchema),
+      annotations: idempotentDestructiveAnnotations,
+    },
+  }),
+  reset_mock_mcp_state: defineMockosManagementOperation({
+    operationId: "reset_mock_mcp_state",
+    title: "Reset mock MCP application state",
+    description:
+      "Deletes sequence cursors and other application state for one mock MCP server without changing its definition.",
+    requiredScopes: ["env:rw"],
+    effect: "destructive",
+    retry: "idempotent",
+    requestSecrets: "none",
+    responseSecrets: "none",
+    mcp: {
+      inputSchema: resetMockMcpStateToolInputSchema,
+      outputSchema: envelopeSchema(mockMcpResetStateResultSchema),
+      annotations: idempotentDestructiveAnnotations,
     },
   }),
 } as const satisfies Record<MockosMcpToolName, MockosManagementOperation>;

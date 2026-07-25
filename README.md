@@ -4,9 +4,9 @@
 
 <h1 align="center"><span aria-hidden="true">🥸</span> mockOS</h1>
 
-<p align="center"><strong>MCP-first mock identity infrastructure for integration tests.</strong></p>
+<p align="center"><strong>MCP-first identity and agent-dependency infrastructure for integration tests.</strong></p>
 
-<p align="center">Let agents build deterministic Entra ID and Okta test environments, then run real integrations against their protocol surfaces.</p>
+<p align="center">Let agents build deterministic Entra ID, Okta, and MCP test environments, then run real integrations against their protocol surfaces.</p>
 
 > **Project status:** M0 through M3 are accepted at exact revision
 > `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
@@ -18,10 +18,13 @@
 > staging-before-production rollout, and exact-version smoke of Classic Authn, SCIM
 > edges, signing-key rotation, token skew/broken tokens, and 200/201 group overage are
 > green. This is sampled deployed mock evidence, not corpus-wide or verified-live
-> parity. The F0 contract/client/OpenAPI foundation passes the complete local source
-> gate, while hosted CI/merge, F1-F9 runtimes, and all experimental activation remain
-> pending. The guarded GitHub promotion workflows remain unqualified. This is not yet
-> a stable npm release or a production-SLA service. See the
+> parity. The F0 contract/client/OpenAPI foundation and bounded F1 mock-MCP runtime
+> are locally source-qualified in the revision carrying this document: their focused
+> suites and the complete repository `pnpm check` gate are green. Hosted CI/merge, F1
+> deployment, private Cloud consumption, F2-F9 runtimes, and all experimental
+> activation remain pending. The guarded GitHub promotion workflows remain
+> unqualified. This is not yet a stable npm release or a production-SLA service. See
+> the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -32,9 +35,10 @@ randomness, and SQLite seams make failures reproducible.
 ## MCP first
 
 The management MCP server at `/mcp` is the primary control interface for agents and
-automation. Its current 15 tools create and configure environments, seed synthetic
+automation. Its current 20 tools create and configure environments, seed synthetic
 identities, register applications, drive lifecycle and provisioning, inject
-deterministic scenarios, inspect captured traffic, and clean up. Start with the
+deterministic scenarios, configure environment-hosted mock MCP servers, inspect
+captured traffic, and clean up. Start with the
 [MCP-first quickstart](./docs/getting-started/mcp-first.md) and use the
 [generated tool reference](./docs/reference/management-tools.md) for the exact
 registry in this source.
@@ -45,10 +49,12 @@ SCIM, Graph-shaped, or Okta-shaped endpoints returned for an environment. The
 surfaces from management MCP, the CLI, the operated console, and the narrower
 five-route self-hosted HTTP API.
 
-Future mock MCP servers are a different product role: they will simulate tools,
-resources, and prompts for an agent under test. That F1 runtime, mock LLM APIs, script
-execution, enforced scoped keys, and Code Mode are unavailable today. The current F0
-source adds contracts and checked projections without activating those runtimes.
+Environment-hosted mock MCP servers have a different product role: they simulate
+tools, resources, resource templates, and prompts for an agent under test. The bounded
+F1 source implements that data plane at an environment route while the five
+configuration operations remain part of management MCP. Start with the
+[mock MCP guide](./docs/mock-mcp.md). Mock LLM APIs, script execution, enforced scoped
+keys, and Code Mode remain unavailable.
 
 The target deployment is Cloudflare-forward: Workers, SQLite Durable Objects,
 Workflows, Queues, KV, and an Agents SDK MCP server. This public repository contains
@@ -99,14 +105,23 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - Cloudflare path routing and a SQLite Durable Object integration that completes hosted
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
-- An accepted authenticated Agents SDK MCP server whose M5 registry adds
-  `run_provisioning_cycle` as tool 15
-- A source-complete local F0 foundation: one 15-operation metadata registry consumed
+- An accepted authenticated Agents SDK management MCP server whose F1 source registry
+  now contains 20 tools: the accepted M5 tool set plus five MCP-only mock-MCP
+  definition/state operations
+- A bounded F1 source runtime for deterministic environment-hosted tools, resources,
+  safe Level-1 resource templates, and prompts over MCP `2025-11-25`; definitions are
+  revisioned, Bearer Mock Credentials and transport sessions are stored hash-only,
+  behavior state is bounded, both hosting routes are resolved, and MCP method/tool/
+  argument evidence joins the existing request log and assertions. GET streaming,
+  `listChanged`, scripts, proxy/record-replay, hosted qualification, and deployment
+  remain open
+- A source-complete local F0 foundation: one 20-operation metadata registry consumed
   by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
   control routes, generated human/machine management references and agent indexes, a
   fetch-based `@mockos/client` workspace skeleton, all six locked version-one behavior
-  contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. Experimental
-  runtimes remain disabled and the new packages are not yet distribution-qualified
+  contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
+  deliberately do not appear in HTTP/OpenAPI/client projections, and the new packages
+  are not yet distribution-qualified
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -121,9 +136,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 
 Management and protocol credentials are deliberately separate: MCP requires the
 configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values and
-the Okta API accepts a non-empty synthetic SSWS value. Those directory checks are mock
-scheme/presence boundaries, not production authorization; never forward the management
-key to them.
+the Okta API accepts a non-empty synthetic SSWS value. An environment-hosted mock MCP
+server accepts no credential or its own write-only Bearer Mock Credential. Those are
+synthetic protocol boundaries, not production authorization; never forward the
+management key to them.
 
 Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
 token/key/overage fixtures are `implemented` and execute through an authenticated local
@@ -172,10 +188,12 @@ records the latest exact accepted candidate, version IDs, exercised flow, and cl
 ## Architecture
 
 ```text
-contracts <- core <- engine-http <- worker-kit <- apps/worker
-                  \                  ^
-                   \---- testkit     |
-contracts ---------------- mcp ------+
+contracts <- core <- engine-http ---------- worker-kit <- apps/worker
+     |          |                               ^
+     |          +---- behavior/state ----------+
+     +---- mcp-mock (mock data plane) ----------+
+     +---- mcp (management plane) --------------+
+                testkit
 ```
 
 The engine uses a synchronous `SqlStore` so SQLite Durable Objects and
@@ -186,7 +204,8 @@ and never persisted.
 ## Documentation
 
 Start at the [documentation index](./docs/README.md). It routes agents and humans by
-task, distinguishes the 15-tool MCP interface from the five-route HTTP subset, and
+task, distinguishes the 20-tool management MCP interface, the environment-hosted mock
+MCP data plane, and the five-route HTTP subset, and
 links support claims to their evidence. Use
 [requirements traceability](./docs/requirements-traceability.md) and the
 [parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from

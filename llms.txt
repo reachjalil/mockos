@@ -1,8 +1,9 @@
 # mockOS
 
-> MCP-first deterministic Entra ID and Okta test infrastructure. Agents and
-> automation control synthetic environments through management MCP; applications
-> under test call the returned provider-shaped endpoints.
+> MCP-first deterministic Entra ID, Okta, and agent-dependency test
+> infrastructure. Agents and automation control synthetic environments through
+> management MCP; applications under test call the returned identity or mock-MCP
+> data planes.
 
 ## Start
 
@@ -10,9 +11,11 @@
 - [MCP-first quickstart](docs/getting-started/mcp-first.md): connect, discover,
   create, test, assert, and clean up.
 - [Interface model](docs/concepts/interface-model.md): management MCP versus
-  provider endpoints, HTTP, CLI, console, and future mock MCP.
+  provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.
+- [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
+  resources, resource templates, and prompts from an agent under test.
 - [Management tool reference](docs/reference/management-tools.md): generated
-  reference for all 15 current MCP tools.
+  reference for all 20 current MCP tools.
 - [Machine operation catalog](docs/reference/management-operations.v1.json):
   generated schemas and capability metadata.
 - [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated
@@ -21,13 +24,16 @@
 ## Current capability boundary
 
 - Management MCP: implemented at `/mcp` with
-  15 tools over Streamable HTTP.
+  20 tools over Streamable HTTP.
 - Tested MCP revision: `2025-11-25`;
   standalone GET streaming is unsupported.
 - Self-hosted management HTTP: 5 implemented
   routes under `/__mockos/v1`.
 - `env:ro` and `env:rw`: metadata only, not enforced scoped-key permissions.
-- F1 mock MCP servers: unavailable.
+- F1 mock MCP servers: source-qualified locally at
+  `/e/{environmentId}/mcp-mock/{slug}` or
+  `https://{environmentId}.{baseDomain}/mcp-mock/{slug}`; deployed acceptance is
+  `unqualified`.
 - F2 mock LLM APIs: unavailable.
 - F3 script execution: unavailable; `NoSandbox` fails closed.
 - F6 Code Mode `search` and `execute`: unavailable and disabled.
