@@ -1,13 +1,14 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus sampled M6 deployment, source-only M7 management reads, and remaining limits; deliberately candid
-Last reviewed: 2026-07-23
+Status: Accepted M3/M5 and sampled M6 boundaries retained; bounded MSAL Node local X/Q and source-only M7 documented with remaining limits
+Last reviewed: 2026-07-25
 
-Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
-evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
-evidence; only sanitized, reviewed comparison with a real provider can be
-verified-live. The bounded M6 slice has sampled exact-version deployment evidence, but
-no M6 fixture/corpus is verified-live and no current fixture has verified-live status.
+Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
+SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
+(P) are separate levels. Hosted CI is source execution; H requires an exact remote
+serving version and recorded smoke; V requires sanitized, reviewed real-provider
+comparison. The bounded MSAL Node slice is D/I/S/X/Q yes and H/V/P no. The bounded M6
+slice has sampled H evidence, but no current fixture is V or P.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -20,6 +21,15 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Entra remains a narrow OIDC/OAuth slice. Authorization code and rotating refresh
   grants have local evidence; client credentials, device flow, UserInfo, logout
   fidelity, and SAML remain unimplemented or unqualified.
+- The only official Entra identity-client qualification is `@azure/msal-node` 5.4.2
+  as a confidential client for one tenant-specific custom authority, authorization
+  code with S256 PKCE, and forced silent refresh. It uses host-only
+  `knownAuthorities` plus `ProtocolMode.OIDC` and passes through local Wrangler HTTPS.
+  The management path is separately driven by `@modelcontextprotocol/sdk` 1.29.0. This
+  is local X/Q evidence, not workers.dev, hosted Cloud, or custom-domain H. It does not
+  qualify `@azure/msal-browser`, public-client helpers, device or client-credential
+  grants, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real Entra
+  tenant, or P.
 - The bounded SCIM parser/PATCH/core service, HTTP adapter, and Worker mount are
   accepted for M3. All 113 SCIM fixtures execute green against the HTTP composition
   locally and in hosted CI, with focused Worker integration tested separately. The
@@ -65,6 +75,21 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   cookies, and token/secret-like headers are redacted. The deployed smoke sampled the
   public state, CORS, privacy, and redaction behavior; deeper retention/revocation/race
   tests remain source evidence, and neither tier is a general log-security audit.
+- Structured provider request-log capture now redacts secret-bearing form and JSON
+  keys across routes, sensitive request/response header families, and secret query or
+  fragment fields in redirect `Location` values before persistence. The MSAL
+  actual-network flow and focused lifecycle Worker test prove absence of its password,
+  client secret, authorization code, PKCE verifier, and issued token values while
+  retaining the safe request sequence. This is not a general content-classification or
+  log-security audit: non-secret structured protocol fields and non-JSON response bodies
+  may still be retained. Malformed form/JSON, primitive JSON request, and
+  unsupported-media request bodies are replaced rather than stored, but production
+  credentials and personal data remain prohibited.
+- The MSAL harness has focused normal-completion and ready-Worker `SIGTERM` cleanup
+  evidence: the signal probe observes exit `143`, port release, Wrangler process-group
+  exit, and temporary-state removal. It does not qualify uncatchable `SIGKILL`, Windows
+  process-tree behavior, abrupt machine loss, or every interruption point while the
+  client is active.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
   Authn state/session capabilities. There are no production sessions, external
@@ -170,9 +195,10 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
-- workers.dev cannot provide wildcard subdomains. Path mode needs explicit SDK
-  authority configuration; SDKs that require an Okta-style bare organization host
-  may not work before custom-domain cutover.
+- workers.dev cannot provide wildcard subdomains. The MSAL Node local qualification
+  proves an explicit request-derived path authority only against an HTTPS loopback
+  Wrangler listener; no workers.dev or Cloud client smoke has run. SDKs that require
+  an Okta-style bare organization host may not work before custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
 - The staging and production workers.dev targets most recently passed the sampled M6
@@ -196,11 +222,14 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.
-- Environment request logs are designed to retain protocol bodies, including many
-  synthetic test tokens. The M6 Classic Authn slice is an explicit exception: it
-  recursively redacts password, state-token, and session-token fields in Authn request
-  and response bodies, including malformed-body fallback redaction. Never put
-  production tokens, account API keys, Cloudflare credentials, or real personal data
-  into a mock environment.
+- Environment request logs are designed to retain assertable protocol structure and
+  may retain non-secret synthetic fields. Structured form/JSON secret keys, sensitive
+  headers, and redirect-location secrets are now redacted generally. Malformed JSON,
+  malformed form requests, primitive JSON requests, and unsupported-media request
+  bodies are replaced with markers. Credential-bearing OAuth, device, activation, and
+  Classic Authn paths use a stricter authentication-body marker where applicable.
+  These rules are path-, key-, and media-type based, not a promise to detect every
+  credential in arbitrary retained content. Never put production tokens, account API
+  keys, Cloudflare credentials, or real personal data into a mock environment.
 - Absolute issuer URLs must never be persisted. Any violation would make host cutover
   unsafe and should block release.

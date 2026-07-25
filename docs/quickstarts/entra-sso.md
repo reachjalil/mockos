@@ -1,7 +1,7 @@
 # Test Entra SSO
 
-Status: Accepted M3 Entra code, refresh, directory, and lifecycle flow in workers.dev path mode; live-provider parity is not claimed
-Last reviewed: 2026-07-22
+Status: Accepted raw-protocol M3 Entra workers.dev flow; separate bounded MSAL Node local X/Q guide available; live parity unclaimed
+Last reviewed: 2026-07-25
 
 1. Choose a local Worker or a live workers.dev origin from
    [hosting modes](../hosting-modes.md). A live control session requires an
@@ -79,6 +79,9 @@ steps under the Cloudflare Workers test runtime. The
 [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) records the bounded deployed
 production and staging flow, including refresh/lifecycle behavior, JWT verification,
 directory samples, and cleanup. This evidence does not claim arbitrary Entra client or
-SDK compatibility or live-provider parity. Client credentials, device flow, UserInfo,
-the separately accepted M5 hosted outbound-provisioning flow, and
-provider-shaped custom domains remain outside this quickstart.
+SDK compatibility or live-provider parity. The separate
+[MSAL Node guide](./entra-msal-node.md) qualifies only pinned
+`@azure/msal-node` 5.4.2 over local Wrangler HTTPS; it has no hosted-smoke,
+verified-live, or production-ready evidence. Client credentials, device flow, UserInfo,
+the separately accepted M5 hosted outbound-provisioning flow, and provider-shaped
+custom domains remain outside this quickstart.

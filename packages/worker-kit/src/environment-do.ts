@@ -1,10 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   type ApplicationListPage,
-  applicationListPageSchema,
   type ApplicationRegistration,
   type AssertionResult,
   type AssertionSpec,
+  applicationListPageSchema,
   type ClearScenarioResult,
   type CreateApplicationInput,
   type EnvironmentConfig,
@@ -16,9 +16,9 @@ import {
   type LifecycleAction,
   type LifecycleResult,
   type ManagementListQuery,
-  managementListQuerySchema,
   type MintedToken,
   type MintTokenRequest,
+  managementListQuerySchema,
   mintTokenRequestSchema,
   type ProvisioningHttpOperation,
   type ProvisioningHttpResponse,
@@ -36,8 +36,8 @@ import {
   type RequestLogQuery,
   type RunProvisioningCycleToolInput,
   runProvisioningCycleToolInputSchema,
-  type ScenarioSpec,
   type ScenarioListPage,
+  type ScenarioSpec,
   scenarioListPageSchema,
   type WellKnownUrls,
   wellKnownUrlsSchema,
@@ -387,7 +387,9 @@ const headersRecord = (
       (normalizedName === "authorization" && options.redactAuthorization) ||
       (options.redactSecrets && sensitiveHeader)
         ? "[REDACTED]"
-        : rawValue;
+        : options.redactSecrets && normalizedName === "location"
+          ? redactLocationSecrets(rawValue)
+          : rawValue;
     const candidate = { ...captured, [normalizedName]: value };
     if (
       new TextEncoder().encode(JSON.stringify(candidate)).byteLength >
@@ -503,6 +505,19 @@ const injectionPointFor = (pathname: string): string => {
 const isOktaAuthnPath = (pathname: string): boolean =>
   pathname === "/api/v1/authn" || pathname.startsWith("/api/v1/authn/");
 
+const isCredentialBearingProtocolPath = (pathname: string): boolean =>
+  isOktaAuthnPath(pathname) ||
+  pathname === "/activate" ||
+  [
+    "/oauth2/v2.0/authorize",
+    "/oauth2/v2.0/token",
+    "/v1/authorize",
+    "/v1/token",
+    "/v1/device/authorize",
+    "/v1/introspect",
+    "/v1/revoke",
+  ].some((suffix) => pathname.endsWith(suffix));
+
 const authenticationSecretKey = (key: string): boolean => {
   const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
   if (normalized === "errorcode" || normalized === "passwordchanged") return false;
@@ -512,12 +527,65 @@ const authenticationSecretKey = (key: string): boolean => {
     normalized === "credential" ||
     normalized === "credentials" ||
     normalized === "code" ||
+    normalized === "codeverifier" ||
+    normalized === "authorizationcode" ||
+    normalized === "devicecode" ||
+    normalized === "usercode" ||
+    normalized === "clientassertion" ||
     normalized === "apikey" ||
     normalized === "privatekey" ||
     normalized.startsWith("password") ||
     normalized.endsWith("passcode") ||
     normalized.endsWith("secret") ||
     normalized.endsWith("token")
+  );
+};
+
+const redactLocationSecrets = (value: string): string => {
+  if (/%(?![0-9a-f]{2})/i.test(value)) return "[REDACTED location]";
+  try {
+    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
+    const schemeRelative = value.startsWith("//");
+    const parsed = new URL(value, "https://mockos.invalid");
+    if (parsed.username || parsed.password) return "[REDACTED location]";
+    let changed = false;
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (authenticationSecretKey(key)) {
+        parsed.searchParams.set(key, "[REDACTED]");
+        changed = true;
+      }
+    }
+    if (parsed.hash.startsWith("#") && parsed.hash.length > 1) {
+      const fragment = new URLSearchParams(parsed.hash.slice(1));
+      let fragmentChanged = false;
+      for (const key of [...fragment.keys()]) {
+        if (authenticationSecretKey(key)) {
+          fragment.set(key, "[REDACTED]");
+          fragmentChanged = true;
+        }
+      }
+      if (fragmentChanged) {
+        parsed.hash = fragment.toString();
+        changed = true;
+      }
+    }
+    if (!changed) return value;
+    if (absolute) return parsed.toString();
+    if (schemeRelative) {
+      return `//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "[REDACTED location]";
+  }
+};
+
+const containsAuthenticationSecret = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(containsAuthenticationSecret);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, entry]) =>
+      authenticationSecretKey(key) || containsAuthenticationSecret(entry)
   );
 };
 
@@ -532,20 +600,53 @@ const redactAuthenticationSecrets = (value: unknown): unknown => {
   );
 };
 
-const authenticationBodyForLog = (
+const structuredBodyForLog = (
   pathname: string,
-  body: string | null
+  contentType: string | null,
+  body: string | null,
+  direction: "request" | "response"
 ): string | null => {
-  if (!isOktaAuthnPath(pathname) || body === null) return body;
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return "[REDACTED authentication body]";
+  if (body === null) return null;
+  const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType === "application/x-www-form-urlencoded") {
+    if (direction === "request" && /%(?![0-9a-f]{2})/i.test(body)) {
+      return "[REDACTED malformed form body]";
     }
-    return JSON.stringify(redactAuthenticationSecrets(parsed));
-  } catch {
+    const parsed = new URLSearchParams(body);
+    if (![...parsed.keys()].some(authenticationSecretKey)) return body;
+    const redacted = new URLSearchParams();
+    for (const [key, value] of parsed) {
+      redacted.append(key, authenticationSecretKey(key) ? "[REDACTED]" : value);
+    }
+    return redacted.toString();
+  }
+  if (mediaType === "application/json" || mediaType?.endsWith("+json")) {
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      if (
+        direction === "request" &&
+        (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      ) {
+        return isCredentialBearingProtocolPath(pathname)
+          ? "[REDACTED authentication body]"
+          : "[REDACTED unstructured JSON request body]";
+      }
+      return containsAuthenticationSecret(parsed)
+        ? JSON.stringify(redactAuthenticationSecrets(parsed))
+        : body;
+    } catch {
+      return isCredentialBearingProtocolPath(pathname)
+        ? "[REDACTED authentication body]"
+        : "[REDACTED malformed JSON body]";
+    }
+  }
+  if (isCredentialBearingProtocolPath(pathname)) {
     return "[REDACTED authentication body]";
   }
+  if (direction === "request") {
+    return "[REDACTED unsupported request body]";
+  }
+  return body;
 };
 
 const scenarioErrorResponse = (
@@ -1701,9 +1802,8 @@ export class EnvironmentDurableObject extends DurableObject {
       requestBodyPromise,
       readBoundedBody(response.clone().body),
     ]);
-    const authnPath = isOktaAuthnPath(routedPath);
     const responseHeaders = headersRecord(response.headers, {
-      redactSecrets: authnPath,
+      redactSecrets: true,
     });
     const responseJson = (() => {
       if (!responseBody) return undefined;
@@ -1735,14 +1835,23 @@ export class EnvironmentDurableObject extends DurableObject {
         path,
         requestHeaders: headersRecord(request.headers, {
           redactAuthorization:
-            authnPath ||
             request.headers.get("x-mockos-redact-authorization") === "true",
-          redactSecrets: authnPath,
+          redactSecrets: true,
         }),
-        requestBody: authenticationBodyForLog(routedPath, requestBody),
+        requestBody: structuredBodyForLog(
+          routedPath,
+          request.headers.get("content-type"),
+          requestBody,
+          "request"
+        ),
         responseStatus: response.status,
         responseHeaders,
-        responseBody: authenticationBodyForLog(routedPath, responseBody),
+        responseBody: structuredBodyForLog(
+          routedPath,
+          response.headers.get("content-type"),
+          responseBody,
+          "response"
+        ),
         durationMs: Math.max(0, Date.now() - startedAt),
         correlationId,
       });
