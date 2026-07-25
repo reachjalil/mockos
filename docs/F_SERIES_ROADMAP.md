@@ -1,6 +1,6 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; F0/F1 local evidence and management-only F2 source slice
+Status: Approved target design; F0/F1 local evidence and bounded OpenAI F2 source slice
 Last reviewed: 2026-07-25
 
 This document turns the approved F-series product direction into an executable
@@ -12,9 +12,11 @@ contract/client/OpenAPI foundation and the locally source-qualified bounded F1
 implementation described in the
 [F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
 CI/merge/deployment remain open. A
-[partial F2 slice](./f-series/f2-llm-kernel.md) now has focused response-kernel tests
-plus strict definitions, four MCP-only operations, and schema-v7 persistence, but the
-served provider data plane and every F3-F9 phase remain open.
+[partial F2 slice](./f-series/f2-llm-kernel.md) now has strict definitions, four
+MCP-only operations, schema-v7 persistence, and a bounded OpenAI model/non-streaming
+Chat Completions data plane that is source-qualified locally through the official SDK.
+Anthropic, streaming, conversation state, LLM-specific observation/assertion, hosted
+qualification, Cloud consumption, deployment, and every F3-F9 phase remain open.
 
 ## Outcome
 
@@ -91,16 +93,22 @@ implementation interpretation.
 ### Mock LLM APIs
 
 Current-source note: the partial F2 slice freezes a neutral response-plan seam,
-behavior adapter, pure JSON/SSE-frame renderers, and in-process official-SDK
-deserialization. It also source-implements strict server definitions, four MCP-only
-management operations, schema-v7 environment persistence, mandatory changed-write
-revision CAS, atomic revision-bound delete, and safe write-only provider-key views.
-Changed full-definition writes must resupply or rotate every enabled strict key;
-safe-view markers are not write shapes. Every provider data-plane
-surface below remains target design: there is no route/auth enforcement, model
-renderer/catalog, runtime state/reset/conversation, network stream or pacing,
-observation, Wrangler, deployment, or Cloud integration. Model list/retrieve objects
-are supplied only by the SDK test harness.
+behavior adapter, pure JSON/SSE-frame renderers, and official-SDK deserialization. It
+also source-implements strict server definitions, four MCP-only management
+operations, schema-v7 environment persistence, mandatory changed-write revision CAS,
+atomic revision-bound delete, and safe write-only provider-key views. Changed
+full-definition writes must resupply or rotate every enabled strict key; safe-view
+markers are not write shapes.
+
+The source now serves the exact OpenAI-only path and subdomain route prefixes,
+requires a provider-shaped Bearer credential in both `accept_any` and `strict` modes,
+and implements `GET /models`, `GET /models/{model}`, and non-streaming
+`POST /chat/completions` with bounded inputs, deterministic plans, and provider-shaped
+errors. That bounded surface is source-qualified locally through the official OpenAI
+SDK. The broader bullets below remain the complete F2 target: Anthropic, SSE and
+paced streaming, conversation/sequence state, LLM-specific observation and
+assertion, Wrangler/network qualification, deployment, and Cloud integration are
+still open.
 
 - Serve OpenAI-compatible `/v1/chat/completions` and model discovery plus Anthropic
   `/v1/messages` and model discovery under each environment's LLM route prefix.
@@ -268,8 +276,12 @@ egress behavior need live evidence.
 ### LLM planning and streaming
 
 This section describes the complete target. The current
-[F2 kernel](./f-series/f2-llm-kernel.md) reaches only the pure plan/render boundary; it
-does not instantiate the edge or EnvironmentDO steps below.
+[F2 kernel](./f-series/f2-llm-kernel.md) instantiates a bounded stateless subset:
+`EnvironmentDO` resolves a definition and immutable response plan, and the edge
+validates the Bearer envelope and renders non-streaming OpenAI responses with
+abort-aware initial delay. The Environment Durable Object applies the current
+`accept_any` or strict-verifier policy. The slice does not implement the stateful
+conversation, paced streaming, completion telemetry, or observation steps below.
 
 The EnvironmentDO remains the source of deterministic behavior and state, but it does
 not stay active to pace a stream for up to 60 seconds.
@@ -390,7 +402,7 @@ the open-core package.
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
 | F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, and complete repository gates are green. The July 28 version checkpoint and all hosted/deployed evidence remain open. |
-| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The management-only source slice exists; no provider service/runtime. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
+| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The current source slice includes MCP-managed definitions plus bounded OpenAI model discovery and non-streaming Chat Completions; the rest remains open. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
 | F5 | Public blueprint core, export/import planner, hosted install integration | F1/F2 schema freeze; hosted apply also gates on F4 slugs/idempotency | Public no-secrets and deterministic hash corpus passes; hosted installs are idempotent and scripts remain disabled. |
@@ -410,9 +422,11 @@ default-off Code Mode/sandbox wrappers with exact dependency guards. The full lo
 F0 repository gate is green. F1 locally qualifies only the bounded
 environment-hosted mock-MCP runtime and five MCP-only management operations; it does
 not add HTTP management routes or activate Code Mode, scripts, or proxy. The partial
-F2 adds neutral schemas, behavior adaptation, pure provider rendering, injected-Fetch
-SDK deserialization, and MCP-only persisted definitions, but no user-operable mock LLM
-provider runtime.
+F2 adds neutral schemas, behavior adaptation, MCP-only persisted definitions, and a
+user-operable bounded OpenAI provider route for model discovery and non-streaming Chat
+Completions. Its local official-SDK evidence is source-qualified, not hosted,
+deployed, Cloud-integrated, or proof of Anthropic, streaming, conversation state, or
+LLM observation support.
 Hosted CI, merge, package publication, private Cloud consumption, and deployment
 remain separate.
 

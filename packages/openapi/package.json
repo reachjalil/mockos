@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@mockos/contracts": "workspace:*",
+    "@mockos/llm-mock": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "zod": "catalog:"
   },

@@ -1,6 +1,6 @@
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry
+Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with a separate partial OpenAI data plane
 Last reviewed: 2026-07-25
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
@@ -20,7 +20,8 @@ Environment-hosted mock MCP servers are separate dependencies for an agent under
 test. See the [interface model](./concepts/interface-model.md), begin identity
 workflows with the [MCP-first quickstart](./getting-started/mcp-first.md), and use the
 [mock MCP guide](./mock-mcp.md) for F1. Use the
-[mock LLM guide](./mock-llm.md) for the F2 management-only definition boundary.
+[mock LLM guide](./mock-llm.md) for the F2 MCP definition contract and separate
+OpenAI provider data plane.
 
 ## Authentication fails closed
 
@@ -65,7 +66,9 @@ annotations, effects, retry policies, secret policies, and exact HTTP availabili
 are generated from the canonical registry in the
 [management-tool reference](./reference/management-tools.md). The corresponding
 [JSON catalog](./reference/management-operations.v1.json) is intended for machine
-readers.
+readers. The generated
+[mock OpenAI manifest](./reference/mock-llm-openai.v1.json) describes the separate
+application-facing provider operations; those operations are not management tools.
 
 All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
@@ -82,7 +85,8 @@ idempotent success even when the supplied revision is stale.
 `delete_mock_llm_server` requires a positive current `expectedRevision`, deletes
 atomically on a match, returns the typed revision-conflict `409` on a stale/ABA
 revision, and returns `deleted: false` when the row is already absent. There is no LLM
-reset operation because there is no response, conversation, or evaluator state.
+reset operation because the current OpenAI provider runtime is stateless and persists
+no conversation, response, or evaluator state.
 
 Successful calls return both text content and structured content shaped as an envelope
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
@@ -108,8 +112,11 @@ These are deliberately separate trust boundaries:
 - `/mcp` requires the configured management Access Key.
 - `/mcp-mock/{slug}` under an environment accepts no credential or its configured
   server-specific Bearer Mock Credential.
-- No OpenAI/Anthropic mock-LLM provider route exists. Provider keys in an F2
-  definition currently authenticate no data-plane request.
+- `/llm-mock/{slug}/openai/v1` under an environment requires a syntactically valid
+  provider Bearer Mock Credential. `accept_any` skips verifier comparison but is not
+  unauthenticated; `strict` compares the current stored verifier. The route supports
+  only model list/retrieve and non-streaming Chat Completions.
+- No Anthropic mock-LLM provider route exists.
 - `/scim/v2` requires a non-empty synthetic `Authorization: Bearer ...` credential.
 - Entra `/graph/v1.0` requires a non-empty synthetic Bearer credential.
 - Okta `/api/v1` requires a non-empty synthetic `Authorization: SSWS ...` credential.
@@ -119,9 +126,11 @@ These are deliberately separate trust boundaries:
 
 The three directory credentials check the expected scheme and presence for protocol
 testing; they do not validate a real provider token and are not production
-authorization. Never reuse or forward the MCP Access Key as a directory or mock-MCP
-credential. For mock-LLM puts, any definition JSON key or string value containing the
-complete active platform key as a substring is rejected before persistence.
+authorization. Never reuse or forward the MCP Access Key as a directory, mock-MCP,
+or mock-LLM credential. For mock-LLM puts, any definition JSON key or string value
+containing the complete active platform key as a substring is rejected before
+persistence. Provider requests also reject that platform key, alternate API-key
+headers, and credential reflection in Chat Completions JSON.
 The accepted bounded M3 inbound SCIM surface provides ServiceProviderConfig,
 ResourceTypes, Schemas, and versioned Users/Groups CRUD, filter, pagination, ETag, and
 PATCH behavior. Graph is a bounded read surface for Users, Groups, and direct

@@ -123,6 +123,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      openai:
+        specifier: 'catalog:'
+        version: 6.49.0(ws@8.21.0)(zod@4.4.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -322,6 +325,9 @@ importers:
       '@mockos/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mockos/llm-mock':
+        specifier: workspace:*
+        version: link:../llm-mock
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
@@ -375,6 +381,9 @@ importers:
       '@mockos/engine-http':
         specifier: workspace:*
         version: link:../engine-http
+      '@mockos/llm-mock':
+        specifier: workspace:*
+        version: link:../llm-mock
       '@mockos/mcp':
         specifier: workspace:*
         version: link:../mcp

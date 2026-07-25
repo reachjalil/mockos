@@ -41,8 +41,103 @@
         }
       },
       "phase": "F2",
-      "providerDataPlane": "unavailable",
-      "status": "unavailable"
+      "providerDataPlane": {
+        "anthropic": "unavailable",
+        "conversationState": "unavailable",
+        "managementConfiguration": "MCP-only",
+        "manifest": "docs/reference/mock-llm-openai.v1.json",
+        "observationsAndAssertions": "unavailable",
+        "openAi": {
+          "authentication": {
+            "acceptAny": "valid-mock-credential-required-no-verifier-comparison",
+            "alternateProviderHeaders": "rejected",
+            "credential": "provider-scoped-mock-credential",
+            "platformManagementAccessKey": "rejected",
+            "scheme": "bearer",
+            "strict": "current-sha256-verifier-constant-time"
+          },
+          "capabilityProbe": "GET /models",
+          "compatibility": "bounded-openai-chat-completions-subset",
+          "dialect": "openai",
+          "evidence": {
+            "cloudPin": "unqualified",
+            "hostedDeployment": "unqualified",
+            "liveProviderParity": "unqualified",
+            "localWorkerOfficialOpenAiSdk": "qualified",
+            "packageTests": "qualified"
+          },
+          "generatedFrom": "packages/llm-mock/src/openai-http.ts",
+          "operations": [
+            {
+              "id": "create_chat_completion",
+              "method": "POST",
+              "path": "/chat/completions",
+              "streaming": false
+            },
+            {
+              "id": "list_models",
+              "method": "GET",
+              "path": "/models",
+              "streaming": false
+            },
+            {
+              "id": "retrieve_model",
+              "method": "GET",
+              "path": "/models/{model}",
+              "streaming": false
+            }
+          ],
+          "planning": {
+            "chunkCadence": "inert-without-streaming",
+            "conversationState": "stateless",
+            "definitionRevision": "rechecked-before-plan-commit",
+            "initialDelay": "abort-aware",
+            "stateKey": "server-slug+dialect+model",
+            "turnIndex": "prior-assistant-message-count"
+          },
+          "request": {
+            "choiceCount": "absent-or-one",
+            "encoding": "utf-8",
+            "maxBodyBytes": 262144,
+            "maxDepth": 24,
+            "maxMessages": 256,
+            "maxNodes": 10000,
+            "maxTextBytes": 65536,
+            "maxToolValueBytes": 65536,
+            "maxTools": 64,
+            "mediaType": "application/json",
+            "messageRoles": [
+              "developer",
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "modelId": "1-256-visible-ascii-excluding-dot-segments",
+            "multimodal": "unsupported",
+            "streamOptions": "rejected",
+            "streaming": "rejected",
+            "toolChoice": "absent-or-auto",
+            "unknownTopLevelFields": "rejected"
+          },
+          "response": {
+            "completionIdPrefix": "chatcmpl-",
+            "deterministicPlanIdExposure": "never",
+            "maxBodyBytes": 2097152,
+            "requestIdHeader": "x-request-id",
+            "transportIds": "fresh-per-invocation"
+          },
+          "routeBases": {
+            "pathMode": "/e/{environmentId}/llm-mock/{slug}/openai/v1",
+            "subdomainMode": "https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1"
+          },
+          "schemaVersion": 1,
+          "status": "source-qualified"
+        },
+        "responsesApi": "unavailable",
+        "status": "openai-non-streaming-source-qualified"
+      },
+      "status": "partial-source-qualified"
     },
     "mockMcpServers": {
       "deployedAcceptance": "unqualified",

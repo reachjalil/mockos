@@ -1,16 +1,17 @@
 ---
 name: mockos-testing
 description: >-
-  Run the accepted M5 workflow and bounded M6 mockOS
-  identity-integration tests through authenticated MCP: create isolated Entra ID or
-  Okta environments, seed identities, register OIDC clients, run
+  Run accepted mockOS identity-integration tests and the bounded mock-OpenAI workflow
+  through authenticated management MCP: create isolated Entra ID or Okta
+  environments, seed identities, register OIDC clients, configure MCP-managed mock
+  LLM definitions, call model discovery and non-streaming Chat Completions, run
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, and clean up. Use when wiring or testing an application's
-  enterprise identity integration or reproducing provider-shaped failures; do not
-  claim unrecorded deployment qualification, the complete Okta Classic Authn
-  transaction machine, or broad provider parity.
+  enterprise identity or OpenAI-shaped integration, or reproducing provider-shaped
+  failures; do not claim unrecorded deployment qualification, streaming, Anthropic,
+  the complete Okta Classic Authn transaction machine, or broad provider parity.
 ---
 
 # Test with mockOS
@@ -61,8 +62,8 @@ Treat `GET /mcp` returning 405 as the expected POST-only Streamable HTTP fallbac
 the issued session ID on later requests and close the client when finished so it sends
 the authenticated session-termination DELETE.
 
-Call `tools/list` before creating anything. The accepted M5 runtime defines these 15
-tools:
+Call `tools/list` before creating anything. The current source registry contains 24
+management MCP tools. The accepted identity workflow uses these 15:
 
 `create_environment`, `list_environments`, `delete_environment`,
 `configure_environment`, `seed_identities`, `create_application`,
@@ -70,12 +71,16 @@ tools:
 `get_request_log`, `assert_requests`, `simulate_lifecycle`, `get_wellknown_urls`, and
 `set_current_environment`.
 
-Require only the tools needed by the planned workflow and tolerate additional tools
-from a newer compatible server. Report a capability mismatch before any mutation; in
-particular, do not attempt the lifecycle cascade unless `simulate_lifecycle` is
-advertised or provisioning unless `run_provisioning_cycle` is advertised.
-Capability discovery is evidence about the connected server, not proof that the
-checkout under test is the source deployed there.
+The bounded mock-OpenAI workflow additionally requires
+`put_mock_llm_server`, `list_mock_llm_servers`, `get_mock_llm_server`, and
+`delete_mock_llm_server`. Require only the tools needed by the planned workflow and
+tolerate additional tools from a newer compatible server. Report a capability
+mismatch before any mutation; in particular, do not attempt the lifecycle cascade
+unless `simulate_lifecycle` is advertised, provisioning unless
+`run_provisioning_cycle` is advertised, or mock-OpenAI configuration unless all four
+definition tools are advertised. Capability discovery is evidence about the
+connected server, not proof that the checkout under test is the source deployed
+there.
 
 ## Create and wire an environment
 
@@ -83,20 +88,66 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
 
 1. Call `create_environment` with a descriptive name, the chosen provider, and a stable
    test seed. This also selects the environment in the current MCP session.
-2. Call `seed_identities` with explicit `users` and `groups`. Use the returned user ID
-   in token tests; group members are seeded user names.
-3. Call `create_application` with the exact callback URI and grants required by the
-   test. Record the returned synthetic `clientId` and `clientSecret` without printing
-   the secret.
-4. Call `get_wellknown_urls` with the explicit environment ID. Configure the
-   application from its returned issuer/endpoints and record `scimBaseUrl` plus
-   `graphBaseUrl` for Entra or `oktaApiBaseUrl` plus `oktaAuthnEndpoint` for Okta. Never
-   construct or persist an issuer or Authn endpoint from memory.
-5. Verify discovery before login and require every absolute URL to use the active host.
-   Treat a missing provider-specific directory URL as a capability mismatch.
+2. For an identity workflow, call `seed_identities` with explicit `users` and
+   `groups`. Use the returned user ID in token tests; group members are seeded user
+   names. A mock-OpenAI-only workflow does not need identities.
+3. For an identity workflow, call `create_application` with the exact callback URI and
+   grants required by the test. Record the returned synthetic `clientId` and
+   `clientSecret` without printing the secret.
+4. For an identity workflow, call `get_wellknown_urls` with the explicit environment
+   ID. Configure the application from its returned issuer/endpoints and record
+   `scimBaseUrl` plus `graphBaseUrl` for Entra or `oktaApiBaseUrl` plus
+   `oktaAuthnEndpoint` for Okta. Never construct or persist an issuer or Authn endpoint
+   from memory.
+5. Verify discovery before login and require every absolute URL to use the active
+   host. Treat a missing provider-specific directory URL as a capability mismatch.
 
 Pass `environmentId` explicitly in saved automation. Use `set_current_environment`
 only for interactive session convenience because its cursor is transport-session-local.
+
+## Exercise the bounded mock-OpenAI flow
+
+Read the [canonical mock LLM guide](../../docs/mock-llm.md), the
+[OpenAI SDK quickstart](../../docs/quickstarts/openai-sdk.md), and the
+[machine-readable provider manifest](../../docs/reference/mock-llm-openai.v1.json)
+before configuring a server. The manifest owns the exact route, request limits, and
+evidence state.
+
+1. Resolve a synthetic provider Mock Credential from caller-owned secret storage. It
+   must be distinct from the platform management Access Key and must never be printed,
+   committed, or included in a prompt.
+2. Call `put_mock_llm_server` with the explicit environment ID,
+   `expectedRevision: null`, and the complete definition shape from the canonical
+   guide. Enable OpenAI, disable Anthropic, and define at least one model. For `strict`,
+   send the raw provider Mock Credential; for `accept_any`, omit a verifier but still
+   require a syntactically valid provider Bearer credential on every request.
+3. Require a positive revision and a secret-safe strict view containing
+   `configured: true` but neither plaintext nor `apiKeySha256`. Never echo
+   `configured: true` into a later put. A changed replacement is a complete write and
+   must resupply or rotate every enabled strict credential from caller-owned storage.
+4. Build the exact provider base URL reported by the operator:
+   `<origin>/e/<environmentId>/llm-mock/<slug>/openai/v1` in path mode or
+   `https://<environmentId>.<baseDomain>/llm-mock/<slug>/openai/v1` in subdomain
+   mode. Do not send the management Access Key to this URL.
+5. Probe authenticated `GET /models`. The four MCP tools prove configuration support,
+   not that the connected deployment serves the provider route. Stop and report the
+   evidence boundary if the probe fails.
+6. Point the official OpenAI JavaScript SDK at that base URL, set `maxRetries: 0`, and
+   exercise model list/retrieve plus one non-streaming
+   `chat.completions.create` call. The locally qualified source pins `openai` 6.49.0;
+   another version needs its own evidence. The current request surface rejects
+   `stream: true`, multimodal content, the Responses API, and unknown top-level keys.
+7. Prove one bounded negative case: missing model, wrong strict credential, or
+   `400 streaming_not_supported`. Do not expect an LLM request log or assertion
+   result; this slice has no LLM-specific observation surface.
+8. In `finally`, read the latest safe definition, delete it with that positive
+   `expectedRevision`, then delete the disposable environment and close management
+   MCP. A stale revision must be reconciled, not overwritten blindly.
+
+The provider is stateless: prior `assistant` messages select the deterministic turn.
+Initial delay is abort-aware, but configured chunk cadence is inert without streaming.
+Do not claim Anthropic, SSE, conversation state, LLM observation/assertion, Wrangler
+or network qualification, Cloud pinning, deployment, or live OpenAI parity.
 
 ## Exercise the provider flow
 

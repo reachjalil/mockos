@@ -23,6 +23,7 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "@mockos/client": "workspace:*",
     "@mockos/testkit": "workspace:*",
+    "openai": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:"

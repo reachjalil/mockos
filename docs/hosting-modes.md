@@ -1,7 +1,7 @@
 # Hosting modes
 
-Status: Bounded M6 path-mode sample deployed; F1 routes are source-only; wildcard live mode remains open
-Last reviewed: 2026-07-24
+Status: Bounded M6 path-mode sample deployed; F1 and partial OpenAI F2 routes are source-only; wildcard live mode remains open
+Last reviewed: 2026-07-25
 
 ## Path mode
 
@@ -32,6 +32,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
   `/e/<env>/scim/v2/Users`
 - Environment-hosted mock MCP:
   `/e/<env>/mcp-mock/<slug>`
+- Environment-hosted mock OpenAI:
+  `/e/<env>/llm-mock/<slug>/openai/v1`
 
 The Graph, Okta directory, and SCIM paths are accepted for the bounded M3 scope. The
 M3 deployed smoke sampled both SCIM profiles, an Entra Graph read, and an Okta directory
@@ -50,6 +52,14 @@ The F1 mock MCP route accepts no credential or the separate Bearer Mock Credenti
 configured for that slug. It negotiates MCP `2025-11-25` over POST-only Streamable
 HTTP. The path resolver and local Worker integration are source evidence only; neither
 recorded workers.dev origin has F1 deployment acceptance.
+
+The partial F2 OpenAI route always requires a syntactically valid provider Bearer Mock
+Credential. `accept_any` accepts any valid provider value without a verifier
+comparison; `strict` compares the current stored verifier. The source-qualified
+operations are `GET /models`, `GET /models/{model}`, and non-streaming
+`POST /chat/completions`. The local Worker integration uses the official OpenAI SDK;
+neither recorded workers.dev origin has F2 deployment acceptance. Anthropic and SSE
+remain unavailable. See [MCP-managed mock OpenAI](./mock-llm.md).
 
 Path mode works without an account-owned zone, but some SDKs assume provider-shaped
 hosts. Configure explicit authorities and never infer broad SDK compatibility from a
@@ -80,11 +90,12 @@ the resolved environment:
 - `https://<environment>.<base-domain>/scim/v2`
 - `https://<environment>.<base-domain>/graph/v1.0`
 - `https://<environment>.<base-domain>/mcp-mock/<slug>`
+- `https://<environment>.<base-domain>/llm-mock/<slug>/openai/v1`
 
 Unit tests cover this split for management-MCP direct minting, well-known URL results,
-routed group-overage claim sources, mock-MCP route classification, and spoofed
-internal routing-header replacement. Live TLS and wildcard-route qualification remain
-pending.
+routed group-overage claim sources, mock-MCP and mock-LLM route classification, and
+spoofed internal routing-header replacement. Live TLS and wildcard-route
+qualification remain pending.
 
 The critical invariant is that stored state contains no absolute issuer URL. Cutover
 must be only host resolution, routes, variables, certificates, and index backfill—not a

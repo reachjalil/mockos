@@ -5,6 +5,17 @@ import {
   mockosHttpOperations,
   mockosManagementOperations,
 } from "@mockos/contracts/operations";
+import {
+  MOCK_LLM_OPENAI_MAX_MESSAGES,
+  MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES,
+  MOCK_LLM_OPENAI_MAX_REQUEST_DEPTH,
+  MOCK_LLM_OPENAI_MAX_REQUEST_NODES,
+  MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES,
+  MOCK_LLM_OPENAI_MAX_TEXT_BYTES,
+  MOCK_LLM_OPENAI_MAX_TOOLS,
+  MOCK_LLM_OPENAI_MAX_TOOL_VALUE_BYTES,
+  mockLlmOpenAiProviderManifest,
+} from "@mockos/llm-mock";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { z } from "zod";
 
@@ -55,6 +66,74 @@ export type MockosManagementDocumentationTool = {
   } | null;
 };
 
+export type MockLlmOpenAiProviderDocumentation = {
+  schemaVersion: 1;
+  generatedFrom: "packages/llm-mock/src/openai-http.ts";
+  status: "source-qualified";
+  compatibility: "bounded-openai-chat-completions-subset";
+  dialect: "openai";
+  routeBases: {
+    pathMode: "/e/{environmentId}/llm-mock/{slug}/openai/v1";
+    subdomainMode: "https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1";
+  };
+  capabilityProbe: "GET /models";
+  authentication: {
+    scheme: "bearer";
+    credential: "provider-scoped-mock-credential";
+    acceptAny: "valid-mock-credential-required-no-verifier-comparison";
+    strict: "current-sha256-verifier-constant-time";
+    platformManagementAccessKey: "rejected";
+    alternateProviderHeaders: "rejected";
+  };
+  operations: Array<{
+    id: "create_chat_completion" | "list_models" | "retrieve_model";
+    method: "GET" | "POST";
+    path: "/chat/completions" | "/models" | "/models/{model}";
+    streaming: false;
+  }>;
+  request: {
+    mediaType: "application/json";
+    encoding: "utf-8";
+    maxBodyBytes: number;
+    maxDepth: number;
+    maxNodes: number;
+    maxMessages: number;
+    maxTools: number;
+    maxTextBytes: number;
+    maxToolValueBytes: number;
+    modelId: "1-256-visible-ascii-excluding-dot-segments";
+    messageRoles: readonly ["developer", "system", "user", "assistant", "tool"];
+    toolChoice: "absent-or-auto";
+    choiceCount: "absent-or-one";
+    streaming: "rejected";
+    streamOptions: "rejected";
+    multimodal: "unsupported";
+    unknownTopLevelFields: "rejected";
+  };
+  response: {
+    maxBodyBytes: number;
+    requestIdHeader: "x-request-id";
+    completionIdPrefix: "chatcmpl-";
+    transportIds: "fresh-per-invocation";
+    deterministicPlanIdExposure: "never";
+  };
+  planning: {
+    conversationState: "stateless";
+    turnIndex: "prior-assistant-message-count";
+    stateKey: "server-slug+dialect+model";
+    definitionRevision: "rechecked-before-plan-commit";
+    initialDelay: "abort-aware";
+    chunkCadence: "inert-without-streaming";
+  };
+  evidence: {
+    packageTests: "qualified";
+    localWorkerOfficialOpenAiSdk: "qualified";
+    cloudPin: "unqualified";
+    hostedDeployment: "unqualified";
+    liveProviderParity: "unqualified";
+  };
+};
+
 export type MockosManagementDocumentationCatalog = {
   schemaVersion: 1;
   generatedFrom: "packages/contracts/src/operations/management.ts";
@@ -97,7 +176,7 @@ export type MockosManagementDocumentationCatalog = {
       deployedAcceptance: "unqualified";
     };
     mockLlmApis: {
-      status: "unavailable";
+      status: "partial-source-qualified";
       phase: "F2";
       managementDefinitions: {
         status: "source-implemented";
@@ -133,7 +212,16 @@ export type MockosManagementDocumentationCatalog = {
         };
       };
       guide: "docs/mock-llm.md";
-      providerDataPlane: "unavailable";
+      providerDataPlane: {
+        status: "openai-non-streaming-source-qualified";
+        managementConfiguration: "MCP-only";
+        manifest: "docs/reference/mock-llm-openai.v1.json";
+        openAi: MockLlmOpenAiProviderDocumentation;
+        anthropic: "unavailable";
+        responsesApi: "unavailable";
+        conversationState: "unavailable";
+        observationsAndAssertions: "unavailable";
+      };
       deployedAcceptance: "unqualified";
     };
     codeMode: {
@@ -142,6 +230,72 @@ export type MockosManagementDocumentationCatalog = {
     };
   };
 };
+
+export const generateMockLlmOpenAiProviderDocumentation =
+  (): MockLlmOpenAiProviderDocumentation => ({
+    schemaVersion: 1,
+    generatedFrom: "packages/llm-mock/src/openai-http.ts",
+    status: "source-qualified",
+    compatibility: "bounded-openai-chat-completions-subset",
+    dialect: mockLlmOpenAiProviderManifest.dialect,
+    routeBases: {
+      pathMode: "/e/{environmentId}/llm-mock/{slug}/openai/v1",
+      subdomainMode: "https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1",
+    },
+    capabilityProbe: "GET /models",
+    authentication: {
+      scheme: "bearer",
+      credential: "provider-scoped-mock-credential",
+      acceptAny: "valid-mock-credential-required-no-verifier-comparison",
+      strict: "current-sha256-verifier-constant-time",
+      platformManagementAccessKey: "rejected",
+      alternateProviderHeaders: "rejected",
+    },
+    operations: mockLlmOpenAiProviderManifest.operations.map((operation) => ({
+      ...operation,
+    })),
+    request: {
+      mediaType: "application/json",
+      encoding: "utf-8",
+      maxBodyBytes: MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES,
+      maxDepth: MOCK_LLM_OPENAI_MAX_REQUEST_DEPTH,
+      maxNodes: MOCK_LLM_OPENAI_MAX_REQUEST_NODES,
+      maxMessages: MOCK_LLM_OPENAI_MAX_MESSAGES,
+      maxTools: MOCK_LLM_OPENAI_MAX_TOOLS,
+      maxTextBytes: MOCK_LLM_OPENAI_MAX_TEXT_BYTES,
+      maxToolValueBytes: MOCK_LLM_OPENAI_MAX_TOOL_VALUE_BYTES,
+      modelId: "1-256-visible-ascii-excluding-dot-segments",
+      messageRoles: ["developer", "system", "user", "assistant", "tool"],
+      toolChoice: "absent-or-auto",
+      choiceCount: "absent-or-one",
+      streaming: "rejected",
+      streamOptions: "rejected",
+      multimodal: "unsupported",
+      unknownTopLevelFields: "rejected",
+    },
+    response: {
+      maxBodyBytes: MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES,
+      requestIdHeader: "x-request-id",
+      completionIdPrefix: "chatcmpl-",
+      transportIds: "fresh-per-invocation",
+      deterministicPlanIdExposure: "never",
+    },
+    planning: {
+      conversationState: "stateless",
+      turnIndex: "prior-assistant-message-count",
+      stateKey: "server-slug+dialect+model",
+      definitionRevision: "rechecked-before-plan-commit",
+      initialDelay: "abort-aware",
+      chunkCadence: "inert-without-streaming",
+    },
+    evidence: {
+      packageTests: "qualified",
+      localWorkerOfficialOpenAiSdk: "qualified",
+      cloudPin: "unqualified",
+      hostedDeployment: "unqualified",
+      liveProviderParity: "unqualified",
+    },
+  });
 
 const openApiJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
   JSON.parse(
@@ -298,7 +452,7 @@ export const generateMockosManagementDocumentationCatalog =
           deployedAcceptance: "unqualified",
         },
         mockLlmApis: {
-          status: "unavailable",
+          status: "partial-source-qualified",
           phase: "F2",
           managementDefinitions: {
             status: "source-implemented",
@@ -335,7 +489,16 @@ export const generateMockosManagementDocumentationCatalog =
             },
           },
           guide: "docs/mock-llm.md",
-          providerDataPlane: "unavailable",
+          providerDataPlane: {
+            status: "openai-non-streaming-source-qualified",
+            managementConfiguration: "MCP-only",
+            manifest: "docs/reference/mock-llm-openai.v1.json",
+            openAi: generateMockLlmOpenAiProviderDocumentation(),
+            anthropic: "unavailable",
+            responsesApi: "unavailable",
+            conversationState: "unavailable",
+            observationsAndAssertions: "unavailable",
+          },
           deployedAcceptance: "unqualified",
         },
         codeMode: { status: "unavailable", phase: "F6" },

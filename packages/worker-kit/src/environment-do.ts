@@ -18,6 +18,7 @@ import {
   type ManagementListQuery,
   type MintedToken,
   type MintTokenRequest,
+  type MockLlmPlan,
   type MockLlmServerSummary,
   type MockLlmServerView,
   type MockMcpServerSummary,
@@ -84,12 +85,17 @@ import {
   type OktaHttpEngine,
   type OktaRenderedError,
 } from "@mockos/engine-http";
+import type {
+  MockLlmOpenAiCatalog,
+  MockLlmOpenAiRuntimeResult,
+} from "@mockos/llm-mock";
 import { createMockMcpFetchHandler, type MockMcpObservation } from "@mockos/mcp-mock";
 import {
   createGraphDirectoryEngine,
   createOktaDirectoryEngine,
 } from "./directory-http";
 import { DoSqlStore } from "./do-sql-store";
+import { EnvironmentMockLlmOpenAiRuntime } from "./mock-llm-runtime";
 import { assertProvisioningPreparedOutputBounds } from "./provisioning-bounds";
 import { performProvisioningHttpOperation } from "./provisioning-http";
 import {
@@ -772,6 +778,7 @@ export class UnknownProvisioningApplicationError extends Error {
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
   readonly #mockLlm: MockLlmRepository;
+  readonly #mockLlmOpenAi: EnvironmentMockLlmOpenAiRuntime;
   readonly #mockMcp: MockMcpRepository;
   readonly #provisioning: ProvisioningPersistence;
   readonly #provisioningEnvironment: ProvisioningEnvironmentVariables;
@@ -795,10 +802,15 @@ export class EnvironmentDurableObject extends DurableObject {
     super(ctx, env);
     this.#store = new DoSqlStore(ctx.storage);
     this.#ensureSchema();
+    this.#provisioningEnvironment = asProvisioningEnvironment(env);
     this.#mockLlm = new MockLlmRepository(this.#store);
+    this.#mockLlmOpenAi = new EnvironmentMockLlmOpenAiRuntime(this.#mockLlm, {
+      ...(this.#provisioningEnvironment.API_KEY
+        ? { platformApiKey: this.#provisioningEnvironment.API_KEY }
+        : {}),
+    });
     this.#mockMcp = new MockMcpRepository(this.#store);
     this.#provisioning = new ProvisioningPersistence(this.#store);
-    this.#provisioningEnvironment = asProvisioningEnvironment(env);
     this.#outboundTargetPolicy = outboundTargetPolicy(env);
     const provisioningFetcher = this.#provisioningEnvironment.PROVISIONING_FETCHER;
     if (provisioningFetcher) {
@@ -1059,6 +1071,35 @@ export class EnvironmentDurableObject extends DurableObject {
     const server = this.#mockLlm.get(slug);
     if (server) await this.#touch();
     return server ? toMockLlmServerView(server) : undefined;
+  }
+
+  async getMockLlmOpenAiCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmOpenAiCatalog>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmOpenAi.getCatalog(slug, credential);
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async planMockLlmOpenAiChatCompletion(
+    slug: string,
+    credential: string,
+    request: unknown
+  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmPlan>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmOpenAi.planChatCompletion(
+      slug,
+      credential,
+      request
+    );
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
   }
 
   async deleteMockLlmServer(slug: string, expectedRevision: number): Promise<boolean> {
@@ -1848,6 +1889,27 @@ export class EnvironmentDurableObject extends DurableObject {
     const config = this.#readConfig();
     if (!config) {
       return Response.json({ error: "environment_not_configured" }, { status: 409 });
+    }
+    if (request.headers.get("x-mockos-route-kind") === "mock-llm") {
+      void request.body
+        ?.cancel("mock LLM traffic must be composed at the edge")
+        .catch(() => undefined);
+      return Response.json(
+        {
+          error: {
+            message: "The mock OpenAI request could not be completed.",
+            type: "api_error",
+            param: null,
+            code: "invalid_edge_composition",
+          },
+        },
+        {
+          status: 500,
+          headers: {
+            "x-request-id": `req_${crypto.randomUUID().replaceAll("-", "")}`,
+          },
+        }
+      );
     }
     const engine = await this.#engine();
     if (generation !== this.#configGeneration) return this.fetch(request);

@@ -191,7 +191,8 @@ production, private Cloud consumption, or broader ecosystem evidence.
   not cancel an in-flight request;
 - script execution and Worker Loader enforcement;
 - `proxy` record/replay;
-- mock OpenAI and Anthropic APIs;
+- any LLM provider surface in this F1 mock-MCP runtime; the bounded OpenAI-only route
+  is a separate partial F2 capability, and Anthropic remains unavailable;
 - enforced shared Access Key scopes and team policy;
 - the final post-July-2026 MCP protocol checkpoint and a second version adapter;
 - npm distribution, hosted qualification, deployment, wildcard TLS, load/cost

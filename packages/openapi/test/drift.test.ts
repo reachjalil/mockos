@@ -5,6 +5,7 @@ import {
 } from "@mockos/contracts/operations";
 import { describe, expect, it } from "vitest";
 import {
+  generateMockLlmOpenAiProviderDocumentation,
   generateMockosHttpOperationManifest,
   generateMockosManagementDocumentationCatalog,
   generateMockosManagementOpenApi,
@@ -74,7 +75,7 @@ describe("management OpenAPI generation", () => {
     ).toHaveLength(5);
   });
 
-  it("keeps F1 qualified, F2 management-only, later workloads unavailable, and placeholders inert", () => {
+  it("keeps F1 and the bounded F2 OpenAI slice source-qualified while later workloads stay unavailable", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
     expect(catalog.managementMcp.scopeEnforcement).toBe("metadata-only");
@@ -87,7 +88,7 @@ describe("management OpenAPI generation", () => {
       deployedAcceptance: "unqualified",
     });
     expect(catalog.future.mockLlmApis).toEqual({
-      status: "unavailable",
+      status: "partial-source-qualified",
       phase: "F2",
       managementDefinitions: {
         status: "source-implemented",
@@ -123,7 +124,16 @@ describe("management OpenAPI generation", () => {
         },
       },
       guide: "docs/mock-llm.md",
-      providerDataPlane: "unavailable",
+      providerDataPlane: {
+        status: "openai-non-streaming-source-qualified",
+        managementConfiguration: "MCP-only",
+        manifest: "docs/reference/mock-llm-openai.v1.json",
+        openAi: generateMockLlmOpenAiProviderDocumentation(),
+        anthropic: "unavailable",
+        responsesApi: "unavailable",
+        conversationState: "unavailable",
+        observationsAndAssertions: "unavailable",
+      },
       deployedAcceptance: "unqualified",
     });
     expect(catalog.future.codeMode.status).toBe("unavailable");

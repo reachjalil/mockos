@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3/M5, sampled M6, source-only M7, management-only F2, and locally qualified F0/F1
+Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI F2, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -133,30 +133,32 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - F1 supports bounded declarative `static`, `template`, `match`, `sequence`, and
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
-  record/replay is rejected. Served mock OpenAI/Anthropic APIs, Code Mode, team ACLs,
+  record/replay is rejected. F1 itself does not define an LLM provider surface; the
+  separate partial F2 slice below owns bounded mock OpenAI. Code Mode, team ACLs,
   blueprints, and OIDC-federated CI access remain future work.
-- The partial F2 source slice has a management-only configuration plane, not a mock
-  LLM service. Provider-neutral schemas, behavior-to-plan adaptation, selected OpenAI
-  Chat Completions and Anthropic Messages JSON/SSE-frame renderers, and official-SDK
-  consumption through injected in-process Fetch are joined by strict definitions,
-  four MCP-only management operations, schema-v7 persistence, mandatory changed-write
-  revision CAS, canonical replay, atomic revision-bound delete, and write-only
-  provider-key views. Safe `configured` markers are not write shapes: every changed
-  full-definition put must resupply or rotate each enabled strict provider key from
-  caller-owned storage. Bounded definition JSON keys/string values containing the
-  complete platform key as a substring fail closed. There is no
-  provider route/request parser/auth enforcement, model renderer/catalog,
-  response/evaluator state, reset, conversation owner, edge-paced SSE network stream,
-  observation/assertion support, Wrangler round trip, private Cloud pin, hosted CI
-  qualification for this tranche, deployment, or verified-live comparison. The
-  official-SDK harness hand-supplies model-list/retrieve fixtures. No listener emits
-  the serialized SSE frames. Do not configure either planned
-  `/e/{environmentId}/llm-mock/{slug}/{provider}/v1` route because neither exists.
-  Pure fixtures reuse content-derived plan IDs for deterministic provider/request
-  correlation, not unique invocation IDs, and omit Anthropic organization identity
-  because no HTTP/auth context exists. A future edge must inject both. Error and
-  stream cadence are bounded inert metadata; no renderer sleeps or paces a network
-  response.
+- The partial F2 source has an MCP-only configuration plane and a separate bounded
+  OpenAI data plane; it is not a general mock LLM service. Four MCP operations own
+  strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
+  canonical replay, atomic revision-bound delete, and write-only provider-key views.
+  The environment route source-qualifies only ordered model list/retrieve and
+  non-streaming Chat Completions. Both auth modes require a valid provider Bearer Mock
+  Credential: `accept_any` skips verifier comparison, while `strict` checks the
+  current hash-only verifier. The parser accepts only bounded text messages,
+  function tools, `n` absent/one, `stream` absent/false, and `tool_choice`
+  absent/`auto`; unknown fields, multimodal content, `stream_options`, and the broader
+  OpenAI parameter surface fail closed. It derives a stateless turn from prior
+  assistant messages and injects fresh request/completion IDs, while content-derived
+  plan IDs stay internal. Initial response/error delay is abort-aware, but there is no
+  SSE listener or timed chunk delivery. Anthropic routing, OpenAI Responses and other
+  APIs, conversation/evaluator state, reset, retry deduplication, LLM-specific
+  observation/assertion support, Wrangler-network qualification, hosted CI for this
+  tranche, private Cloud pinning, deployment, and verified-live comparison remain
+  unavailable or unqualified. Safe `configured` markers remain non-writable, and
+  every changed full-definition put must resupply or rotate each enabled strict key
+  from caller-owned storage. The complete active platform key is rejected from
+  definition keys/string values and provider authentication/body reflection. Use the
+  [generated provider manifest](./reference/mock-llm-openai.v1.json), not OpenAI's
+  broader API, as the compatibility boundary.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
   control routes; the other 19 management MCP operations, including all five F1 and
   all four F2 operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
