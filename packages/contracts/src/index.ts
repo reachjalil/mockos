@@ -1,9 +1,18 @@
 import { z } from "zod";
 import { assertBehaviorSpecBounds, jsonValueSchema } from "./behavior";
 import {
+  MOCK_LLM_MAX_SEGMENTS,
+  MOCK_LLM_MAX_TOKEN_COUNT,
+  MOCK_LLM_MAX_TOOL_NAME_LENGTH,
+  mockLlmErrorKindSchema,
+  mockLlmModelSchema,
+  mockLlmStopReasonSchema,
+} from "./mock-llm";
+import {
   type MockLlmDeleteServerResult,
   type MockLlmServerList,
   type MockLlmServerView,
+  mockLlmDialectSchema,
   mockLlmServerWriteSchema,
   mockLlmSlugSchema,
 } from "./mock-llm-server";
@@ -303,8 +312,58 @@ export const scenarioListPageSchema = z
 export type ScenarioListPage = z.infer<typeof scenarioListPageSchema>;
 
 export const requestLogSourceSchema = z.enum(["inbound", "outbound", "control"]);
-export const requestLogProviderSchema = z.union([providerIdSchema, z.literal("mcp")]);
+export const requestLogProviderSchema = z.union([
+  providerIdSchema,
+  z.literal("mcp"),
+  mockLlmDialectSchema,
+]);
 export const requestLogProtocolSchema = z.enum(["http", "mcp"]);
+export const requestLogLlmOperationSchema = z.enum([
+  "chat.completions.create",
+  "messages.create",
+]);
+export type RequestLogLlmOperation = z.infer<typeof requestLogLlmOperationSchema>;
+export const requestLogLlmOutcomeSchema = z.enum([
+  "pending",
+  "completed",
+  "cancelled",
+  "deadline_exceeded",
+  "failed",
+]);
+export type RequestLogLlmOutcome = z.infer<typeof requestLogLlmOutcomeSchema>;
+/**
+ * Legacy request_log columns are non-null. Pending LLM reservations use these
+ * explicit compatibility sentinels; they are not delivered response metadata.
+ */
+export const REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS = 102;
+export const REQUEST_LOG_LLM_PENDING_DURATION_MS = 0;
+export const requestLogLlmTerminalOutcomeSchema = z.enum([
+  "completed",
+  "cancelled",
+  "deadline_exceeded",
+  "failed",
+]);
+export type RequestLogLlmTerminalOutcome = z.infer<
+  typeof requestLogLlmTerminalOutcomeSchema
+>;
+export const requestLogLlmToolNamesSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(MOCK_LLM_MAX_TOOL_NAME_LENGTH)
+      .regex(/^[A-Za-z0-9_-]+$/)
+  )
+  .max(MOCK_LLM_MAX_SEGMENTS);
+export type RequestLogLlmToolNames = z.infer<typeof requestLogLlmToolNamesSchema>;
+export const requestLogLlmFinalizationSchema = z
+  .object({
+    llmOutcome: requestLogLlmTerminalOutcomeSchema,
+    responseStatus: z.number().int().min(100).max(599),
+    durationMs: z.number().int().min(0),
+  })
+  .strict();
+export type RequestLogLlmFinalization = z.infer<typeof requestLogLlmFinalizationSchema>;
 export const REQUEST_LOG_MCP_ARGUMENT_KEY_MAX_LENGTH = 256;
 const requestLogMcpArgumentsValueSchema = z.record(
   z.string().min(1).max(REQUEST_LOG_MCP_ARGUMENT_KEY_MAX_LENGTH),
@@ -342,6 +401,20 @@ export const requestLogEntrySchema = z
     mcpArguments: requestLogMcpArgumentsSchema.optional(),
     mcpErrorCode: z.number().int().min(-32_800).max(32_767).optional(),
     mcpToolIsError: z.boolean().optional(),
+    llmDialect: mockLlmDialectSchema.optional(),
+    llmOperation: requestLogLlmOperationSchema.optional(),
+    llmServerSlug: mockLlmSlugSchema.optional(),
+    llmServerRevision: z.number().int().safe().min(1).optional(),
+    llmModel: mockLlmModelSchema.optional(),
+    llmStream: z.boolean().optional(),
+    llmTurnIndex: z.number().int().safe().min(0).optional(),
+    llmOutcome: requestLogLlmOutcomeSchema.optional(),
+    llmResponseId: z.string().min(1).max(128).optional(),
+    llmInputTokens: z.number().int().min(0).max(MOCK_LLM_MAX_TOKEN_COUNT).optional(),
+    llmOutputTokens: z.number().int().min(0).max(MOCK_LLM_MAX_TOKEN_COUNT).optional(),
+    llmStopReason: mockLlmStopReasonSchema.optional(),
+    llmToolNames: requestLogLlmToolNamesSchema.optional(),
+    llmErrorKind: mockLlmErrorKindSchema.optional(),
   })
   .strict()
   .superRefine((entry, context) => {
@@ -370,13 +443,166 @@ export const requestLogEntrySchema = z
         path: ["mcpMethod"],
       });
     }
+
+    const llmCoreFields = [
+      "llmDialect",
+      "llmOperation",
+      "llmServerSlug",
+      "llmServerRevision",
+      "llmModel",
+      "llmStream",
+      "llmTurnIndex",
+      "llmOutcome",
+    ] as const;
+    const llmResponseFields = [
+      "llmInputTokens",
+      "llmOutputTokens",
+      "llmStopReason",
+      "llmToolNames",
+    ] as const;
+    const hasAnyLlmMetadata =
+      llmCoreFields.some((field) => entry[field] !== undefined) ||
+      llmResponseFields.some((field) => entry[field] !== undefined) ||
+      entry.llmResponseId !== undefined ||
+      entry.llmErrorKind !== undefined;
+    const hasAllLlmCoreMetadata = llmCoreFields.every(
+      (field) => entry[field] !== undefined
+    );
+    const hasAnyLlmResponseMetadata = llmResponseFields.some(
+      (field) => entry[field] !== undefined
+    );
+    const hasAllLlmResponseMetadata = llmResponseFields.every(
+      (field) => entry[field] !== undefined
+    );
+
+    if (hasAnyLlmMetadata && !hasAllLlmCoreMetadata) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM request metadata requires every core LLM field.",
+        path: ["llmDialect"],
+      });
+    }
+    if (
+      entry.llmOutcome === "pending" &&
+      (entry.responseStatus !== REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS ||
+        entry.durationMs !== REQUEST_LOG_LLM_PENDING_DURATION_MS)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Pending LLM request metadata requires compatibility status and duration sentinels.",
+        path: ["responseStatus"],
+      });
+    }
+    if (
+      hasAnyLlmMetadata &&
+      !(
+        (hasAllLlmResponseMetadata &&
+          entry.llmResponseId !== undefined &&
+          entry.llmErrorKind === undefined) ||
+        (!hasAnyLlmResponseMetadata &&
+          entry.llmResponseId === undefined &&
+          entry.llmErrorKind !== undefined)
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "LLM request metadata requires either a complete response plan with response ID or one error kind without response ID.",
+        path: ["llmInputTokens"],
+      });
+    }
+    if (
+      hasAnyLlmMetadata &&
+      (entry.provider !== entry.llmDialect || entry.protocol !== "http")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM request metadata requires matching provider and HTTP protocol.",
+        path: ["provider"],
+      });
+    }
+    if (
+      hasAnyLlmMetadata &&
+      ((entry.llmDialect === "openai" &&
+        entry.llmOperation !== "chat.completions.create") ||
+        (entry.llmDialect === "anthropic" && entry.llmOperation !== "messages.create"))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM operation must match its provider dialect.",
+        path: ["llmOperation"],
+      });
+    }
+    if (
+      hasAnyLlmMetadata &&
+      (entry.source !== "inbound" ||
+        entry.method.trim().toUpperCase() !== "POST" ||
+        Object.keys(entry.requestHeaders).length !== 0 ||
+        entry.requestBody !== null ||
+        Object.keys(entry.responseHeaders).length !== 0 ||
+        entry.responseBody !== null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Structured LLM observations require inbound POST metadata without headers or bodies.",
+        path: ["requestBody"],
+      });
+    }
+    if (
+      hasAnyLlmMetadata &&
+      (entry.mcpMethod !== undefined ||
+        entry.mcpTool !== undefined ||
+        entry.mcpArguments !== undefined ||
+        entry.mcpErrorCode !== undefined ||
+        entry.mcpToolIsError !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM and MCP request metadata are mutually exclusive.",
+        path: ["mcpMethod"],
+      });
+    }
+    if (
+      (entry.provider === "openai" || entry.provider === "anthropic") &&
+      !hasAnyLlmMetadata
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "An LLM provider requires structured LLM request metadata.",
+        path: ["llmDialect"],
+      });
+    }
   });
 export type RequestLogEntry = z.infer<typeof requestLogEntrySchema>;
+export type RequestLogLlmReservation = Omit<
+  RequestLogEntry,
+  "durationMs" | "llmOutcome" | "responseStatus"
+> & {
+  readonly llmOutcome: "pending";
+};
 
 const assertionMethodSchema = z.string().trim().min(1).max(32);
 const assertionPathSchema = z.string().min(1).max(2048);
 const assertionBodyIncludesSchema = z.string().min(1).max(8192);
 const assertionMcpMethodSchema = z.string().min(1).max(256);
+const requestLogLlmMatcherShape = {
+  llmDialect: mockLlmDialectSchema.optional(),
+  llmOperation: requestLogLlmOperationSchema.optional(),
+  llmServerSlug: mockLlmSlugSchema.optional(),
+  llmServerRevision: z.number().int().safe().min(1).optional(),
+  llmModel: mockLlmModelSchema.optional(),
+  llmStream: z.boolean().optional(),
+  llmTurnIndex: z.number().int().safe().min(0).optional(),
+  llmOutcome: requestLogLlmOutcomeSchema.optional(),
+  llmResponseId: z.string().min(1).max(128).optional(),
+  llmInputTokens: z.number().int().min(0).max(MOCK_LLM_MAX_TOKEN_COUNT).optional(),
+  llmOutputTokens: z.number().int().min(0).max(MOCK_LLM_MAX_TOKEN_COUNT).optional(),
+  llmStopReason: mockLlmStopReasonSchema.optional(),
+  llmToolNames: requestLogLlmToolNamesSchema.optional(),
+  llmErrorKind: mockLlmErrorKindSchema.optional(),
+} as const;
 
 const assertionCountSchema = z
   .object({
@@ -428,6 +654,7 @@ export const assertionSequenceStepSchema = z
     mcpMethod: assertionMcpMethodSchema.optional(),
     mcpTool: mockMcpCapabilityNameSchema.optional(),
     mcpArguments: requestLogMcpArgumentsSchema.optional(),
+    ...requestLogLlmMatcherShape,
   })
   .strict()
   .refine((step) => Object.values(step).some((value) => value !== undefined), {
@@ -446,6 +673,7 @@ export const assertionSpecSchema = z
     mcpMethod: assertionMcpMethodSchema.optional(),
     mcpTool: mockMcpCapabilityNameSchema.optional(),
     mcpArguments: requestLogMcpArgumentsSchema.optional(),
+    ...requestLogLlmMatcherShape,
     sequence: z.array(assertionSequenceStepSchema).min(2).max(100).optional(),
     count: assertionCountSchema.default({ atLeast: 1 }),
   })
@@ -645,6 +873,7 @@ export const requestLogQuerySchema = z
     status: z.number().int().min(100).max(599).optional(),
     mcpMethod: assertionMcpMethodSchema.optional(),
     mcpTool: mockMcpCapabilityNameSchema.optional(),
+    ...requestLogLlmMatcherShape,
     limit: z.number().int().min(1).max(1_000).default(100),
     cursor: z.string().min(1).max(512).optional(),
   })

@@ -43,6 +43,48 @@ const callData = async <Value>(
   return structured?.data as Value;
 };
 
+type LlmRequestLogEntry = {
+  readonly id: string;
+  readonly provider: string;
+  readonly protocol: string;
+  readonly method: string;
+  readonly path: string;
+  readonly requestHeaders: Record<string, string>;
+  readonly requestBody: string | null;
+  readonly responseStatus: number;
+  readonly responseHeaders: Record<string, string>;
+  readonly responseBody: string | null;
+  readonly durationMs: number;
+  readonly llmDialect: string;
+  readonly llmOperation: string;
+  readonly llmServerSlug: string;
+  readonly llmServerRevision: number;
+  readonly llmModel: string;
+  readonly llmStream: boolean;
+  readonly llmTurnIndex: number;
+  readonly llmOutcome: string;
+  readonly llmResponseId?: string;
+  readonly llmInputTokens?: number;
+  readonly llmOutputTokens?: number;
+  readonly llmStopReason?: string;
+  readonly llmToolNames?: string[];
+  readonly llmErrorKind?: string;
+};
+
+const eventuallyRequestLog = async (
+  client: Client,
+  query: Record<string, unknown>,
+  accepted: (entries: readonly LlmRequestLogEntry[]) => boolean
+): Promise<{ entries: LlmRequestLogEntry[] }> => {
+  let latest: { entries: LlmRequestLogEntry[] } = { entries: [] };
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    latest = await callData(client, "get_request_log", query);
+    if (accepted(latest.entries)) return latest;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for LLM observations: ${JSON.stringify(latest)}`);
+};
+
 const serverDefinition = (
   authentication:
     | { readonly mode: "accept_any" }
@@ -150,7 +192,20 @@ describe("public mock OpenAI Worker route", () => {
           seed: "mock-openai-worker-two",
         }
       );
-      environmentIds.push(firstEnvironment.id, secondEnvironment.id);
+      const strictCollisionEnvironment = await callData<{ id: string }>(
+        management,
+        "create_environment",
+        {
+          name: "Mock OpenAI observation collision",
+          provider: "entra",
+          seed: "mock-openai-observation-collision",
+        }
+      );
+      environmentIds.push(
+        firstEnvironment.id,
+        secondEnvironment.id,
+        strictCollisionEnvironment.id
+      );
 
       const firstPut = await callData<{
         revision: number;
@@ -187,6 +242,15 @@ describe("public mock OpenAI Worker route", () => {
         environmentId: secondEnvironment.id,
         expectedRevision: null,
         server: serverDefinition({ mode: "accept_any" }, "Hello from environment two."),
+      });
+      const strictOperationCredential = "chat.completions.create";
+      await callData(management, "put_mock_llm_server", {
+        environmentId: strictCollisionEnvironment.id,
+        expectedRevision: null,
+        server: serverDefinition({
+          mode: "strict",
+          apiKey: strictOperationCredential,
+        }),
       });
 
       const first = openAiClient(firstEnvironment.id);
@@ -227,6 +291,42 @@ describe("public mock OpenAI Worker route", () => {
       expect(isolatedCompletion.choices[0]?.message.content).toBe(
         "Hello from environment two."
       );
+      const strictCollisionCompletion = await openAiClient(
+        strictCollisionEnvironment.id,
+        strictOperationCredential
+      ).chat.completions.create({
+        model: "mock-text-1",
+        messages: [{ role: "user", content: "Observe without disclosing the key" }],
+      });
+      expect(strictCollisionCompletion.choices[0]?.message.content).toBe(
+        "Hello from environment one."
+      );
+      const acceptAnyPathCollisionCompletion = await openAiClient(
+        secondEnvironment.id,
+        secondEnvironment.id
+      ).chat.completions.create({
+        model: "mock-text-1",
+        messages: [{ role: "user", content: "Path collision" }],
+      });
+      expect(acceptAnyPathCollisionCompletion.choices[0]?.message.content).toBe(
+        "Hello from environment two."
+      );
+      const strictCollisionLog = await callData<{
+        entries: LlmRequestLogEntry[];
+      }>(management, "get_request_log", {
+        environmentId: strictCollisionEnvironment.id,
+        llmDialect: "openai",
+        limit: 100,
+      });
+      expect(strictCollisionLog.entries).toEqual([]);
+      const acceptAnyCollisionLog = await callData<{
+        entries: LlmRequestLogEntry[];
+      }>(management, "get_request_log", {
+        environmentId: secondEnvironment.id,
+        llmResponseId: acceptAnyPathCollisionCompletion.id,
+        limit: 100,
+      });
+      expect(acceptAnyCollisionLog.entries).toEqual([]);
       expect(firstCompletion.id).toMatch(/^chatcmpl-[a-f0-9]{32}$/);
       expect(repeatedCompletion.id).toMatch(/^chatcmpl-[a-f0-9]{32}$/);
       expect(repeatedCompletion.id).not.toBe(firstCompletion.id);
@@ -381,6 +481,8 @@ describe("public mock OpenAI Worker route", () => {
               "string"
           )
       ).toBe(true);
+      const streamedResponseId = chunks.at(0)?.id;
+      expect(streamedResponseId).toMatch(/^chatcmpl-[a-f0-9]{32}$/);
 
       const cancellable = await first.chat.completions.create({
         model: "mock-text-1",
@@ -424,19 +526,131 @@ describe("public mock OpenAI Worker route", () => {
         ).data
       ).toHaveLength(4);
 
-      const requestLog = await callData<{ entries: unknown[] }>(
+      const requestLog = await eventuallyRequestLog(
         management,
-        "get_request_log",
         {
           environmentId: firstEnvironment.id,
+          llmDialect: "openai",
+          llmOperation: "chat.completions.create",
           limit: 100,
-        }
+        },
+        (entries) =>
+          entries.some(
+            (entry) =>
+              entry.llmResponseId === firstCompletion.id &&
+              entry.llmOutcome === "completed"
+          ) &&
+          entries.some(
+            (entry) =>
+              entry.llmResponseId === streamedResponseId &&
+              entry.llmOutcome === "completed"
+          )
       );
       const serializedLog = JSON.stringify(requestLog);
-      expect(requestLog.entries).toEqual([]);
+      expect(
+        requestLog.entries.filter((entry) => entry.llmResponseId === firstCompletion.id)
+      ).toEqual([
+        expect.objectContaining({
+          id: firstCompletion._request_id,
+          provider: "openai",
+          protocol: "http",
+          method: "POST",
+          path: `/e/${firstEnvironment.id}/llm-mock/agent-tests/openai/v1/chat/completions`,
+          requestHeaders: {},
+          requestBody: null,
+          responseStatus: 200,
+          responseHeaders: {},
+          responseBody: null,
+          durationMs: expect.any(Number),
+          llmDialect: "openai",
+          llmOperation: "chat.completions.create",
+          llmServerSlug: "agent-tests",
+          llmServerRevision: firstPut.revision,
+          llmModel: "mock-text-1",
+          llmStream: false,
+          llmTurnIndex: 0,
+          llmOutcome: "completed",
+          llmResponseId: firstCompletion.id,
+          llmInputTokens: 11,
+          llmOutputTokens: 5,
+          llmStopReason: "end_turn",
+          llmToolNames: [],
+        }),
+      ]);
+      expect(requestLog.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            llmErrorKind: "rate_limit",
+            llmModel: "mock-rate-limit-1",
+            llmOutcome: "completed",
+            llmStream: false,
+            responseStatus: 429,
+          }),
+          expect.objectContaining({
+            llmModel: "mock-tool-1",
+            llmStopReason: "tool_use",
+            llmToolNames: ["get_weather"],
+          }),
+          expect.objectContaining({
+            llmModel: "mock-text-1",
+            llmOutcome: "completed",
+            llmResponseId: streamedResponseId,
+            llmStream: true,
+            responseStatus: 200,
+          }),
+        ])
+      );
+      expect(
+        requestLog.entries.find(
+          (entry) =>
+            entry.llmErrorKind === "rate_limit" &&
+            entry.llmModel === "mock-rate-limit-1"
+        )
+      ).not.toHaveProperty("llmResponseId");
+      expect(
+        requestLog.entries.every(
+          (entry) =>
+            Object.keys(entry.requestHeaders).length === 0 &&
+            entry.requestBody === null &&
+            Object.keys(entry.responseHeaders).length === 0 &&
+            entry.responseBody === null &&
+            entry.llmServerRevision === firstPut.revision
+        )
+      ).toBe(true);
+      const exactObservation = await callData<{
+        matched: number;
+        pass: boolean;
+      }>(management, "assert_requests", {
+        environmentId: firstEnvironment.id,
+        llmDialect: "openai",
+        llmOperation: "chat.completions.create",
+        llmResponseId: firstCompletion.id,
+        llmOutcome: "completed",
+        status: 200,
+        count: { exactly: 1 },
+      });
+      expect(exactObservation).toMatchObject({ matched: 1, pass: true });
+      const configuredErrorObservation = await callData<{
+        matched: number;
+        pass: boolean;
+      }>(management, "assert_requests", {
+        environmentId: firstEnvironment.id,
+        llmDialect: "openai",
+        llmErrorKind: "rate_limit",
+        llmStream: false,
+        llmOutcome: "completed",
+        status: 429,
+        count: { exactly: 1 },
+      });
+      expect(configuredErrorObservation).toMatchObject({
+        matched: 1,
+        pass: true,
+      });
       expect(serializedLog).not.toContain(OPENAI_MOCK_CREDENTIAL);
       expect(serializedLog).not.toContain(ROTATED_OPENAI_MOCK_CREDENTIAL);
       expect(serializedLog).not.toContain("apiKeySha256");
+      expect(serializedLog).not.toContain("Hello from environment one.");
+      expect(serializedLog).not.toContain("Berlin");
 
       await callData(management, "delete_environment", {
         environmentId: secondEnvironment.id,

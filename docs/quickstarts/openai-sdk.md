@@ -272,7 +272,9 @@ Keep `maxRetries: 0`, then choose one bounded negative case:
 - send `stream_options` without `stream: true` and require `400 invalid_request`.
 
 Do not submit the credential inside a prompt. The adapter rejects credential
-reflection, and request-log observation is not part of this LLM slice.
+reflection before planning, so that invalid request is intentionally unobserved.
+Successfully planned calls that pass response preflight do enter the metadata-only
+request log described below.
 
 ## 6. Clean up with the latest revision
 
@@ -298,8 +300,12 @@ production, or live OpenAI parity.
 
 This OpenAI workflow does not exercise the separately source-qualified bounded
 Anthropic route. The current F2 slice still has no Responses API, multimodal content,
-configured mid-stream errors, persisted conversation state, reset, LLM
-observations/assertions, or broad Chat Completions parameter support. Use the
+configured mid-stream errors, persisted conversation state, reset, or broad Chat
+Completions parameter support. Successfully parsed/planned calls that pass response
+preflight attempt a metadata-only request-log reservation within a 50-millisecond
+fail-open budget; prospective metadata/credential collisions skip it. Use the
+[`get_request_log`/`assert_requests` guide](../mock-llm.md#observe-and-assert-provider-calls)
+for exact matchers and its privacy/evidence boundary. Use the
 [Anthropic SDK quickstart](./anthropic-sdk.md) for its separately qualified JSON/SSE
 Messages surface, and use the
 [machine-readable provider manifest](../reference/mock-llm-openai.v1.json) instead of

@@ -15,7 +15,14 @@ import {
 } from "@mockos/contracts/mock-llm-server";
 import { renderAnthropicPlan } from "./anthropic";
 import { canonicalMockLlmJson } from "./canonical-json";
-import { prepareEdgeSseStream } from "./edge-stream";
+import { EdgeSseStreamDeadlineError, prepareEdgeSseStream } from "./edge-stream";
+import {
+  createMockLlmProviderObservationPrivacyGuard,
+  type MockLlmProviderObservationHook,
+  type MockLlmProviderObservationStart,
+  reserveMockLlmProviderObservation,
+  scheduleMockLlmProviderObservationFinish,
+} from "./observation";
 import { mockLlmPlanContainsSecret, mockLlmValueContainsSecret } from "./openai-http";
 
 export const MOCK_LLM_ANTHROPIC_VERSION = "2023-06-01";
@@ -704,12 +711,14 @@ const defaultDelay = async (milliseconds: number, signal: AbortSignal) => {
 export type CreateMockLlmAnthropicFetchHandlerOptions = {
   readonly runtime: MockLlmAnthropicRuntime;
   readonly platformApiKey?: string;
+  readonly observation?: MockLlmProviderObservationHook;
   readonly createIdentity?: () => {
     readonly requestId: string;
     readonly responseId: string;
   };
   readonly delay?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly now?: () => number;
+  readonly durationNow?: () => number;
 };
 
 export const createMockLlmAnthropicFetchHandler = (
@@ -721,6 +730,10 @@ export const createMockLlmAnthropicFetchHandler = (
     request: Request,
     rawRoute: MockLlmAnthropicRoute
   ): Promise<Response> => {
+    const durationNow = options.durationNow ?? (() => performance.now());
+    const requestStartedAtMilliseconds = durationNow();
+    const elapsedDurationMilliseconds = () =>
+      Math.max(0, Math.floor(durationNow() - requestStartedAtMilliseconds));
     const identity = createIdentity();
     const slug = mockLlmSlugSchema.safeParse(rawRoute.slug);
     if (!slug.success || !rawRoute.providerPath.startsWith("/")) {
@@ -909,6 +922,65 @@ export const createMockLlmAnthropicFetchHandler = (
     if (mockLlmValueContainsSecret(wire, [credential, options.platformApiKey])) {
       return internalError(identity.requestId);
     }
+    const observationPrivacyGuard = createMockLlmProviderObservationPrivacyGuard([
+      credential,
+      options.platformApiKey,
+    ]);
+    const prospectiveObservationMetadata = {
+      requestPath: new URL(request.url).pathname,
+      possibleResponseStatuses: [wire.status, 499, 500],
+    };
+
+    const observationStart = (): MockLlmProviderObservationStart =>
+      plan.kind === "response"
+        ? {
+            observationId: identity.requestId,
+            responseId: identity.responseId,
+            dialect: "anthropic",
+            operation: "messages.create",
+            slug: slug.data,
+            method: "POST",
+            path: "/v1/messages",
+            model: parsed.model,
+            stream: parsed.stream,
+            turnIndex: plan.turnIndex,
+            response: {
+              inputTokens: plan.usage.inputTokens,
+              outputTokens: plan.usage.outputTokens,
+              stopReason: plan.stopReason,
+              toolNames: plan.segments.flatMap((segment) =>
+                segment.type === "tool_call" ? [segment.name] : []
+              ),
+            },
+          }
+        : {
+            observationId: identity.requestId,
+            dialect: "anthropic",
+            operation: "messages.create",
+            slug: slug.data,
+            method: "POST",
+            path: "/v1/messages",
+            model: parsed.model,
+            stream: parsed.stream,
+            turnIndex: plan.turnIndex,
+            errorKind: plan.error.kind,
+          };
+    const finishObservation = (
+      reserved: boolean,
+      outcome: "cancelled" | "completed" | "deadline_exceeded" | "failed",
+      responseStatus: number
+    ): void =>
+      scheduleMockLlmProviderObservationFinish(
+        options.observation,
+        reserved,
+        {
+          observationId: identity.requestId,
+          outcome,
+          responseStatus,
+          durationMilliseconds: elapsedDurationMilliseconds(),
+        },
+        observationPrivacyGuard
+      );
 
     if (wire.kind === "sse") {
       if (plan.kind !== "response") return internalError(identity.requestId);
@@ -924,6 +996,25 @@ export const createMockLlmAnthropicFetchHandler = (
       } catch {
         return internalError(identity.requestId);
       }
+      const reserved = await reserveMockLlmProviderObservation(
+        options.observation,
+        observationStart(),
+        observationPrivacyGuard,
+        prospectiveObservationMetadata
+      );
+      let selectedResponseStatus: number | undefined;
+      scheduleMockLlmProviderObservationFinish(
+        options.observation,
+        reserved,
+        prepared.terminal.then((result) => ({
+          observationId: identity.requestId,
+          outcome: result.outcome,
+          responseStatus:
+            selectedResponseStatus ?? (result.outcome === "cancelled" ? 499 : 500),
+          durationMilliseconds: elapsedDurationMilliseconds(),
+        })),
+        observationPrivacyGuard
+      );
       try {
         await prepared.waitForInitialDelay();
       } catch {
@@ -931,10 +1022,12 @@ export const createMockLlmAnthropicFetchHandler = (
         return internalError(identity.requestId);
       }
       try {
-        return new Response(prepared.createReadableStream(), {
+        const response = new Response(prepared.createReadableStream(), {
           status: wire.status,
           headers: wire.headers,
         });
+        selectedResponseStatus = wire.status;
+        return response;
       } catch {
         if (request.signal.aborted) return new Response(null, { status: 499 });
         return internalError(identity.requestId);
@@ -942,23 +1035,44 @@ export const createMockLlmAnthropicFetchHandler = (
     }
 
     if (wire.kind !== "json") return internalError(identity.requestId);
+    const serialized = JSON.stringify(wire.body);
+    if (utf8Length(serialized) > MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES) {
+      return internalError(identity.requestId);
+    }
+    const reserved = await reserveMockLlmProviderObservation(
+      options.observation,
+      observationStart(),
+      observationPrivacyGuard,
+      prospectiveObservationMetadata
+    );
     const initialDelayMilliseconds =
       plan.kind === "response"
         ? plan.cadence.initialDelayMilliseconds
         : plan.initialDelayMilliseconds;
     try {
       await delay(initialDelayMilliseconds, request.signal);
+    } catch (reason) {
+      if (request.signal.aborted) {
+        finishObservation(reserved, "cancelled", 499);
+        return new Response(null, { status: 499 });
+      }
+      finishObservation(
+        reserved,
+        reason instanceof EdgeSseStreamDeadlineError ? "deadline_exceeded" : "failed",
+        500
+      );
+      return internalError(identity.requestId);
+    }
+    try {
+      const response = new Response(serialized, {
+        status: wire.status,
+        headers: wire.headers,
+      });
+      finishObservation(reserved, "completed", wire.status);
+      return response;
     } catch {
-      if (request.signal.aborted) return new Response(null, { status: 499 });
+      finishObservation(reserved, "failed", 500);
       return internalError(identity.requestId);
     }
-    const serialized = JSON.stringify(wire.body);
-    if (utf8Length(serialized) > MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES) {
-      return internalError(identity.requestId);
-    }
-    return new Response(serialized, {
-      status: wire.status,
-      headers: wire.headers,
-    });
   };
 };

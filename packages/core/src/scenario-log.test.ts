@@ -4,6 +4,9 @@ import {
   SCIM_PATCH_PARSE_INJECTION_POINT,
   type AssertionSpec,
   type RequestLogEntry,
+  type RequestLogLlmReservation,
+  REQUEST_LOG_LLM_PENDING_DURATION_MS,
+  REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
   scenarioSpecSchema,
 } from "@mockos/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -21,6 +24,7 @@ import {
   MAX_SCENARIO_SPEC_BYTES,
   RequestLogCursorError,
   RequestLogEntryTooLargeError,
+  RequestLogLlmFinalizationConflictError,
   RequestLogService,
   ScenarioService,
   type SqlRow,
@@ -123,8 +127,8 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(7);
-    expect(getSchemaVersion(store)).toBe(7);
+    expect(applyMigrations(store)).toBe(8);
+    expect(getSchemaVersion(store)).toBe(8);
     const service = new ScenarioService({
       store,
       seed: "upgrade",
@@ -423,6 +427,45 @@ const logEntry = (input: {
   correlationId: `correlation-${input.id}`,
 });
 
+const llmResponseLogEntry = (input: {
+  readonly id: string;
+  readonly dialect: "openai" | "anthropic";
+  readonly stream: boolean;
+  readonly turnIndex: number;
+  readonly toolNames?: readonly string[];
+}): RequestLogLlmReservation => ({
+  id: input.id,
+  timestamp: "2026-07-22T12:00:00.000Z",
+  source: "inbound",
+  provider: input.dialect,
+  protocol: "http",
+  method: "POST",
+  path:
+    input.dialect === "openai"
+      ? "/llm-mock/assistant/v1/chat/completions"
+      : "/llm-mock/assistant/v1/messages",
+  requestHeaders: {},
+  requestBody: null,
+  responseHeaders: {},
+  responseBody: null,
+  correlationId: input.id,
+  llmDialect: input.dialect,
+  llmOperation:
+    input.dialect === "openai" ? "chat.completions.create" : "messages.create",
+  llmServerSlug: "assistant",
+  llmServerRevision: 7,
+  llmModel: input.dialect === "openai" ? "gpt-mock" : "claude-mock",
+  llmStream: input.stream,
+  llmTurnIndex: input.turnIndex,
+  llmOutcome: "pending",
+  llmResponseId:
+    input.dialect === "openai" ? `chatcmpl-${input.id}` : `msg_${input.id}`,
+  llmInputTokens: input.turnIndex,
+  llmOutputTokens: 0,
+  llmStopReason: (input.toolNames?.length ?? 0) > 0 ? "tool_use" : "end_turn",
+  llmToolNames: [...(input.toolNames ?? [])],
+});
+
 describe("request log service", () => {
   it("stores, filters, and exactly asserts canonical mock-MCP metadata", async () => {
     const store = memoryStore();
@@ -501,6 +544,305 @@ describe("request log service", () => {
         count: { exactly: 1 },
       })
     ).toMatchObject({ pass: false, matched: 0 });
+  });
+
+  it("reserves and append-once finalizes one structured LLM observation", async () => {
+    const store = memoryStore();
+    const engine = Engine.create(
+      { provider: "okta", seed: "llm-request-log", requestLogLimit: 10 },
+      { store, clock: new FixedClock("2026-07-22T12:00:00.000Z") }
+    );
+    await engine.initialize();
+    engine.log.append(
+      logEntry({
+        id: "before-llm",
+        source: "control",
+        method: "POST",
+        path: "/before",
+        requestBody: null,
+        responseStatus: 200,
+      })
+    );
+    const reserved = engine.reserveLlmObservation(
+      llmResponseLogEntry({
+        id: "req_llm_1",
+        dialect: "openai",
+        stream: false,
+        turnIndex: 0,
+        toolNames: ["lookup", "finish"],
+      })
+    );
+    expect(reserved).toMatchObject({
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmOutcome: "pending",
+      llmToolNames: ["lookup", "finish"],
+      responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+      requestHeaders: {},
+      requestBody: null,
+      responseHeaders: {},
+      responseBody: null,
+    });
+    const sequenceBefore = store.get<{ sequence: number }>(
+      "SELECT sequence FROM request_log WHERE id = ?",
+      "req_llm_1"
+    )?.sequence;
+
+    expect(
+      engine
+        .getRequestLog({
+          provider: "openai",
+          protocol: "http",
+          llmDialect: "openai",
+          llmOperation: "chat.completions.create",
+          llmServerSlug: "assistant",
+          llmServerRevision: 7,
+          llmModel: "gpt-mock",
+          llmStream: false,
+          llmTurnIndex: 0,
+          llmOutcome: "pending",
+          status: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+          llmInputTokens: 0,
+          llmOutputTokens: 0,
+          llmStopReason: "tool_use",
+          llmToolNames: ["lookup", "finish"],
+          limit: 10,
+        })
+        .entries.map(({ id }) => id)
+    ).toEqual(["req_llm_1"]);
+    expect(
+      engine.assertRequests({
+        llmDialect: "openai",
+        llmOperation: "chat.completions.create",
+        llmServerSlug: "assistant",
+        llmServerRevision: 7,
+        llmModel: "gpt-mock",
+        llmStream: false,
+        llmTurnIndex: 0,
+        llmOutcome: "pending",
+        status: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+        llmResponseId: "chatcmpl-req_llm_1",
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        llmStopReason: "tool_use",
+        llmToolNames: ["lookup", "finish"],
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({
+      pass: true,
+      matched: 1,
+      requestIds: ["req_llm_1"],
+    });
+
+    const completed = engine.finalizeLlmObservation("req_llm_1", {
+      llmOutcome: "completed",
+      responseStatus: 201,
+      durationMs: 42,
+    });
+    expect(completed).toMatchObject({
+      id: "req_llm_1",
+      llmOutcome: "completed",
+      responseStatus: 201,
+      durationMs: 42,
+    });
+    expect(
+      store.get<{ duration_ms: number; response_status: number }>(
+        `SELECT response_status, duration_ms
+         FROM request_log
+         WHERE id = ?`,
+        "req_llm_1"
+      )
+    ).toEqual({
+      response_status: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      duration_ms: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+    });
+    expect(
+      store.get<{
+        duration_ms: number;
+        llm_outcome: string;
+        response_status: number;
+      }>(
+        `SELECT llm_outcome, response_status, duration_ms
+         FROM request_log_llm_terminal
+         WHERE request_id = ?`,
+        "req_llm_1"
+      )
+    ).toEqual({
+      llm_outcome: "completed",
+      response_status: 201,
+      duration_ms: 42,
+    });
+    expect(
+      engine.finalizeLlmObservation("req_llm_1", {
+        llmOutcome: "completed",
+        responseStatus: 201,
+        durationMs: 42,
+      })
+    ).toEqual(completed);
+    expect(() =>
+      engine.finalizeLlmObservation("req_llm_1", {
+        llmOutcome: "failed",
+        responseStatus: 500,
+        durationMs: 42,
+      })
+    ).toThrow(RequestLogLlmFinalizationConflictError);
+    expect(
+      store.get<{ sequence: number }>(
+        "SELECT sequence FROM request_log WHERE id = ?",
+        "req_llm_1"
+      )?.sequence
+    ).toBe(sequenceBefore);
+    expect(
+      store.get<{ count: number }>(
+        "SELECT count(*) AS count FROM request_log_llm_terminal"
+      )
+    ).toEqual({ count: 1 });
+    expect(
+      engine.getRequestLog({
+        status: 201,
+        llmOutcome: "completed",
+        llmStream: false,
+        llmTurnIndex: 0,
+        limit: 10,
+      }).entries
+    ).toMatchObject([
+      {
+        id: "req_llm_1",
+        responseStatus: 201,
+        durationMs: 42,
+        llmOutcome: "completed",
+      },
+    ]);
+    expect(
+      engine.assertRequests({
+        sequence: [
+          { source: "control", path: "/before" },
+          {
+            llmDialect: "openai",
+            llmOutcome: "completed",
+            llmToolNames: ["lookup", "finish"],
+          },
+        ],
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({
+      pass: true,
+      matched: 1,
+      requestIds: ["before-llm", "req_llm_1"],
+    });
+  });
+
+  it("stores mutually exclusive LLM error metadata and filters terminal failures", async () => {
+    const store = memoryStore();
+    const engine = Engine.create(
+      { provider: "entra", seed: "llm-error-log", requestLogLimit: 10 },
+      { store, clock: new FixedClock("2026-07-22T12:00:00.000Z") }
+    );
+    await engine.initialize();
+    const response = llmResponseLogEntry({
+      id: "req_llm_error",
+      dialect: "anthropic",
+      stream: true,
+      turnIndex: 1,
+    });
+    engine.reserveLlmObservation({
+      ...response,
+      llmInputTokens: undefined,
+      llmOutputTokens: undefined,
+      llmStopReason: undefined,
+      llmToolNames: undefined,
+      llmResponseId: undefined,
+      llmErrorKind: "rate_limit",
+    });
+    engine.finalizeLlmObservation("req_llm_error", {
+      llmOutcome: "failed",
+      responseStatus: 429,
+      durationMs: 0,
+    });
+
+    const entries = engine.getRequestLog({
+      llmDialect: "anthropic",
+      llmOperation: "messages.create",
+      llmStream: true,
+      llmTurnIndex: 1,
+      llmOutcome: "failed",
+      llmErrorKind: "rate_limit",
+      limit: 10,
+    }).entries;
+    expect(entries).toMatchObject([
+      {
+        id: "req_llm_error",
+        llmOutcome: "failed",
+        llmErrorKind: "rate_limit",
+        durationMs: 0,
+      },
+    ]);
+    expect(entries[0]).not.toHaveProperty("llmResponseId");
+    expect(
+      engine.assertRequests({
+        llmDialect: "anthropic",
+        llmOutcome: "failed",
+        llmErrorKind: "rate_limit",
+        count: { exactly: 1 },
+      })
+    ).toMatchObject({
+      pass: true,
+      matched: 1,
+      requestIds: ["req_llm_error"],
+    });
+  });
+
+  it("cascades trimmed LLM terminals and never resurrects a trimmed reservation", () => {
+    const store = memoryStore();
+    applyMigrations(store);
+    const service = new RequestLogService({ store, limit: 1 });
+    service.reserveLlmObservation(
+      llmResponseLogEntry({
+        id: "trimmed-llm",
+        dialect: "openai",
+        stream: true,
+        turnIndex: 0,
+      })
+    );
+    service.finalizeLlmObservation("trimmed-llm", {
+      llmOutcome: "cancelled",
+      responseStatus: 200,
+      durationMs: 9,
+    });
+    service.append(
+      logEntry({
+        id: "retained-request",
+        source: "control",
+        method: "GET",
+        path: "/retained",
+        requestBody: null,
+        responseStatus: 200,
+      })
+    );
+
+    expect(service.query({ limit: 10 }).entries.map(({ id }) => id)).toEqual([
+      "retained-request",
+    ]);
+    expect(
+      store.get<{ count: number }>(
+        "SELECT count(*) AS count FROM request_log_llm_terminal"
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      service.finalizeLlmObservation("trimmed-llm", {
+        llmOutcome: "cancelled",
+        responseStatus: 200,
+        durationMs: 9,
+      })
+    ).toBeUndefined();
+    expect(
+      store.get<{ count: number }>(
+        "SELECT count(*) AS count FROM request_log_llm_terminal"
+      )
+    ).toEqual({ count: 0 });
   });
 
   it("trims transactionally and paginates newest-first with bound opaque cursors", async () => {
@@ -602,6 +944,20 @@ describe("request log service", () => {
     });
     expect(second.entries.map(({ id }) => id)).toEqual(["request-3"]);
     expect(second.nextCursor).toBeUndefined();
+    expect(
+      engine
+        .getRequestLog({
+          source: "inbound",
+          method: "POST",
+          path: "/oauth2/default/v1/token",
+          limit: 1,
+          // Encoded by the schema-v7 filter fingerprint before LLM matchers
+          // existed. No-LLM queries intentionally keep this cursor contract.
+          cursor:
+            "eyJiZWZvcmUiOjUsImNoZWNrIjoiMjMuMmMyOTUwY2VhNmE0NzE2NSIsImZpbHRlciI6IjQ0LjExNTkzY2Q4OTFlZmRkYzUiLCJ2IjoxfQ",
+        })
+        .entries.map(({ id }) => id)
+    ).toEqual(["request-3"]);
 
     expect(() =>
       engine.getRequestLog({ limit: 1, cursor: "not-a-valid-cursor!" })

@@ -1995,7 +1995,7 @@ invented HTTP path.
 
 ### `get_request_log`
 
-**Get request log.** Returns a filtered page of inbound, outbound, or control traffic for an environment.
+**Get request log.** Returns a filtered page of inbound, outbound, or control traffic, including structured mock-LLM lifecycle observations without prompts, credentials, headers, or bodies.
 
 - Scope metadata: `env:ro`
 - Effect: `read`
@@ -2027,6 +2027,103 @@ invented HTTP path.
       "default": 100,
       "maximum": 1000,
       "minimum": 1,
+      "type": "integer"
+    },
+    "llmDialect": {
+      "enum": [
+        "openai",
+        "anthropic"
+      ],
+      "type": "string"
+    },
+    "llmErrorKind": {
+      "enum": [
+        "invalid_request",
+        "authentication",
+        "permission_denied",
+        "not_found",
+        "request_too_large",
+        "rate_limit",
+        "timeout",
+        "internal",
+        "overloaded"
+      ],
+      "type": "string"
+    },
+    "llmInputTokens": {
+      "maximum": 1000000000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "llmModel": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[\\x21-\\x7e]+$",
+      "type": "string"
+    },
+    "llmOperation": {
+      "enum": [
+        "chat.completions.create",
+        "messages.create"
+      ],
+      "type": "string"
+    },
+    "llmOutcome": {
+      "enum": [
+        "pending",
+        "completed",
+        "cancelled",
+        "deadline_exceeded",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "llmOutputTokens": {
+      "maximum": 1000000000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "llmResponseId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "llmServerRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "llmServerSlug": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "type": "string"
+    },
+    "llmStopReason": {
+      "enum": [
+        "end_turn",
+        "max_tokens",
+        "stop_sequence",
+        "tool_use"
+      ],
+      "type": "string"
+    },
+    "llmStream": {
+      "type": "boolean"
+    },
+    "llmToolNames": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "llmTurnIndex": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
       "type": "integer"
     },
     "mcpMethod": {
@@ -2068,6 +2165,13 @@ invented HTTP path.
         },
         {
           "const": "mcp",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
           "type": "string"
         }
       ]
@@ -2153,6 +2257,103 @@ invented HTTP path.
                 "minLength": 1,
                 "type": "string"
               },
+              "llmDialect": {
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "type": "string"
+              },
+              "llmErrorKind": {
+                "enum": [
+                  "invalid_request",
+                  "authentication",
+                  "permission_denied",
+                  "not_found",
+                  "request_too_large",
+                  "rate_limit",
+                  "timeout",
+                  "internal",
+                  "overloaded"
+                ],
+                "type": "string"
+              },
+              "llmInputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmModel": {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "type": "string"
+              },
+              "llmOperation": {
+                "enum": [
+                  "chat.completions.create",
+                  "messages.create"
+                ],
+                "type": "string"
+              },
+              "llmOutcome": {
+                "enum": [
+                  "pending",
+                  "completed",
+                  "cancelled",
+                  "deadline_exceeded",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "llmOutputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmResponseId": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "llmServerRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "llmServerSlug": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "llmStopReason": {
+                "enum": [
+                  "end_turn",
+                  "max_tokens",
+                  "stop_sequence",
+                  "tool_use"
+                ],
+                "type": "string"
+              },
+              "llmStream": {
+                "type": "boolean"
+              },
+              "llmToolNames": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "llmTurnIndex": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "mcpArguments": {
                 "additionalProperties": {
                   "$ref": "#/definitions/__schema0"
@@ -2209,6 +2410,13 @@ invented HTTP path.
                   },
                   {
                     "const": "mcp",
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "openai",
+                      "anthropic"
+                    ],
                     "type": "string"
                   }
                 ]
@@ -2327,7 +2535,7 @@ invented HTTP path.
 
 ### `assert_requests`
 
-**Assert captured requests.** Evaluates a deterministic assertion against captured environment traffic.
+**Assert captured requests.** Evaluates deterministic count or ordered-sequence assertions against captured environment traffic and structured mock-LLM metadata.
 
 - Scope metadata: `env:ro`
 - Effect: `read`
@@ -2412,6 +2620,103 @@ invented HTTP path.
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
       "type": "string"
     },
+    "llmDialect": {
+      "enum": [
+        "openai",
+        "anthropic"
+      ],
+      "type": "string"
+    },
+    "llmErrorKind": {
+      "enum": [
+        "invalid_request",
+        "authentication",
+        "permission_denied",
+        "not_found",
+        "request_too_large",
+        "rate_limit",
+        "timeout",
+        "internal",
+        "overloaded"
+      ],
+      "type": "string"
+    },
+    "llmInputTokens": {
+      "maximum": 1000000000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "llmModel": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[\\x21-\\x7e]+$",
+      "type": "string"
+    },
+    "llmOperation": {
+      "enum": [
+        "chat.completions.create",
+        "messages.create"
+      ],
+      "type": "string"
+    },
+    "llmOutcome": {
+      "enum": [
+        "pending",
+        "completed",
+        "cancelled",
+        "deadline_exceeded",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "llmOutputTokens": {
+      "maximum": 1000000000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "llmResponseId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "llmServerRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "llmServerSlug": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "type": "string"
+    },
+    "llmStopReason": {
+      "enum": [
+        "end_turn",
+        "max_tokens",
+        "stop_sequence",
+        "tool_use"
+      ],
+      "type": "string"
+    },
+    "llmStream": {
+      "type": "boolean"
+    },
+    "llmToolNames": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "llmTurnIndex": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
     "mcpArguments": {
       "additionalProperties": {
         "$ref": "#/definitions/__schema0"
@@ -2457,6 +2762,103 @@ invented HTTP path.
             "maxLength": 8192,
             "minLength": 1,
             "type": "string"
+          },
+          "llmDialect": {
+            "enum": [
+              "openai",
+              "anthropic"
+            ],
+            "type": "string"
+          },
+          "llmErrorKind": {
+            "enum": [
+              "invalid_request",
+              "authentication",
+              "permission_denied",
+              "not_found",
+              "request_too_large",
+              "rate_limit",
+              "timeout",
+              "internal",
+              "overloaded"
+            ],
+            "type": "string"
+          },
+          "llmInputTokens": {
+            "maximum": 1000000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "llmModel": {
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "type": "string"
+          },
+          "llmOperation": {
+            "enum": [
+              "chat.completions.create",
+              "messages.create"
+            ],
+            "type": "string"
+          },
+          "llmOutcome": {
+            "enum": [
+              "pending",
+              "completed",
+              "cancelled",
+              "deadline_exceeded",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "llmOutputTokens": {
+            "maximum": 1000000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "llmResponseId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "llmServerRevision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "llmServerSlug": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+            "type": "string"
+          },
+          "llmStopReason": {
+            "enum": [
+              "end_turn",
+              "max_tokens",
+              "stop_sequence",
+              "tool_use"
+            ],
+            "type": "string"
+          },
+          "llmStream": {
+            "type": "boolean"
+          },
+          "llmToolNames": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "llmTurnIndex": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "mcpArguments": {
             "additionalProperties": {
@@ -8714,8 +9116,8 @@ invented HTTP path.
   Unknown top-level put arguments fail with a secret-safe generic issue, and any
   definition JSON key or string value containing the platform Access Key as a
   substring is rejected at both Worker ingress and the Environment Durable Object.
-- Schema v7 upgrades v6 stores; an older v6 bundle explicitly refuses a store
-  already touched by the newer schema v7, so rollback requires forward recovery.
+- Schema v8 upgrades v7 stores; an older v7 bundle explicitly refuses a store
+  already touched by the newer schema v8, so rollback requires forward recovery.
 - MCP is the only current configuration interface. Applications under test call
   the separate provider-shaped environment data plane; those provider operations
   never enter the five-route management OpenAPI projection.
@@ -8760,8 +9162,28 @@ invented HTTP path.
   selected plan in the Environment Durable Object before returning it to the edge.
   Persisted conversation/evaluator state and abort-aware state rollback remain
   unimplemented and require a separately qualified state design.
+- Successfully parsed and planned Chat Completions and Messages POSTs that pass
+  response serialization/SSE preflight reserve one metadata-only request-log row
+  as `pending` before provider delay or response headers. Terminal finalization
+  overlays that same logical row as `completed`, `cancelled`,
+  `deadline_exceeded`, or `failed` without changing append order.
+- Actual delivered `responseStatus` and `durationMs` are written only by terminal
+  finalization. Pending reads expose `102` and `0` compatibility sentinels for
+  legacy non-null columns; those values are not delivery metadata.
+- Existing `get_request_log` and `assert_requests` inputs accept exact LLM
+  dialect, operation, slug, selected server revision, model, stream, turn,
+  outcome, response ID, usage, stop reason, ordered tool-name, and error-kind
+  matchers. Ordered sequence assertions retain their greedy-earliest,
+  non-overlapping append-order semantics.
+- LLM observations store empty request/response headers and null bodies. They
+  never persist prompts, outputs, credentials, headers, tool inputs, `planId`, or
+  `requestHash`. Stream frame and byte counts are internal test accounting only;
+  they are not persisted, returned, queryable, or assertable metadata.
+- Reservation and finalization are fail-open best-effort evidence. A storage
+  failure never changes a valid provider response, so a row can be absent or
+  remain `pending`; this is not a complete audit guarantee.
 - Beta APIs, OpenAI Responses, durable conversation state, configured mid-stream
-  errors, observations/assertions, Cloud pinning, hosted deployment, and
+  errors, actual-network qualification, Cloud pinning, hosted deployment, and
   live-provider parity remain unqualified or unavailable.
 - Deployed acceptance remains `unqualified`.
 - Use [the mock LLM guide](../mock-llm.md) for the exact definition, revision,
@@ -8770,10 +9192,11 @@ invented HTTP path.
   [Anthropic](./mock-llm-anthropic.v1.json) provider manifests are generated from
   executable limits and operation metadata.
 
-## Unavailable MCP surfaces
+## Unavailable F2 surfaces
 
-- OpenAI Responses, Anthropic betas, durable conversations, and
-  LLM-specific observation/assertion MCP surfaces remain unavailable.
+- OpenAI Responses, Anthropic betas, durable conversations, and dedicated new
+  LLM-only management tools remain unavailable. Bounded LLM observation uses the
+  existing `get_request_log` and `assert_requests` management tools.
 - Code Mode `search` and `execute` are planned for F6 and remain disabled.
 
 Use [implementation status](../IMPLEMENTATION_STATUS.md) for evidence and the

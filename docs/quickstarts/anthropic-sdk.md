@@ -370,9 +370,13 @@ post-header cancellation does not roll back the already completed plan commit.
 
 The current provider slice has no beta APIs, multimodal input, thinking, sampling
 controls, stop sequences, metadata, built-in/server tools, non-auto tool choice,
-configured midstream errors, durable conversation/evaluator state, reset, or
-LLM-specific observations/assertions. Model-list pagination query parameters are
-ignored and the response is always one page. Required `max_tokens` is validated from
+configured midstream errors, durable conversation/evaluator state, or reset.
+Successfully parsed/planned calls that pass response preflight attempt a metadata-only
+request-log reservation within a 50-millisecond fail-open budget; prospective
+metadata/credential collisions skip it. Use the
+[`get_request_log`/`assert_requests` guide](../mock-llm.md#observe-and-assert-provider-calls)
+for exact matchers and its privacy/evidence boundary. Model-list pagination query
+parameters are ignored and the response is always one page. Required `max_tokens` is validated from
 `1` through `1,000,000,000` and enters the deterministic fingerprint; `max_tokens`
 does not truncate a configured response plan.
 

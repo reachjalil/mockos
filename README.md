@@ -23,13 +23,18 @@
 > suites and the complete repository `pnpm check` gate are green. Hosted CI/merge,
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
-> MCP-only mock-LLM definition operations with environment-local schema-v7 persistence
+> MCP-only mock-LLM definition operations with environment-local schema-v8 persistence
 > and write-only provider keys plus bounded OpenAI Chat Completions JSON/SSE and
 > Anthropic Messages/model JSON/SSE data planes. Package tests and local Worker
 > integrations through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify
-> that bounded source slice. Configured midstream errors, the OpenAI Responses API,
-> Anthropic betas, conversation state, observations/assertions, and complete
-> F2 remain unavailable. The guarded GitHub promotion
+> that bounded source slice. Successfully parsed/planned provider POSTs that pass
+> response preflight attempt one metadata-only request-log reservation within a
+> 50-millisecond fail-open budget; prospective metadata/credential collisions skip
+> it. The existing management MCP tools query and assert persisted lifecycle fields. Prompts,
+> outputs, headers, credentials, tool inputs, stream frame/byte counts, `planId`, and
+> `requestHash` are not captured. Configured midstream errors, the OpenAI Responses
+> API, Anthropic betas, conversation state, actual-network/hosted qualification, and
+> complete F2 remain unavailable. The guarded GitHub promotion
 > workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
@@ -67,8 +72,11 @@ management MCP. The separate F2 data plane now source-qualifies OpenAI model
 list/retrieve and Chat Completions as JSON or bounded SSE plus Anthropic model
 list/retrieve and Messages as JSON or named-event bounded SSE at environment routes
 through pinned official SDKs. Configured midstream errors, the OpenAI Responses API,
-Anthropic betas, conversation state, LLM observations/assertions, script execution,
-enforced scoped keys, Cloud integration, and deployment remain unavailable. Start with
+Anthropic betas, conversation state, script execution, enforced scoped keys, Cloud
+integration, and deployment remain unavailable. Successfully parsed/planned provider
+POSTs that pass response preflight do produce bounded metadata-only observations for
+the existing `get_request_log` and `assert_requests` tools; delivery is fail-open and
+not an audit guarantee. Start with
 the [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md), and use the
 [partial F2 LLM record](./docs/f-series/f2-llm-kernel.md) for architecture and exact
@@ -145,7 +153,7 @@ private control plane, licensing, billing, or a hosted mockOS account.
   behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
   JSON/SSE-frame renderers, pinned official-SDK consumption through injected
   in-process Fetch, strict server-definition contracts, four MCP-only management
-  operations, schema-v7 environment persistence, mandatory revision
+  operations, schema-v8 environment persistence, mandatory revision
   compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
   request adapters. Local Worker integrations configure through MCP and exercise
   official SDK model list/retrieve, JSON text/tool/error calls, bounded OpenAI and
@@ -154,10 +162,15 @@ private control plane, licensing, billing, or a hosted mockOS account.
   transport identity. Both streams perform a complete 2 MiB UTF-8/schedule preflight,
   pace payload deltas only, and enforce one absolute initial-wait/pacing/backpressure
   deadline. Anthropic uses named events ending in `message_stop`, with no `[DONE]`.
+  Successfully parsed/planned provider POSTs that pass response preflight attempt one
+  metadata-only reservation within a 50-millisecond fail-open budget; prospective
+  metadata/credential collisions skip it. In-budget rows append-once finalize as
+  `completed`, `cancelled`, `deadline_exceeded`, or `failed`; exact
+  query/count/ordered-sequence matchers run through existing management MCP. This is fail-open evidence, excludes provider
+  payloads and internal stream frame/byte counts, and is not an audit trail.
   Configured midstream errors, OpenAI Responses, Anthropic betas,
-  runtime/conversation state, reset, LLM
-  observation/assertion, Wrangler-network or deployed conformance, and Cloud pinning
-  remain unavailable
+  runtime/conversation state, reset, Wrangler-network or deployed conformance, and
+  Cloud pinning remain unavailable
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation

@@ -16,7 +16,10 @@ import {
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  REQUEST_LOG_LLM_PENDING_DURATION_MS,
+  REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
   requestLogEntrySchema,
+  requestLogLlmFinalizationSchema,
   SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
@@ -171,6 +174,162 @@ describe("wire contracts", () => {
         mcpErrorCode: -32_801,
       })
     ).toThrow();
+  });
+
+  it("accepts structured response and error LLM observations without bodies", () => {
+    const response = requestLogEntrySchema.parse({
+      id: "req_openai_1",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "openai",
+      protocol: "http",
+      method: "post",
+      path: "/llm-mock/assistant/v1/chat/completions",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+      correlationId: "req_openai_1",
+      llmDialect: "openai",
+      llmOperation: "chat.completions.create",
+      llmServerSlug: "assistant",
+      llmServerRevision: 1,
+      llmModel: "gpt-mock",
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmOutcome: "pending",
+      llmResponseId: "chatcmpl-response-1",
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmStopReason: "end_turn",
+      llmToolNames: [],
+    });
+    expect(response).toMatchObject({
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmToolNames: [],
+    });
+    const { llmResponseId: _responseId, ...responseWithoutId } = response;
+    const configuredErrorEntry = requestLogEntrySchema.parse({
+      ...responseWithoutId,
+      id: "req_anthropic_1",
+      provider: "anthropic",
+      path: "/llm-mock/assistant/v1/messages",
+      correlationId: "req_anthropic_1",
+      llmDialect: "anthropic",
+      llmOperation: "messages.create",
+      llmInputTokens: undefined,
+      llmOutputTokens: undefined,
+      llmStopReason: undefined,
+      llmToolNames: undefined,
+      llmErrorKind: "rate_limit",
+    });
+    expect(configuredErrorEntry.llmErrorKind).toBe("rate_limit");
+    expect(configuredErrorEntry).not.toHaveProperty("llmResponseId");
+    expect(
+      requestLogLlmFinalizationSchema.parse({
+        llmOutcome: "cancelled",
+        responseStatus: 200,
+        durationMs: 0,
+      })
+    ).toEqual({
+      llmOutcome: "cancelled",
+      responseStatus: 200,
+      durationMs: 0,
+    });
+  });
+
+  it("rejects incomplete, mixed, secret-bearing, or dialect-inconsistent LLM metadata", () => {
+    const base = {
+      id: "req_openai_invalid",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "openai",
+      protocol: "http",
+      method: "POST",
+      path: "/llm-mock/assistant/v1/chat/completions",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+      correlationId: "req_openai_invalid",
+      llmDialect: "openai",
+      llmOperation: "chat.completions.create",
+      llmServerSlug: "assistant",
+      llmServerRevision: 1,
+      llmModel: "gpt-mock",
+      llmStream: true,
+      llmTurnIndex: 0,
+      llmOutcome: "pending",
+      llmResponseId: "chatcmpl-response-invalid",
+      llmInputTokens: 1,
+      llmOutputTokens: 2,
+      llmStopReason: "end_turn",
+      llmToolNames: [],
+    } as const;
+
+    for (const invalid of [
+      { ...base, llmModel: undefined },
+      { ...base, provider: "anthropic" },
+      { ...base, llmOperation: "messages.create" },
+      { ...base, protocol: "mcp" },
+      { ...base, mcpMethod: "tools/call", mcpTool: "lookup" },
+      { ...base, llmErrorKind: "rate_limit" },
+      { ...base, llmResponseId: undefined },
+      { ...base, llmOutputTokens: undefined },
+      { ...base, responseStatus: 200 },
+      { ...base, durationMs: 1 },
+      { ...base, requestHeaders: { authorization: "secret" } },
+      { ...base, requestBody: '{"messages":["secret"]}' },
+      { ...base, responseBody: '{"answer":"secret"}' },
+    ]) {
+      expect(() => requestLogEntrySchema.parse(invalid)).toThrow();
+    }
+    expect(() =>
+      requestLogLlmFinalizationSchema.parse({
+        llmOutcome: "pending",
+        responseStatus: 200,
+        durationMs: 0,
+      })
+    ).toThrow();
+  });
+
+  it("preserves false and zero values in LLM query and assertion matchers", () => {
+    expect(
+      getRequestLogToolInputSchema.parse({
+        llmDialect: "openai",
+        llmStream: false,
+        llmTurnIndex: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+      })
+    ).toMatchObject({
+      llmDialect: "openai",
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+    });
+    expect(
+      assertionSpecSchema.parse({
+        llmStream: false,
+        llmTurnIndex: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        sequence: [{ llmOutcome: "completed" }, { llmToolNames: ["lookup", "finish"] }],
+      })
+    ).toMatchObject({
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+    });
   });
 
   it("bounds management pages and keeps application listings secret-free", () => {

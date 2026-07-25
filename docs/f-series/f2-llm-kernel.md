@@ -1,18 +1,21 @@
 # F2 LLM kernel and provider source slice
 
-Status: Partial source-qualified OpenAI and Anthropic JSON/SSE data planes; configured midstream errors, state, observations, Cloud, and deployment remain open
+Status: Partial source-qualified OpenAI and Anthropic JSON/SSE plus metadata-only observation/query/assertion; configured midstream errors, state, network, Cloud, and deployment remain open
 Last reviewed: 2026-07-25
 
 This slice establishes both a provider-neutral seam for deterministic mock LLM
 responses and an MCP-first configuration substrate for environment-hosted servers.
 One normalized behavior result becomes one validated response plan and then
 provider-shaped OpenAI or Anthropic JSON/SSE frames. Strict server
-definitions, four MCP-only operations, environment-local schema-v7 persistence,
+definitions, four MCP-only operations, environment-local schema-v8 persistence,
 mandatory revision compare-and-swap, and write-only provider credential views own
 configuration. Separate bounded OpenAI and Anthropic request adapters plus the shared
 environment runtime now serve model list/retrieve, OpenAI Chat Completions as JSON or
 timed SSE, and Anthropic Messages as JSON or named-event timed SSE to applications or
-SDKs.
+SDKs. Successfully parsed/planned provider POSTs that pass response preflight attempt
+one metadata-only request-log reservation within a 50-millisecond fail-open budget;
+privacy collisions skip it, and successfully persisted rows can be queried or
+asserted through the existing management MCP tools.
 
 Read this page as a source-architecture and evidence record. The complete F2 target
 remains in the [F-series roadmap](../F_SERIES_ROADMAP.md), and the current negative
@@ -37,7 +40,9 @@ machine-readable operation, limit, auth, planning, and evidence truth.
   persisted credential verifiers.
 - Four management MCP operations create/list/get/delete definitions inside a named or
   session-selected environment.
-- Schema v7 persists canonical definitions and monotonic revisions transactionally;
+- Schema v8 retains schema-v7 canonical definitions and monotonic revisions, then
+  adds structured LLM metadata plus an append-once terminal overlay to the existing
+  request log;
   changed replacements require the current revision while canonical retries are
   idempotent. Replacement is full-definition and requires every enabled strict key to
   be resupplied or rotated; delete requires positive revision CAS.
@@ -67,6 +72,30 @@ machine-readable operation, limit, auth, planning, and evidence truth.
   without early exit, derives stateless turns from prior assistant messages, and
   rechecks the definition revision before committing the plan inside the Environment
   Durable Object and returning it to the edge.
+- Successfully parsed/planned Chat Completions and Messages POSTs that pass JSON/SSE
+  response preflight reserve one `pending`, metadata-only request-log entry before
+  provider delay or response headers. Reservation wait is capped at 50 milliseconds;
+  failure, timeout, or a prospective metadata/credential collision cannot delay or
+  alter the provider response. A non-cancellable hook can still create a late
+  `pending` row after timeout. Terminal completion overlays an in-budget reservation
+  as `completed`, `cancelled`, `deadline_exceeded`, or `failed`, preserving its append
+  sequence and exact selected server revision. Actual delivered status and monotonic
+  elapsed duration enter only the terminal child; pending reads use explicit `102`
+  and `0` compatibility sentinels for the legacy non-null columns.
+- `get_request_log` and `assert_requests` support exact LLM dialect, operation, slug,
+  revision, model, stream, turn, outcome, response ID, usage, stop-reason,
+  ordered-tool-name, and configured-error matchers, including the existing
+  greedy-earliest non-overlapping sequence semantics. Stream is accepted request
+  intent, not proof of SSE delivery; configured errors can retain `true` while
+  returning JSON. Response IDs are preallocated response-plan metadata and are
+  omitted for configured errors.
+- Observation storage is fail-open and metadata-only. It stores empty headers and
+  null bodies, never prompts, outputs, credentials, tool inputs, `planId`, or
+  `requestHash`. A request-local guard skips the whole observation when the presented
+  Mock Credential or platform key collides with any prospective durable metadata,
+  including routed path, operation, slug/model/IDs, revision, pending sentinels,
+  terminal outcomes, status, or duration. Stream frame/byte counts remain internal
+  test accounting and are not persisted or queryable.
 - Local Worker integrations configure isolated environments through MCP and
   drive model, text, tool, usage, error, credential-rotation, and secret-safety cases
   through pinned official `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0; the OpenAI
@@ -79,9 +108,9 @@ hosted CI, deployed, production, or live-provider evidence.
 ## What is not available
 
 There is no mock-LLM management HTTP route, CLI command, console workflow,
-conversation/evaluator state, reset operation, configured
-midstream error, OpenAI Responses API, LLM observation/assertion support, Wrangler
-network qualification, Cloud pin, or deployed endpoint in this slice.
+conversation/evaluator state, reset operation, configured midstream error, OpenAI
+Responses API, actual Wrangler-network qualification, Cloud pin, or deployed endpoint
+in this slice.
 
 In particular:
 
@@ -105,8 +134,9 @@ In particular:
   `x-api-key` as exact pre-dispatch boundaries;
 - `turnIndex` is the stateless count of prior assistant messages; there is no response
   or conversation-state owner, retry-deduplication record, or implicit session;
-- provider traffic is not yet captured as an LLM-specific observation and cannot be
-  asserted through the request-log tools; and
+- only successfully parsed/planned Chat Completions/Messages POSTs whose response
+  preflight passes are observed; catalog/auth/version/parse/model-selection/planning
+  and response-preflight failures are outside this bounded evidence contract; and
 - the local official-SDK Worker integration proves the routed source composition,
   not a real socket, Wrangler dev server, hosted endpoint, or broad SDK matrix.
 
@@ -133,6 +163,10 @@ environment path/subdomain router
       │
       ▼
 official OpenAI/Anthropic SDK Worker tests
+             │
+             ▼
+ one attempted metadata-only request-log row
+ get_request_log / assert_requests
 
 management agent
        │
@@ -140,7 +174,7 @@ management agent
  four MCP-only definition tools
        │
        ▼
- schema-v7 definition repository
+ schema-v8 environment repository
 ```
 
 The management branch is composed through the Environment Durable Object and persists
@@ -148,7 +182,10 @@ configuration, not responses. The provider branch authenticates and plans in the
 environment, commits the plan there after its final revision check, then lets the edge
 own initial delay, rendering, and timed streaming for both dialects. The pure
 serializers remain in-process projection seams; both HTTP adapters pass their
-payload/immediate cadence metadata to the same edge scheduler.
+payload/immediate cadence metadata to the same edge scheduler. After response
+preflight, the edge uses the exact revision returned with that plan to reserve the
+observation in the same Environment Durable Object and later best-effort finalizes its
+terminal status and duration.
 
 ## Source ownership
 
@@ -156,19 +193,22 @@ payload/immediate cadence metadata to the same edge scheduler.
 | --- | --- | --- |
 | [`packages/contracts/src/mock-llm.ts`](../../packages/contracts/src/mock-llm.ts) | Provider-neutral segment, stop, usage, cadence, error, and response-plan validation | Provider JSON, request parsing, routing, storage, or private policy |
 | [`packages/contracts/src/mock-llm-server.ts`](../../packages/contracts/src/mock-llm-server.ts) | Strict write/persisted/safe-view server definitions, model/dialect bounds, and provider-key separation | Provider routing |
+| [`packages/contracts/src/index.ts`](../../packages/contracts/src/index.ts) | Structured LLM request-log entries, terminal outcomes, exact query/count/sequence matcher schemas, and privacy invariants | Provider rendering or durable storage |
 | [`packages/contracts/src/operations/management.ts`](../../packages/contracts/src/operations/management.ts) | Four MCP-only definition operations and exact effect/retry/secret metadata | Self-hosted HTTP routes |
 | [`packages/core/src/behavior/evaluator.ts`](../../packages/core/src/behavior/evaluator.ts) | Deterministic `BehaviorSpec` evaluation and staged sequence semantics | LLM dialect decisions |
 | [`packages/core/src/mock-llm/repository.ts`](../../packages/core/src/mock-llm/repository.ts) | Canonical definition writes, monotonic revision allocation, compare-and-swap, replay, and limits | Conversation, response-plan, or evaluator state |
-| [`packages/core/src/store/migrations.ts`](../../packages/core/src/store/migrations.ts) | Append-only schema-v7 definition and revision tables | A rollback/downgrade migration |
+| [`packages/core/src/store/migrations.ts`](../../packages/core/src/store/migrations.ts) | Append-only schema-v7 definition/revision tables plus schema-v8 structured observation columns and terminal child table | A rollback/downgrade migration |
+| [`packages/core/src/log/request-log.ts`](../../packages/core/src/log/request-log.ts) | One-row pending reservation, append-once terminal overlay, exact LLM query/assertion matching, retention, and stable sequence | Guaranteed audit delivery |
 | [`packages/llm-mock/src/planner.ts`](../../packages/llm-mock/src/planner.ts) | Convert credential-free normalized request material and a behavior result into a validated neutral plan | Persistence ownership or request authentication |
 | [`packages/llm-mock/src/openai.ts`](../../packages/llm-mock/src/openai.ts) | Pure Chat Completions JSON/error rendering plus complete SSE-frame serialization with payload/immediate cadence metadata | HTTP request parsing, authentication, timed network delivery, or backpressure |
 | [`packages/llm-mock/src/edge-stream.ts`](../../packages/llm-mock/src/edge-stream.ts) | Provider-neutral precomputed SSE byte validation, pre-header initial wait, payload-only pacing, one absolute deadline, backpressure-aware writes, and cancellation truncation | Provider parsing, fabricated terminal recovery, or configured midstream errors |
-| [`packages/llm-mock/src/openai-http.ts`](../../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded JSON/SSE request/model adapter, strict stream options, local provider errors, declared-tool check, fresh transport identity, response ceiling, and edge-stream composition | Anthropic, state, observations, Responses API, or broad OpenAI parameters |
+| [`packages/llm-mock/src/observation.ts`](../../packages/llm-mock/src/observation.ts) | Metadata-only reserve/finalize event contract plus fail-open Worker-lifetime scheduling | Persistence, retries, or audit guarantees |
+| [`packages/llm-mock/src/openai-http.ts`](../../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded JSON/SSE request/model adapter, strict stream options, local provider errors, declared-tool check, fresh transport identity, response ceiling, edge-stream composition, and observation lifecycle emission | Anthropic, state, Responses API, or broad OpenAI parameters |
 | [`packages/llm-mock/src/anthropic.ts`](../../packages/llm-mock/src/anthropic.ts) | Pure Messages JSON/error rendering and named SSE-frame serialization with payload/immediate cadence metadata | Version-header enforcement, authentication, timed network delivery, or backpressure |
-| [`packages/llm-mock/src/anthropic-http.ts`](../../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, exact version/auth boundary, bounded request/model adapter, local provider errors, declared-tool check, fresh IDs, response ceiling, and edge-stream composition | Betas, state, observations, or broad Anthropic parameters |
+| [`packages/llm-mock/src/anthropic-http.ts`](../../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, exact version/auth boundary, bounded request/model adapter, local provider errors, declared-tool check, fresh IDs, response ceiling, edge-stream composition, and observation lifecycle emission | Betas, state, or broad Anthropic parameters |
 | [`packages/mcp/src/index.ts`](../../packages/mcp/src/index.ts) and management worker-kit seams | Management registration, environment existence/isolation, provider-key hashing, safe views, and stable problem mapping | Provider HTTP as a configuration interface |
-| [`packages/worker-kit/src/mock-llm-runtime.ts`](../../packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition auth, stateless planning, secret rejection, revision recheck, and plan commit inside the Environment Durable Object before edge return | Conversation state, retries across invocations, or observations |
-| [`packages/worker-kit/src/host-resolver.ts`](../../packages/worker-kit/src/host-resolver.ts) and [`edge-router.ts`](../../packages/worker-kit/src/edge-router.ts) | Exact environment route classification, trusted metadata replacement, EnvironmentDO RPC, and provider-handler composition | Wildcard TLS, hosted policy, or provider stream policy |
+| [`packages/worker-kit/src/mock-llm-runtime.ts`](../../packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition auth, stateless planning, secret rejection, revision recheck, exact selected-revision return, and plan commit inside the Environment Durable Object before edge return | Conversation state or retries across invocations |
+| [`packages/worker-kit/src/host-resolver.ts`](../../packages/worker-kit/src/host-resolver.ts), [`edge-router.ts`](../../packages/worker-kit/src/edge-router.ts), and [`environment-do.ts`](../../packages/worker-kit/src/environment-do.ts) | Exact environment route classification, trusted metadata replacement, provider-handler composition, revision-bound observation reservation, and terminal persistence | Wildcard TLS, hosted policy, guaranteed audit delivery, or provider stream policy |
 | Official-SDK source tests | Exercise pure OpenAI/Anthropic deserialization and both bounded local Worker routes with inert test credentials | Wrangler network routing, real sockets, remote providers, or broad SDK conformance |
 
 The public repository owns these reusable contracts and pure provider dialects. The
@@ -385,7 +425,12 @@ mockOS management remains MCP-first. The current source adds
 environment-local definitions. The [task guide](../mock-llm.md) documents their exact
 inputs, full strict-key resupply, put replay, atomic delete compare-and-swap, safe
 reads, secret-safe validation, platform-key-substring rejection, schema-v7 rollback
-warning, cleanup, and failures.
+history plus the current schema-v8 forward-recovery warning, cleanup, and failures.
+
+Observation adds no fifth LLM-definition tool. The existing `get_request_log` and
+`assert_requests` schemas now accept the bounded LLM metadata matchers documented in
+the task guide. Provider handlers reserve/finalize through the Environment Durable
+Object; callers continue to inspect and assert only through management MCP.
 
 There is no reset operation because this slice has no LLM runtime state. It must not
 be presented as a console-only or hidden HTTP configuration path. Applications under
@@ -418,16 +463,18 @@ target, or streaming target changes.
 | --- | --- | --- |
 | Contract parsing tests | Neutral plan fields and invalid-shape rejection | Persistence or wire behavior |
 | Server-definition contract tests | Strict write/persisted/safe views, provider-key non-reflection, secret-safe top-level rejection, bounded static-plan compatibility, and mandatory put/delete revisions | Provider routing by themselves |
-| Repository and migration tests | Schema-v7 persistence, canonical put replay, put/delete CAS including ABA denial, monotonic revisions, limits, corruption failure, v6 upgrade, and older-v6 refusal of v7 | Hosted rollback or response/conversation state |
+| Repository and migration tests | Schema-v7 definition persistence plus v7→v8 structured-observation upgrade, canonical put replay, put/delete CAS including ABA denial, monotonic revisions, limits, corruption failure, and older-v7 refusal of v8 | Hosted rollback, audit delivery, or response/conversation state |
 | Management MCP/Worker tests | Four tools, environment selection/existence, isolation, full strict-key writes, hashing/safe views, stable conflicts, and platform-key-substring rejection in definition keys/values | HTTP management projection or provider behavior by themselves |
 | Planner tests | Behavior-to-plan adaptation, deterministic identifiers/metadata, stateless turns, and validation-before-explicit staged-interface commit | Durable/revision-bound state, runtime transaction ownership, retries, or conversations |
 | Pure renderer tests | Selected provider success/error JSON, complete text/tool/usage SSE-frame sequences, and both dialects' payload/immediate cadence labels | Request parsing, version-header/auth enforcement, timed delivery, backpressure, or network behavior |
-| Edge-stream tests | Precomputed UTF-8/body bounds, pre-header initial delay, payload-only pacing, immediate structural/terminal frames, one absolute duration including backpressure, abort/deadline truncation, and cleanup | Provider parsing, configured midstream errors, hosted sockets, or deployment |
-| OpenAI HTTP-adapter tests | Exact operation manifest, strict request/tool/auth/body/response limits and stream options, JSON/SSE model projection, provider errors, fresh identity, default-on/disabled obfuscation, preflight failures, initial-delay abort, and no reflection | Environment persistence, upstream size/security parity, or hosted routing |
-| Anthropic HTTP-adapter tests | Exact operation manifest, `x-api-key`/stable-version/beta rejection, bounded Messages/tool/model parsing, JSON/named-event SSE, provider-error-before-headers, fresh identity, 2 MiB/timing preflight, cancellation/deadline truncation, initial-delay abort, and no reflection | Broad Anthropic API, configured midstream errors, or hosted routing |
+| Request-log contract/core tests | Complete metadata or configured-error shapes, empty headers/null bodies, enforced pending `102`/`0` compatibility sentinels, actual status/duration only in the append-once terminal child, idempotent terminal replay, conflicting-finalization rejection, retention cleanup, exact false/zero/ordered-array matchers, and cross-source sequences without reorder | Fail-closed delivery, hosted durability, or audit-grade completeness |
+| Edge-stream tests | Precomputed UTF-8/body bounds, pre-header initial delay, payload-only pacing, immediate structural/terminal frames, one absolute duration including backpressure, abort/deadline truncation, cleanup, and internal emitted frame/byte accounting | Persisted/queryable frame or byte metadata, provider parsing, configured midstream errors, hosted sockets, or deployment |
+| OpenAI HTTP-adapter tests | Exact operation manifest, strict request/tool/auth/body/response limits and stream options, JSON/SSE model projection, provider errors, fresh identity, default-on/disabled obfuscation, preflight failures, initial-delay abort, metadata-only reserve-before-delay without provisional status/duration, completed/cancelled terminal events, configured-error observation, fail-open storage, and no reflection | Environment persistence, upstream size/security parity, or hosted routing |
+| Anthropic HTTP-adapter tests | Exact operation manifest, `x-api-key`/stable-version/beta rejection, bounded Messages/tool/model parsing, JSON/named-event SSE, provider-error-before-headers, fresh identity, 2 MiB/timing preflight, metadata-only reservation without provisional status/duration, cancellation/deadline terminal events, initial-delay abort, and no reflection | Broad Anthropic API, configured midstream errors, or hosted routing |
 | Environment-runtime tests | Current-definition auth, accept-any/strict separation, rotation linearization, stateless planning, revision recheck, commit inside the Environment Durable Object before edge return, and secret rejection | Stateful conversations or multi-tenant hosted authorization |
 | Host-resolution tests | Exact path/subdomain OpenAI/Anthropic classification and trusted internal metadata replacement | Live wildcard TLS or custom-domain routing |
-| Official SDK tests | Pinned clients deserialize pure projections and exercise both bounded local Worker routes configured through MCP; OpenAI consumes usage/obfuscation streams, Anthropic consumes named text/tool streams with cumulative usage, and both abort without fabricated terminal success | Wrangler network compatibility, hosted connectability, upstream parity, or ecosystem-wide compatibility |
+| Edge-router observation integration | Exact selected revision reaches reservation; direct reader cancellation finalizes once as `cancelled` while keeping accepted `200`; reservation failure leaves a valid provider response unchanged | Mounted Worker-pool cancellation propagation, real sockets, or hosted durability |
+| Official SDK and mounted Worker/MCP tests | Pinned provider clients deserialize pure projections and exercise both bounded local Worker routes configured through MCP; OpenAI consumes usage/obfuscation streams, Anthropic consumes named text/tool streams with cumulative usage, both abort without fabricated terminal success, and the official MCP client queries/asserts metadata-only completed/configured-error observations | `cancelled` persistence through the Worker-pool service binding, Wrangler network compatibility, hosted connectability, upstream parity, or ecosystem-wide compatibility |
 | Generated provider manifest/drift tests | Machine-readable route, auth, limit, planning, unsupported, and evidence contract remains derived from executable source | Deployment or live-provider parity |
 | Repository checks | Formatting, links, types, focused tests, and builds for the candidate when recorded green | Hosted CI, merge, publication, Cloud consumption, or deployment |
 
@@ -438,6 +485,26 @@ integrations. Their exact source evidence belongs in the implementation ledger
 with the revision carrying the final green gate. None of these tranches implies hosted
 CI, merge, publication, Cloud consumption, or deployment.
 
+### Observation evidence levels
+
+| Level | Current bounded claim |
+| --- | --- |
+| Designed | Yes |
+| Implemented | Yes |
+| Source-tested | Yes |
+| Integration-tested | Yes, at the mounted local Worker/MCP seam |
+| SDK/client-qualified | Provider behavior uses pinned OpenAI/Anthropic SDKs; observation query/assertion uses the mounted official MCP client |
+| Actual-network-qualified | No |
+| Hosted-smoke-verified | No |
+| Verified-live | No |
+| Production-ready | No |
+
+Cancellation is the narrower edge in that matrix. Direct HTTP-adapter and edge-router
+tests prove `cancelled` terminal persistence. The mounted Worker-pool service binding
+does not propagate downstream stream reader cancellation through the binding, so its
+SDK test proves only that no fabricated terminal provider success appears; it does
+not promote mounted cancellation observation to integration-tested.
+
 ## Remaining F2 exit work
 
 Before a complete F2 claim, the public implementation still needs:
@@ -445,15 +512,15 @@ Before a complete F2 claim, the public implementation still needs:
 1. any configured midstream-error semantics only after their provider event,
    cancellation, and resource boundaries are explicitly designed;
 2. explicit conversation/version/retry semantics if stateful behavior is added;
-3. request observation and LLM-specific assertions;
-4. official SDK clients against Wrangler network routes for normal, error, usage,
+3. official SDK clients against Wrangler network routes for normal, error, usage,
    tool-call, streaming, and cancellation cases;
-5. broader parameter/version/client conformance only when explicitly chosen;
-6. Cloud pinning only after the public candidate is merged and independently
+4. broader parameter/version/client conformance only when explicitly chosen;
+5. Cloud pinning only after the public candidate is merged and independently
    qualified; and
-7. exact-revision hosted CI, staging, production, and documentation evidence kept as
+6. exact-revision hosted CI, staging, production, and documentation evidence kept as
    separate gates.
 
 Until those steps pass, say “MCP-managed definitions plus bounded OpenAI and
-Anthropic JSON/SSE provider data planes are source-qualified locally,” not
+Anthropic JSON/SSE provider data planes plus metadata-only request-log
+query/assertion are source-qualified locally,” not
 “mockOS is generally OpenAI/Anthropic-compatible” and not “F2 is complete.”

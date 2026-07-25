@@ -79,7 +79,7 @@ describe("management OpenAPI generation", () => {
     ).toHaveLength(5);
   });
 
-  it("keeps F1 and the bounded F2 provider slice source-qualified while later workloads stay unavailable", () => {
+  it("keeps F1 and bounded F2 provider/observation slices source-qualified while later workloads stay unavailable", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
     expect(catalog.managementMcp.scopeEnforcement).toBe("metadata-only");
@@ -103,7 +103,7 @@ describe("management OpenAPI generation", () => {
           "get_mock_llm_server",
           "delete_mock_llm_server",
         ],
-        persistence: "environment-schema-v7",
+        persistence: "environment-schema-v8",
         strictCredentials: "write-only-provider-scoped",
         putContract: {
           expectedRevision: "required-null-create-or-positive-replace",
@@ -123,8 +123,8 @@ describe("management OpenAPI generation", () => {
           platformAccessKey: "reject-substring-in-definition-keys-and-string-values",
         },
         schemaCompatibility: {
-          upgrade: "v6-to-v7",
-          rollback: "v6-refuses-v7",
+          upgrade: "v7-to-v8",
+          rollback: "v7-refuses-v8",
         },
       },
       guide: "docs/mock-llm.md",
@@ -139,7 +139,66 @@ describe("management OpenAPI generation", () => {
         anthropic: generateMockLlmAnthropicProviderDocumentation(),
         responsesApi: "unavailable",
         conversationState: "unavailable",
-        observationsAndAssertions: "unavailable",
+        observationsAndAssertions: {
+          status: "bounded-metadata-only-source-qualified",
+          managementTools: ["get_request_log", "assert_requests"],
+          scope: "successfully-parsed-and-planned-posts-after-response-preflight",
+          dialects: ["openai", "anthropic"],
+          operations: ["chat.completions.create", "messages.create"],
+          lifecycle: {
+            reservation: "pending-before-provider-delay-and-response-headers",
+            reservationBudgetMilliseconds: 50,
+            finalization: "append-once-terminal-overlay-one-logical-row",
+            terminalOutcomes: ["completed", "cancelled", "deadline_exceeded", "failed"],
+            replay: "exact-idempotent-conflicting-rejected-trimmed-no-op",
+            failurePolicy: "fail-open-best-effort-no-provider-response-change",
+          },
+          metadata: {
+            queryAndAssertionMatch: "exact",
+            sequence: "greedy-earliest-non-overlapping-append-order",
+            serverRevision: "exact-rechecked-plan-selection-revision",
+            resultShape: "response-plan-metadata-or-configured-error-kind",
+            responseId: "preallocated-response-plan-only-omitted-for-configured-errors",
+            stream: "accepted-request-stream-intent-configured-errors-may-return-json",
+            durationClock: "monotonic-elapsed-integer-milliseconds",
+            persistedTerminal: ["outcome", "responseStatus", "durationMs"],
+            pendingCompatibilitySentinel: {
+              responseStatus: 102,
+              durationMs: 0,
+              meaning: "legacy-non-null-columns-not-delivery-metadata",
+            },
+            streamFrameAndByteCounts: "internal-test-only-not-persisted-or-queryable",
+          },
+          privacy: {
+            requestHeaders: "empty",
+            requestBody: "null",
+            responseHeaders: "empty",
+            responseBody: "null",
+            collisionPolicy:
+              "skip-entire-observation-when-any-prospective-metadata-contains-request-credential",
+            excluded: [
+              "prompts",
+              "outputs",
+              "credentials",
+              "headers",
+              "tool-inputs",
+              "planId",
+              "requestHash",
+            ],
+          },
+          evidence: {
+            designed: "qualified",
+            implemented: "qualified",
+            sourceTested: "qualified",
+            integrationTested: "qualified-mounted-worker",
+            sdkClientQualified:
+              "provider-behavior-only-observation-management-via-mounted-mcp",
+            actualNetwork: "unqualified",
+            hostedSmoke: "unqualified",
+            verifiedLive: "unqualified",
+            productionReady: "unqualified",
+          },
+        },
       },
       deployedAcceptance: "unqualified",
     });

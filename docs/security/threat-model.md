@@ -14,8 +14,9 @@ sessions, revision-bound behavior state, and captured agent traffic. Provider,
 environment mock-MCP, and mock-LLM protocol surfaces are intentionally
 attacker-controllable.
 F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
-schema-v7 definition storage, and bounded OpenAI/Anthropic provider data planes. Those
-data planes are attacker-controlled synthetic protocol surfaces, not management APIs.
+schema-v8 environment storage, bounded OpenAI/Anthropic provider data planes, and
+metadata-only provider lifecycle observations. Those data planes are
+attacker-controlled synthetic protocol surfaces, not management APIs.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization
 boundary.
 
@@ -48,7 +49,7 @@ F2 definition threats add platform-key confusion with either provider key, plain
 or verifier reflection through safe reads/behavior material, cross-environment
 definition access, lost updates, delete/recreate revision reuse, canonicalization
 ambiguity, malformed persisted rows/allocator regression, definition-size denial, and
-unsafe rollback after a schema-v7 store has been opened. A safe-view marker mistakenly
+unsafe rollback after a schema-v8 store has been opened. A safe-view marker mistakenly
 reused as a write also risks an ambiguous credential update, so it must fail rather
 than imply preservation. The provider data planes additionally consider malformed or
 double-decoded route selection, cross-environment or cross-dialect dispatch,
@@ -58,7 +59,9 @@ fingerprints/errors/logs, oversized or adversarial JSON/tool schemas, unknown pr
 fields that silently change semantics, undeclared tool output, stale-definition plan
 commit, content-derived transport-ID reuse, and abort/timing resource consumption.
 Anthropic adds version/beta header confusion, authorization-alias confusion, malformed
-tool history, and model-pagination assumptions.
+tool history, and model-pagination assumptions. Observation adds secret/prompt/output
+disclosure through structured metadata, false confidence from fail-open missing or
+pending evidence, duplicate/conflicting terminal writes, and append-order distortion.
 
 ## Implemented controls and evidence boundaries
 
@@ -93,13 +96,18 @@ tool history, and model-pagination assumptions.
   and deletes in one transaction with both slug and revision in the final predicate.
   A stale or delete/recreate ABA revision returns the typed `409` without mutation;
   an absent row or a retry after successful delete returns `deleted: false`.
-- Schema v7 creates only the definition and monotonic allocator tables. New writes
-  use canonical JSON; persisted reads validate the contract, slug identity, and
-  canonical byte form. Transactional parsing verifies the allocator's monotonicity.
-  Focused tests prove v6 upgrades to v7 while preserving F1 rows and prove an older v6
-  bundle explicitly refuses a v7-touched database as newer than supported. This fails
-  closed but means source rollback cannot downgrade the store; recovery must roll
-  forward or use a separately reviewed bridge.
+- Schema v7 creates the definition and monotonic allocator tables. Schema v8 adds
+  nullable structured LLM columns to the existing request log plus an append-once
+  terminal child table keyed by request ID; reads overlay terminal status/duration
+  into the same logical row and append sequence. Actual delivered status/duration
+  enter only that child; pending base rows use explicit `102`/`0` sentinels because
+  the legacy columns are non-null. New definition writes use canonical JSON;
+  persisted reads validate the contract, slug identity, and canonical byte
+  form. Transactional parsing verifies the allocator's monotonicity. Focused tests
+  prove v7 upgrades to v8 without rewriting legacy log rows and an older v7 bundle
+  refuses a v8-touched database as newer than supported. This fails closed but means
+  source rollback cannot downgrade the store; recovery must roll forward or use a
+  separately reviewed bridge.
 - The mock-LLM resolver recognizes only the exact OpenAI and Anthropic
   path/subdomain route families,
   decodes the slug once, validates the decoded slug, and binds the body to neither an
@@ -133,9 +141,32 @@ tool history, and model-pagination assumptions.
 - Each adapter rejects the presented provider credential or active platform key when
   either appears in a Chat Completions or Messages JSON key or string value. The planner receives
   normalized message/tool material rather than transport or internal routing headers.
-  The current slice emits no LLM-specific observation/request-log entry, so it also
-  offers no LLM assertion or audit claim; that deliberate absence must not be
-  described as comprehensive redaction evidence.
+  After successful parse/plan and response preflight, observation stores only dialect,
+  operation, slug, exact selected revision, model, stream, turn, response ID,
+  lifecycle, and either usage/stop/ordered tool names or configured error kind.
+  Stream records accepted request intent, even when a configured error is returned as
+  JSON; response ID is preallocated response-plan metadata and is omitted for
+  configured errors. A request-local guard checks all prospective durable values,
+  including the actual routed path, revision, pending sentinels, every terminal
+  outcome, status, and monotonic duration. If either presented credential would
+  collide, the complete observation is skipped while the provider call remains
+  available.
+  Request/response headers are empty and bodies are null. Prompts, outputs,
+  credentials, tool inputs, `planId`, and `requestHash` cannot enter the schema.
+  Internal stream frame/byte counts are not persisted or queryable. Contract,
+  provider, core, edge-router, and mounted Worker tests inspect serialized entries for
+  inert credentials and fixture text; this is bounded redaction evidence, not proof
+  against every future field or storage path.
+- Observation reservation runs after response serialization/SSE preflight but before
+  provider delay or headers and has a 50-millisecond wait budget; terminal
+  finalization overlays the same row exactly once.
+  Exact replay is idempotent, conflicting terminal data is rejected, retention removes
+  terminal children, and finalizing a trimmed row is a no-op. Both reservation and
+  completion are fail-open so their storage failure, timeout, or privacy rejection
+  cannot change a valid provider response. A non-cancellable storage hook can commit a
+  late row after the wait budget, but it receives no terminal finalization and remains
+  `pending`. Missing or `pending` rows are therefore possible and must never be
+  treated as audit completeness.
 - Stateless planning derives the turn only from prior assistant messages. Before
   plan commit, the environment runtime rereads the definition revision and replans
   after a concurrent replacement; repeated instability fails generically. The edge
@@ -353,10 +384,11 @@ accepts any syntactically valid credential through the provider's required chann
 without verifier comparison; it is suitable only for synthetic tests and is not
 public/anonymous access or production authorization. `strict` compares the current
 hash-only verifier, but a successful mock check still grants only this synthetic
-  provider behavior. Conversation/response state, reset, LLM observation/assertion,
-  configured midstream errors, OpenAI Responses, Anthropic betas/broad
-  parameters, Wrangler-network qualification, deployment, and private Cloud pinning
-  remain absent.
+  provider behavior. Metadata-only observation/query/assertion is source-qualified
+  but fail-open and not an audit control. Conversation/response state, reset,
+  configured midstream errors, OpenAI Responses, Anthropic betas/broad parameters,
+  Wrangler-network qualification, deployment, and private Cloud pinning remain
+  absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
 

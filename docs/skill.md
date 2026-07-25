@@ -115,8 +115,8 @@ own synthetic Bearer Mock Credential.
 6. In `strict` mode, prove wrong authentication, or send `stream_options` without
    `stream: true` and require `400 invalid_request_error`. `accept_any` accepts every
    syntactically valid provider Bearer Mock Credential without verifier comparison.
-   Do not expect an LLM observation because no LLM-specific request-log/assertion
-   surface exists.
+   These pre-plan failures are intentionally unobserved; query/assert the earlier
+   successfully planned calls through the existing request-log MCP tools instead.
 7. In `finally`, read the current definition, pass its latest positive revision to
    `delete_mock_llm_server`, reconcile a typed stale conflict rather than overwriting,
    delete the disposable environment, and close management MCP.
@@ -137,10 +137,15 @@ arguments.
 Preflight failure is generic JSON before HTTP `200`; cancellation or deadline after
 HTTP `200` truncates without fabricated success. Current turn selection is stateless;
 the selected plan is committed in the Environment Durable Object before edge return.
-Configured midstream errors, the Responses API, conversation state, LLM
-observations/assertions, Cloud pinning, and deployment remain outside that evidence
-boundary. A passing local source workflow must never be reported as deployed or
-verified-live OpenAI parity.
+Successfully parsed/planned provider POSTs that pass response preflight attempt one
+metadata-only request-log reservation within a 50-millisecond fail-open budget;
+prospective metadata/credential collisions skip it. Use the existing
+`get_request_log` and `assert_requests` MCP tools for exact LLM matchers; never expect
+prompts, outputs, headers, credentials, tool inputs, frame/byte counts, `planId`, or
+`requestHash` in the log. Configured midstream errors, the Responses API,
+conversation state, actual-network qualification, Cloud pinning, and deployment
+remain outside that evidence boundary. A passing local source workflow must never be
+reported as deployed or verified-live OpenAI parity.
 
 ## Bounded mock-Anthropic recipe
 
@@ -181,4 +186,5 @@ Durable Object before edge streaming. Current state is stateless, and cancellati
 does not roll back that commit.
 
 The source contract does not qualify Anthropic betas, broad parameters, configured
-midstream errors, state, observations, deployment, or live-provider parity.
+midstream errors, state, audit-grade observation delivery, deployment, or
+live-provider parity.

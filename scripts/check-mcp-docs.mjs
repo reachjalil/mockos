@@ -539,14 +539,118 @@ if (
   ]) ||
   catalog.future?.mockLlmApis?.providerDataPlane?.responsesApi !== "unavailable" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.conversationState !== "unavailable" ||
-  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions !==
-    "unavailable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.status !==
+    "bounded-metadata-only-source-qualified" ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions
+      ?.managementTools,
+    ["get_request_log", "assert_requests"]
+  ) ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.scope !==
+    "successfully-parsed-and-planned-posts-after-response-preflight" ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.dialects,
+    ["openai", "anthropic"]
+  ) ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions
+      ?.operations,
+    ["chat.completions.create", "messages.create"]
+  ) ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+    ?.reservation !== "pending-before-provider-delay-and-response-headers" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+    ?.reservationBudgetMilliseconds !== 50 ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+    ?.finalization !== "append-once-terminal-overlay-one-logical-row" ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+      ?.terminalOutcomes,
+    ["completed", "cancelled", "deadline_exceeded", "failed"]
+  ) ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+    ?.replay !== "exact-idempotent-conflicting-rejected-trimmed-no-op" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.lifecycle
+    ?.failurePolicy !== "fail-open-best-effort-no-provider-response-change" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.queryAndAssertionMatch !== "exact" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.sequence !== "greedy-earliest-non-overlapping-append-order" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.serverRevision !== "exact-rechecked-plan-selection-revision" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.resultShape !== "response-plan-metadata-or-configured-error-kind" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.responseId !== "preallocated-response-plan-only-omitted-for-configured-errors" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.stream !== "accepted-request-stream-intent-configured-errors-may-return-json" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.durationClock !== "monotonic-elapsed-integer-milliseconds" ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+      ?.persistedTerminal,
+    ["outcome", "responseStatus", "durationMs"]
+  ) ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+      ?.pendingCompatibilitySentinel,
+    {
+      durationMs: 0,
+      meaning: "legacy-non-null-columns-not-delivery-metadata",
+      responseStatus: 102,
+    }
+  ) ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.metadata
+    ?.streamFrameAndByteCounts !== "internal-test-only-not-persisted-or-queryable" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+    ?.requestHeaders !== "empty" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+    ?.requestBody !== "null" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+    ?.responseHeaders !== "empty" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+    ?.responseBody !== "null" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+    ?.collisionPolicy !==
+    "skip-entire-observation-when-any-prospective-metadata-contains-request-credential" ||
+  !equal(
+    catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.privacy
+      ?.excluded,
+    [
+      "prompts",
+      "outputs",
+      "credentials",
+      "headers",
+      "tool-inputs",
+      "planId",
+      "requestHash",
+    ]
+  ) ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.designed !== "qualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.implemented !== "qualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.sourceTested !== "qualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.integrationTested !== "qualified-mounted-worker" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.sdkClientQualified !==
+    "provider-behavior-only-observation-management-via-mounted-mcp" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.actualNetwork !== "unqualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.hostedSmoke !== "unqualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.verifiedLive !== "unqualified" ||
+  catalog.future?.mockLlmApis?.providerDataPlane?.observationsAndAssertions?.evidence
+    ?.productionReady !== "unqualified" ||
   catalog.future?.mockLlmApis?.deployedAcceptance !== "unqualified" ||
   catalog.future?.mockLlmApis?.guide !== "docs/mock-llm.md" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.status !== "source-implemented" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.interface !== "MCP-only" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.persistence !==
-    "environment-schema-v7" ||
+    "environment-schema-v8" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.strictCredentials !==
     "write-only-provider-scoped" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.putContract?.expectedRevision !==
@@ -572,9 +676,9 @@ if (
   catalog.future?.mockLlmApis?.managementDefinitions?.validation?.platformAccessKey !==
     "reject-substring-in-definition-keys-and-string-values" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.schemaCompatibility?.upgrade !==
-    "v6-to-v7" ||
+    "v7-to-v8" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.schemaCompatibility?.rollback !==
-    "v6-refuses-v7" ||
+    "v7-refuses-v8" ||
   !equal(
     catalog.future?.mockLlmApis?.managementDefinitions?.toolIds,
     expectedMockLlmManagementTools
@@ -1012,8 +1116,8 @@ for (const required of [
   "secret-safe",
   "active platform management Access Key, including as a substring",
   "JSON keys or string values",
-  "schema v7",
-  "older v6 bundle",
+  "schema v8",
+  "older v7 bundle",
   "roll forward",
   "MCP-only",
   "OpenAI and Anthropic",
@@ -1054,7 +1158,17 @@ for (const required of [
   "fresh `x-request-id`",
   "`planId` values are never exposed",
   "no mock-LLM reset operation",
-  "LLM-specific observations or assertions",
+  "one logical request-log row",
+  "successfully parsed and planned",
+  "`pending`",
+  "`deadline_exceeded`",
+  "`get_request_log`",
+  "`assert_requests`",
+  "fail-open",
+  "Frame and byte counts",
+  "not persisted or queryable",
+  "`planId`",
+  "`requestHash`",
   "Cloud pinning",
   "source-qualified locally",
 ]) {

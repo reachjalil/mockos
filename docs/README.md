@@ -139,15 +139,19 @@ source-qualified for its bounded implementation, while hosted CI, merge, package
 publication, private Cloud consumption, and deployed F1 acceptance remain open. The
 F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
-server-definition contract, four MCP-only operations, schema-v7 environment
+server-definition contract, four MCP-only operations, schema-v8 environment
 persistence, mandatory revision compare-and-swap, and write-only provider Mock
 Credentials. It now source-qualifies bounded provider routes for ordered model
 list/retrieve plus OpenAI Chat Completions and Anthropic Messages as JSON or timed
-SSE through local Worker integrations and pinned official SDKs.
+SSE through local Worker integrations and pinned official SDKs. Successfully
+parsed/planned POSTs that pass response preflight attempt one metadata-only request-log
+reservation within a 50-millisecond fail-open budget; prospective
+metadata/credential collisions skip it. Existing MCP tools query and assert
+successfully persisted lifecycle rows exactly.
 Configured midstream errors, the OpenAI Responses API, Anthropic beta APIs,
-runtime/conversation state, reset, LLM observations/assertions, Wrangler-network
-qualification, deployment, and Cloud pinning remain unavailable. Script execution,
-enforced scoped keys, and Code Mode also remain unavailable.
+runtime/conversation state, reset, Wrangler-network qualification, deployment, and
+Cloud pinning remain unavailable. Script execution, enforced scoped keys, and Code
+Mode also remain unavailable.
 
 ## Accepted evidence
 

@@ -13,12 +13,14 @@ implementation described in the
 [F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
 CI/merge/deployment remain open. A
 [partial F2 slice](./f-series/f2-llm-kernel.md) now has strict definitions, four
-MCP-only operations, schema-v7 persistence, and bounded OpenAI model/JSON-or-SSE Chat
+MCP-only operations, schema-v8 persistence, and bounded OpenAI model/JSON-or-SSE Chat
 Completions plus Anthropic model/JSON-or-SSE Messages data planes that are
-source-qualified locally through official SDKs. Configured midstream errors, OpenAI
-Responses, Anthropic betas, conversation state, LLM-specific
-observation/assertion, hosted qualification, Cloud consumption, deployment, and every
-F3-F9 phase remain open.
+source-qualified locally through official SDKs. Metadata-only request-log
+observation/query/assertion for successfully parsed/planned, response-preflighted
+provider POSTs is also source-qualified at the mounted Worker/MCP seam. Configured
+midstream errors, OpenAI Responses, Anthropic betas, conversation state,
+actual-network/hosted qualification, Cloud consumption, deployment, and every F3-F9
+phase remain open.
 
 ## Outcome
 
@@ -97,7 +99,7 @@ implementation interpretation.
 Current-source note: the partial F2 slice freezes a neutral response-plan seam,
 behavior adapter, pure JSON/SSE-frame renderers, and official-SDK deserialization. It
 also source-implements strict server definitions, four MCP-only management
-operations, schema-v7 environment persistence, mandatory changed-write revision CAS,
+operations, schema-v8 environment persistence, mandatory changed-write revision CAS,
 atomic revision-bound delete, and safe write-only provider-key views. Changed
 full-definition writes must resupply or rotate every enabled strict key; safe-view
 markers are not write shapes.
@@ -113,10 +115,14 @@ paces payload deltas only, uses one absolute duration across initial wait, pacin
 backpressure, and truncates post-`200` cancellation/deadline without inventing
 success. Anthropic streams end with `message_stop`, report cumulative
 `message_delta` usage, and emit neither `[DONE]` nor mock `ping` (clients should still
-tolerate upstream `ping`). The broader bullets below remain the complete F2 target:
-configured midstream errors, conversation/sequence state,
-LLM-specific observation and assertion, Wrangler/network qualification, deployment,
-and Cloud integration are still open.
+tolerate upstream `ping`). After response preflight, bounded provider POSTs attempt
+one metadata-only request-log reservation within a 50-millisecond fail-open budget;
+prospective metadata/credential collisions skip it. In-budget rows append-once
+finalize on the same sequence, and existing MCP log query/assertion tools exact-match
+their lifecycle fields.
+The broader bullets below remain the complete F2 target: configured midstream errors,
+conversation/sequence state, Wrangler/network qualification, deployment, and Cloud
+integration are still open.
 
 - Serve OpenAI-compatible `/v1/chat/completions` and model discovery plus Anthropic
   `/v1/messages` and model discovery under each environment's LLM route prefix.
@@ -445,9 +451,9 @@ not add HTTP management routes or activate Code Mode, scripts, or proxy. The par
 F2 adds neutral schemas, behavior adaptation, MCP-only persisted definitions, and
 user-operable bounded OpenAI/Anthropic provider routes for model discovery and
 OpenAI JSON/SSE Chat Completions plus Anthropic JSON/SSE Messages. Local
-official-SDK evidence is source-qualified, not hosted, deployed, Cloud-integrated, or
-proof of configured midstream errors, conversation state, or LLM
-observation support.
+official-SDK evidence plus mounted Worker/MCP metadata observation assertions are
+source-qualified, not actual-network, hosted, deployed, Cloud-integrated, or proof of
+configured midstream errors, conversation state, or audit-complete observation.
 Hosted CI, merge, package publication, private Cloud consumption, and deployment
 remain separate.
 
@@ -517,8 +523,11 @@ The current F2 source satisfies the configuration prerequisite and bounded local
 OpenAI and Anthropic JSON/SSE runtime subsets. Its pinned official SDK tests
 consume pure JSON/SSE projections and local Worker routes through injected Fetch;
 edge-stream package tests separately qualify shared pacing, deadline, backpressure,
-and cancellation mechanics. They do not run against Wrangler, a network endpoint, or
-the deployed exit gates below.
+and cancellation mechanics. Mounted Worker tests query/assert completed and
+configured-error observation rows through the official MCP client; direct edge tests
+own persisted cancellation proof because the Worker-pool binding does not propagate
+reader cancellation. They do not run against Wrangler, a network endpoint, or the
+deployed exit gates below.
 
 - Real `openai` and `@anthropic-ai/sdk` clients run against `wrangler dev` and deployed
   staging for non-streaming, streaming, tool calls, provider errors, and cancellation.
