@@ -659,6 +659,26 @@ describe("mock Anthropic HTTP adapter", () => {
     expect(serialized).not.toContain(VALID_CREDENTIAL);
   });
 
+  it("fails closed when the runtime returns a plan for another model", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const response = await handler(
+      runtime({
+        planMessage: vi.fn(async () =>
+          success({ ...basePlan, model: "different-model" })
+        ),
+      })
+    )(jsonRequest(messageBody()), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+
+    expect(response.status).toBe(500);
+    expect(await responseJson(response)).toMatchObject({
+      error: { type: "api_error" },
+    });
+  });
+
   it("fails closed on invalid or secret-bearing runtime catalog output", async () => {
     const invalid = await handler(
       runtime({

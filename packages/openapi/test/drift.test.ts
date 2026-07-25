@@ -1,10 +1,10 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { mockosMcpToolNames } from "@mockos/contracts";
 import {
   mockosHttpOperationIds,
   mockosHttpOperations,
 } from "@mockos/contracts/operations";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   generateMockLlmAnthropicProviderDocumentation,
@@ -129,7 +129,7 @@ describe("management OpenAPI generation", () => {
       },
       guide: "docs/mock-llm.md",
       providerDataPlane: {
-        status: "openai-and-anthropic-non-streaming-source-qualified",
+        status: "openai-streaming-and-anthropic-non-streaming-source-qualified",
         managementConfiguration: "MCP-only",
         manifests: [
           "docs/reference/mock-llm-openai.v1.json",

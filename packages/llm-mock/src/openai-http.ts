@@ -13,6 +13,7 @@ import {
   mockLlmSlugSchema,
 } from "@mockos/contracts/mock-llm-server";
 import { canonicalMockLlmJson } from "./canonical-json";
+import { prepareEdgeSseStream } from "./edge-stream";
 import { renderOpenAiPlan } from "./openai";
 
 export const MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES = 256 * 1_024;
@@ -39,7 +40,7 @@ export const mockLlmOpenAiProviderManifest = Object.freeze({
       id: "create_chat_completion",
       method: "POST",
       path: "/chat/completions",
-      streaming: false,
+      streaming: true,
     },
     {
       id: "list_models",
@@ -98,16 +99,15 @@ export type ParsedMockLlmOpenAiChatRequest = {
   readonly request: Readonly<Record<string, JsonValue>>;
   readonly model: string;
   readonly turnIndex: number;
+  readonly stream: boolean;
+  readonly includeUsage: boolean;
+  readonly includeObfuscation: boolean;
   readonly fingerprint: Readonly<Record<string, JsonValue>>;
 };
 
 export class MockLlmOpenAiRequestError extends Error {
   constructor(
-    readonly code:
-      | "invalid_json"
-      | "invalid_request"
-      | "request_too_large"
-      | "streaming_not_supported",
+    readonly code: "invalid_json" | "invalid_request" | "request_too_large",
     readonly parameter?: string,
     options?: ErrorOptions
   ) {
@@ -431,13 +431,18 @@ export const parseMockLlmOpenAiChatRequest = (
   if (!isRecord(value)) {
     throw new MockLlmOpenAiRequestError("invalid_request");
   }
-  if (Object.hasOwn(value, "stream_options")) {
-    throw new MockLlmOpenAiRequestError("invalid_request", "stream_options");
-  }
   if (
     !hasOnlyFields(
       value,
-      new Set(["model", "messages", "n", "stream", "tool_choice", "tools"])
+      new Set([
+        "model",
+        "messages",
+        "n",
+        "stream",
+        "stream_options",
+        "tool_choice",
+        "tools",
+      ])
     )
   ) {
     throw new MockLlmOpenAiRequestError("invalid_request");
@@ -457,8 +462,26 @@ export const parseMockLlmOpenAiChatRequest = (
   if (value.stream !== undefined && typeof value.stream !== "boolean") {
     throw new MockLlmOpenAiRequestError("invalid_request", "stream");
   }
-  if (value.stream === true) {
-    throw new MockLlmOpenAiRequestError("streaming_not_supported", "stream");
+  const stream = value.stream === true;
+  let includeUsage = false;
+  let includeObfuscation = stream;
+  if (Object.hasOwn(value, "stream_options")) {
+    if (
+      !stream ||
+      !isRecord(value.stream_options) ||
+      !hasOnlyFields(
+        value.stream_options,
+        new Set(["include_usage", "include_obfuscation"])
+      ) ||
+      (value.stream_options.include_usage !== undefined &&
+        typeof value.stream_options.include_usage !== "boolean") ||
+      (value.stream_options.include_obfuscation !== undefined &&
+        typeof value.stream_options.include_obfuscation !== "boolean")
+    ) {
+      throw new MockLlmOpenAiRequestError("invalid_request", "stream_options");
+    }
+    includeUsage = value.stream_options.include_usage === true;
+    includeObfuscation = value.stream_options.include_obfuscation !== false;
   }
   if (
     value.n !== undefined &&
@@ -488,6 +511,9 @@ export const parseMockLlmOpenAiChatRequest = (
     request: Object.freeze(value),
     model: parsedModel.data,
     turnIndex,
+    stream,
+    includeUsage,
+    includeObfuscation,
     fingerprint: Object.freeze(fingerprint),
   });
 };
@@ -561,6 +587,27 @@ export const mockLlmValueContainsSecret = (
   }
   return false;
 };
+
+export const mockLlmPlanContainsSecret = (
+  plan: MockLlmPlan,
+  secrets: readonly (string | undefined)[]
+): boolean =>
+  mockLlmValueContainsSecret(plan, secrets) ||
+  (plan.kind === "response" &&
+    mockLlmValueContainsSecret(
+      plan.segments
+        .filter(
+          (
+            segment
+          ): segment is Extract<
+            (typeof plan.segments)[number],
+            { readonly type: "text" }
+          > => segment.type === "text"
+        )
+        .map((segment) => segment.text)
+        .join(""),
+      secrets
+    ));
 
 const bearerCredential = (request: Request): string | undefined => {
   const authorization = request.headers.get("authorization");
@@ -689,6 +736,7 @@ export type CreateMockLlmOpenAiFetchHandlerOptions = {
     readonly responseId: string;
   };
   readonly delay?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly now?: () => number;
 };
 
 export const createMockLlmOpenAiFetchHandler = (
@@ -725,7 +773,12 @@ export const createMockLlmOpenAiFetchHandler = (
       if (!result) return internalError(identity.requestId);
       if (!result.ok) return responseForRuntimeError(result.code, identity.requestId);
       const models = validateCatalog(result.value);
-      if (!models) return internalError(identity.requestId);
+      if (
+        !models ||
+        mockLlmValueContainsSecret(models, [credential, options.platformApiKey])
+      ) {
+        return internalError(identity.requestId);
+      }
       return jsonResponse(
         { object: "list", data: models.map(modelBody) },
         identity.requestId
@@ -763,7 +816,12 @@ export const createMockLlmOpenAiFetchHandler = (
       if (!result) return internalError(identity.requestId);
       if (!result.ok) return responseForRuntimeError(result.code, identity.requestId);
       const models = validateCatalog(result.value);
-      if (!models) return internalError(identity.requestId);
+      if (
+        !models ||
+        mockLlmValueContainsSecret(models, [credential, options.platformApiKey])
+      ) {
+        return internalError(identity.requestId);
+      }
       const model = models.find((candidate) => candidate.id === requestedModel);
       return model
         ? jsonResponse(modelBody(model), identity.requestId)
@@ -812,12 +870,6 @@ export const createMockLlmOpenAiFetchHandler = (
       ) {
         return requestTooLarge(identity.requestId);
       }
-      if (
-        error instanceof MockLlmOpenAiRequestError &&
-        error.code === "streaming_not_supported"
-      ) {
-        return invalidRequest(identity.requestId, "streaming_not_supported", "stream");
-      }
       return invalidRequest(
         identity.requestId,
         error instanceof MockLlmOpenAiRequestError ? error.code : "invalid_request",
@@ -843,6 +895,12 @@ export const createMockLlmOpenAiFetchHandler = (
     } catch {
       return internalError(identity.requestId);
     }
+    if (plan.model !== parsed.model) {
+      return internalError(identity.requestId);
+    }
+    if (mockLlmPlanContainsSecret(plan, [credential, options.platformApiKey])) {
+      return internalError(identity.requestId);
+    }
     if (plan.kind === "response") {
       const declaredTools = new Set(
         Array.isArray(parsed.fingerprint.toolNames)
@@ -859,6 +917,48 @@ export const createMockLlmOpenAiFetchHandler = (
         return internalError(identity.requestId);
       }
     }
+    const wire = renderOpenAiPlan(plan, {
+      stream: parsed.stream,
+      includeUsage: parsed.includeUsage,
+      includeObfuscation: parsed.includeObfuscation,
+      requestId: identity.requestId,
+      responseId: identity.responseId,
+    });
+    if (mockLlmValueContainsSecret(wire, [credential, options.platformApiKey])) {
+      return internalError(identity.requestId);
+    }
+
+    if (wire.kind === "sse") {
+      if (plan.kind !== "response") return internalError(identity.requestId);
+      let prepared: ReturnType<typeof prepareEdgeSseStream>;
+      try {
+        prepared = prepareEdgeSseStream({
+          frames: wire.frames,
+          schedule: plan.cadence,
+          signal: request.signal,
+          maximumBytes: MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES,
+          ...(options.now ? { now: options.now } : {}),
+        });
+      } catch {
+        return internalError(identity.requestId);
+      }
+      try {
+        await prepared.waitForInitialDelay();
+      } catch {
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        return internalError(identity.requestId);
+      }
+      try {
+        return new Response(prepared.createReadableStream(), {
+          status: wire.status,
+          headers: wire.headers,
+        });
+      } catch {
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        return internalError(identity.requestId);
+      }
+    }
+
     const initialDelayMilliseconds =
       plan.kind === "response"
         ? plan.cadence.initialDelayMilliseconds
@@ -869,12 +969,6 @@ export const createMockLlmOpenAiFetchHandler = (
       if (request.signal.aborted) return new Response(null, { status: 499 });
       return internalError(identity.requestId);
     }
-    const wire = renderOpenAiPlan(plan, {
-      stream: false,
-      requestId: identity.requestId,
-      responseId: identity.responseId,
-    });
-    if (wire.kind !== "json") return internalError(identity.requestId);
     const serialized = JSON.stringify(wire.body);
     if (utf8Length(serialized) > MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES) {
       return internalError(identity.requestId);

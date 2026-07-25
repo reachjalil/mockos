@@ -126,7 +126,7 @@ const openAiClient = (environmentId: string, apiKey = OPENAI_MOCK_CREDENTIAL) =>
   });
 
 describe("public mock OpenAI Worker route", () => {
-  it("configures through MCP and serves a bounded official-SDK non-streaming slice", {
+  it("configures through MCP and serves the bounded official-SDK provider slice", {
     timeout: 30_000,
   }, async () => {
     const management = await connectManagement();
@@ -279,6 +279,55 @@ describe("public mock OpenAI Worker route", () => {
           arguments: '{"location":"Berlin","units":"celsius"}',
         },
       });
+      const toolStream = await first.chat.completions.create({
+        model: "mock-tool-1",
+        messages: [{ role: "user", content: "Stream the Berlin lookup" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "get_weather",
+              parameters: {
+                type: "object",
+                properties: { location: { type: "string" } },
+              },
+            },
+          },
+        ],
+        stream: true,
+        stream_options: { include_obfuscation: false },
+      });
+      const toolChunks = [];
+      for await (const chunk of toolStream) toolChunks.push(chunk);
+      const toolDeltas = toolChunks
+        .flatMap((chunk) => chunk.choices)
+        .flatMap(
+          (choice) =>
+            (
+              choice.delta as unknown as {
+                tool_calls?: readonly {
+                  index: number;
+                  id?: string;
+                  type?: string;
+                  function?: { name?: string; arguments?: string };
+                }[];
+              }
+            ).tool_calls ?? []
+        );
+      expect(toolDeltas.at(0)).toMatchObject({
+        index: 0,
+        id: "call_weather_1",
+        type: "function",
+        function: { name: "get_weather" },
+      });
+      expect(toolDeltas.map((delta) => delta.function?.arguments ?? "").join("")).toBe(
+        '{"location":"Berlin","units":"celsius"}'
+      );
+      expect(
+        toolChunks
+          .flatMap((chunk) => chunk.choices)
+          .find((choice) => choice.finish_reason !== null)?.finish_reason
+      ).toBe("tool_calls");
 
       await expect(
         first.chat.completions.create({
@@ -301,16 +350,47 @@ describe("public mock OpenAI Worker route", () => {
         status: 404,
         error: { code: "model_not_found" },
       });
-      await expect(
-        first.chat.completions.create({
-          model: "mock-text-1",
-          messages: [{ role: "user", content: "No streaming" }],
-          stream: true,
-        })
-      ).rejects.toMatchObject({
-        status: 400,
-        error: { code: "streaming_not_supported" },
+      const stream = await first.chat.completions.create({
+        model: "mock-text-1",
+        messages: [{ role: "user", content: "Stream this" }],
+        stream: true,
+        stream_options: { include_usage: true },
       });
+      const chunks = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      expect(
+        chunks
+          .flatMap((chunk) => chunk.choices)
+          .map((choice) => choice.delta.content ?? "")
+          .join("")
+      ).toBe("Hello from environment one.");
+      expect(chunks.at(-1)).toMatchObject({
+        choices: [],
+        usage: {
+          prompt_tokens: 11,
+          completion_tokens: 5,
+          total_tokens: 16,
+        },
+      });
+      expect(
+        chunks
+          .filter((chunk) => chunk.choices.length > 0)
+          .every(
+            (chunk) =>
+              typeof (chunk as unknown as { obfuscation?: unknown }).obfuscation ===
+              "string"
+          )
+      ).toBe(true);
+
+      const cancellable = await first.chat.completions.create({
+        model: "mock-text-1",
+        messages: [{ role: "user", content: "Cancel after one frame" }],
+        stream: true,
+      });
+      const iterator = cancellable[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toMatchObject({ done: false });
+      cancellable.controller.abort();
+      await expect(iterator.next()).resolves.toMatchObject({ done: true });
 
       await expect(
         openAiClient(firstEnvironment.id, PLATFORM_KEY).models.list()

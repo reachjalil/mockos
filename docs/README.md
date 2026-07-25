@@ -39,7 +39,7 @@ support, deployment, or provider-parity claim.
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
-| Test an application against deterministic OpenAI model and non-streaming Chat Completions behavior | [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) |
+| Test an application against deterministic OpenAI model and JSON/SSE Chat Completions behavior | [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) |
 | Test an application against deterministic Anthropic model and non-streaming Messages behavior | [Anthropic SDK quickstart](./quickstarts/anthropic-sdk.md) |
 | Configure, replace, inspect, and remove a mock LLM through MCP | [MCP-managed mock OpenAI and Anthropic](./mock-llm.md) |
 | Understand the partial mock-LLM planner/provider architecture | [F2 LLM kernel](./f-series/f2-llm-kernel.md) |
@@ -141,10 +141,11 @@ F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
 server-definition contract, four MCP-only operations, schema-v7 environment
 persistence, mandatory revision compare-and-swap, and write-only provider Mock
-Credentials. It now source-qualifies bounded OpenAI and Anthropic provider routes for
-ordered model list/retrieve plus non-streaming Chat Completions/Messages through local
-Worker integrations and pinned official SDKs. SSE/timed streaming, Anthropic beta
-APIs, runtime/conversation state, reset, LLM observations/assertions, Wrangler-network
+Credentials. It now source-qualifies bounded provider routes for ordered model
+list/retrieve, OpenAI Chat Completions as JSON or timed SSE, and non-streaming
+Anthropic Messages through local Worker integrations and pinned official SDKs.
+Configured midstream errors, the OpenAI Responses API, Anthropic streaming/beta APIs,
+runtime/conversation state, reset, LLM observations/assertions, Wrangler-network
 qualification, deployment, and Cloud pinning remain unavailable. Script execution,
 enforced scoped keys, and Code Mode also remain unavailable.
 

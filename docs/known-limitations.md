@@ -167,18 +167,34 @@ slice has sampled H evidence, but no current fixture is V or P.
   OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
   strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
-  Environment routes source-qualify ordered model list/retrieve plus non-streaming
-  Chat Completions and Messages. OpenAI requires Bearer and Anthropic requires
-  `x-api-key` plus exactly `anthropic-version: 2023-06-01`; both auth modes require a
-  valid provider Mock Credential. `accept_any` skips verifier comparison, while
-  `strict` checks the dialect's current hash-only verifier. The OpenAI parser accepts
-  only bounded text messages,
-  function tools, `n` absent/one, `stream` absent/false, and `tool_choice`
-  absent/`auto`; unknown fields, multimodal content, `stream_options`, and the broader
-  OpenAI parameter surface fail closed. It derives a stateless turn from prior
-  assistant messages and injects fresh request/completion IDs, while content-derived
-  plan IDs stay internal. Initial response/error delay is abort-aware, but there is no
-  SSE listener or timed chunk delivery. The Anthropic parser accepts only bounded
+  Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
+  Completions as JSON or bounded SSE, and non-streaming Anthropic Messages. OpenAI
+  requires Bearer and Anthropic requires `x-api-key` plus exactly
+  `anthropic-version: 2023-06-01`; both auth modes require a valid provider Mock
+  Credential. `accept_any` skips verifier comparison, while `strict` checks the
+  dialect's current hash-only verifier. The OpenAI parser accepts only bounded text
+  messages, function tools, `n` absent/one, `stream` absent/false/true, and
+  `tool_choice` absent/`auto`. `stream_options` is valid only with `stream: true`,
+  accepts only optional Boolean `include_usage` and `include_obfuscation`, and rejects
+  unknown fields. Usage is omitted by default. Obfuscation defaults on and adds fresh
+  opaque compatibility padding to regular delta chunks; it is not qualified as
+  upstream size normalization or a security control. Unknown fields, multimodal
+  content, and the broader OpenAI parameter surface fail closed.
+  The runtime derives a stateless turn from prior assistant messages, commits the
+  selected plan in the Environment Durable Object after the final definition-revision
+  check and before returning it to the edge, and injects fresh request/completion IDs
+  while content-derived plan IDs stay internal. OpenAI initial delay is abort-aware
+  and occurs before response headers. Only payload deltas are cadence-paced; role,
+  terminal, optional usage, and `[DONE]` frames are immediate. One absolute maximum
+  duration includes initial wait, pacing, and response backpressure, and the complete
+  precomputed SSE body is capped at 2,097,152 UTF-8 bytes. The schedule is accepted
+  only when `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  is strictly less than `maximumDurationMilliseconds`;
+  equality is rejected. Payload frame count comes from Unicode code-point chunks of
+  text and canonical tool arguments. Preflight failures return a generic JSON error
+  before HTTP `200`; cancellation or deadline after HTTP `200` truncates the stream
+  without fabricating terminal success. Configured midstream errors are not
+  supported. The Anthropic parser accepts only bounded
   `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
   streaming/betas/broad parameters, and deliberately does not enforce turn alternation
   or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,

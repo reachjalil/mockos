@@ -1,6 +1,10 @@
 import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
 import { canonicalMockLlmJson } from "./canonical-json";
-import type { RenderedLlmWire, RenderLlmPlanOptions } from "./wire";
+import type {
+  RenderedLlmSseFrame,
+  RenderedLlmWire,
+  RenderLlmPlanOptions,
+} from "./wire";
 
 type MockLlmResponsePlan = Extract<MockLlmPlan, { readonly kind: "response" }>;
 type MockLlmErrorPlan = Extract<MockLlmPlan, { readonly kind: "error" }>;
@@ -14,6 +18,12 @@ export type RenderOpenAiPlanOptions = RenderLlmPlanOptions & {
    */
   readonly requestId?: string;
   readonly responseId?: string;
+  /**
+   * Adds opaque, response-scoped compatibility padding to delta events. This
+   * mirrors the current OpenAI event shape but does not claim to reproduce the
+   * upstream service's undisclosed payload-size distribution.
+   */
+  readonly includeObfuscation?: boolean;
 };
 
 type OpenAiWireIdentity = {
@@ -149,14 +159,20 @@ const renderOpenAiJsonResponse = (
   };
 };
 
-const openAiSseFrame = (event: Readonly<Record<string, unknown>>): string =>
-  `data: ${JSON.stringify(event)}\n\n`;
+const openAiSseFrame = (
+  event: Readonly<Record<string, unknown>>,
+  cadence: RenderedLlmSseFrame["cadence"] = "immediate"
+): RenderedLlmSseFrame => ({
+  data: `data: ${JSON.stringify(event)}\n\n`,
+  cadence,
+});
 
 const openAiChunk = (
   plan: MockLlmResponsePlan,
   responseId: string,
   choice: Readonly<Record<string, unknown>>,
-  includeUsage: boolean
+  includeUsage: boolean,
+  obfuscation?: string
 ): Readonly<Record<string, unknown>> => ({
   id: responseId,
   object: "chat.completion.chunk",
@@ -164,26 +180,36 @@ const openAiChunk = (
   model: plan.model,
   choices: [choice],
   ...(includeUsage ? { usage: null } : {}),
+  ...(obfuscation === undefined ? {} : { obfuscation }),
 });
 
 const renderOpenAiSseResponse = (
   plan: MockLlmResponsePlan,
   identity: OpenAiWireIdentity,
-  includeUsage: boolean
+  includeUsage: boolean,
+  includeObfuscation: boolean
 ): RenderedLlmWire => {
-  const frames: string[] = [
+  let eventIndex = 0;
+  const chunk = (
+    choice: Readonly<Record<string, unknown>>
+  ): Readonly<Record<string, unknown>> =>
+    openAiChunk(
+      plan,
+      identity.responseId,
+      choice,
+      includeUsage,
+      includeObfuscation
+        ? `mockos_${identity.responseId.slice(-16)}_${eventIndex++}`
+        : undefined
+    );
+  const frames: RenderedLlmSseFrame[] = [
     openAiSseFrame(
-      openAiChunk(
-        plan,
-        identity.responseId,
-        {
-          index: 0,
-          delta: { role: "assistant", content: "", refusal: null },
-          logprobs: null,
-          finish_reason: null,
-        },
-        includeUsage
-      )
+      chunk({
+        index: 0,
+        delta: { role: "assistant", content: "", refusal: null },
+        logprobs: null,
+        finish_reason: null,
+      })
     ),
   ];
 
@@ -193,17 +219,13 @@ const renderOpenAiSseResponse = (
       for (const text of splitCodePoints(segment.text, plan.cadence.chunkSize)) {
         frames.push(
           openAiSseFrame(
-            openAiChunk(
-              plan,
-              identity.responseId,
-              {
-                index: 0,
-                delta: { content: text },
-                logprobs: null,
-                finish_reason: null,
-              },
-              includeUsage
-            )
+            chunk({
+              index: 0,
+              delta: { content: text },
+              logprobs: null,
+              finish_reason: null,
+            }),
+            "payload"
           )
         );
       }
@@ -217,52 +239,44 @@ const renderOpenAiSseResponse = (
     const firstArguments = argumentChunks[0] ?? "";
     frames.push(
       openAiSseFrame(
-        openAiChunk(
-          plan,
-          identity.responseId,
-          {
-            index: 0,
-            delta: {
-              tool_calls: [
-                {
-                  index: toolIndex,
-                  id: segment.id,
-                  type: "function",
-                  function: {
-                    name: segment.name,
-                    arguments: firstArguments,
-                  },
+        chunk({
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: toolIndex,
+                id: segment.id,
+                type: "function",
+                function: {
+                  name: segment.name,
+                  arguments: firstArguments,
                 },
-              ],
-            },
-            logprobs: null,
-            finish_reason: null,
+              },
+            ],
           },
-          includeUsage
-        )
+          logprobs: null,
+          finish_reason: null,
+        }),
+        "payload"
       )
     );
     for (const argumentChunk of argumentChunks.slice(1)) {
       frames.push(
         openAiSseFrame(
-          openAiChunk(
-            plan,
-            identity.responseId,
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    index: toolIndex,
-                    function: { arguments: argumentChunk },
-                  },
-                ],
-              },
-              logprobs: null,
-              finish_reason: null,
+          chunk({
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: toolIndex,
+                  function: { arguments: argumentChunk },
+                },
+              ],
             },
-            includeUsage
-          )
+            logprobs: null,
+            finish_reason: null,
+          }),
+          "payload"
         )
       );
     }
@@ -271,17 +285,12 @@ const renderOpenAiSseResponse = (
 
   frames.push(
     openAiSseFrame(
-      openAiChunk(
-        plan,
-        identity.responseId,
-        {
-          index: 0,
-          delta: {},
-          logprobs: null,
-          finish_reason: OPENAI_FINISH_REASON[plan.stopReason],
-        },
-        includeUsage
-      )
+      chunk({
+        index: 0,
+        delta: {},
+        logprobs: null,
+        finish_reason: OPENAI_FINISH_REASON[plan.stopReason],
+      })
     )
   );
   if (includeUsage) {
@@ -296,7 +305,7 @@ const renderOpenAiSseResponse = (
       })
     );
   }
-  frames.push("data: [DONE]\n\n");
+  frames.push({ data: "data: [DONE]\n\n", cadence: "immediate" });
   return {
     kind: "sse",
     status: 200,
@@ -336,6 +345,11 @@ export const renderOpenAiPlan = (
   };
   if (plan.kind === "error") return renderOpenAiError(plan, identity.requestId);
   return options.stream
-    ? renderOpenAiSseResponse(plan, identity, options.includeUsage === true)
+    ? renderOpenAiSseResponse(
+        plan,
+        identity,
+        options.includeUsage === true,
+        options.includeObfuscation === true
+      )
     : renderOpenAiJsonResponse(plan, identity);
 };

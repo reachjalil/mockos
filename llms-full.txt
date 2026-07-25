@@ -38,11 +38,12 @@ Repository path: `README.md`
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
 > MCP-only mock-LLM definition operations with environment-local schema-v7 persistence
-> and write-only provider keys plus bounded OpenAI Chat Completions and Anthropic
-> Messages/model non-streaming data planes. Package tests and local Worker integrations
-> through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify that bounded
-> source slice. Streaming/betas, conversation state, observations/assertions, and
-> complete F2 remain unavailable. The guarded GitHub promotion
+> and write-only provider keys plus bounded OpenAI Chat Completions JSON/SSE and
+> Anthropic Messages/model non-streaming data planes. Package tests and local Worker
+> integrations through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify
+> that bounded source slice. Configured midstream errors, the OpenAI Responses API,
+> Anthropic streaming/betas, conversation state, observations/assertions, and complete
+> F2 remain unavailable. The guarded GitHub promotion
 > workflows remain unqualified. This is not yet
 > a stable npm release or a production-SLA service. See the
 > [evidence ledger](docs/IMPLEMENTATION_STATUS.md).
@@ -77,9 +78,10 @@ configuration operations remain part of management MCP. Start with the
 [mock MCP guide](docs/mock-mcp.md). Four
 [mock-LLM definition operations](docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
-list/retrieve and non-streaming Chat Completions plus Anthropic model list/retrieve and
-non-streaming Messages at environment routes through pinned official SDKs.
-Streaming/betas, conversation state, LLM observations/assertions, script execution,
+list/retrieve and Chat Completions as JSON or bounded SSE plus Anthropic model
+list/retrieve and non-streaming Messages at environment routes through pinned official
+SDKs. Configured midstream errors, the OpenAI Responses API, Anthropic
+streaming/betas, conversation state, LLM observations/assertions, script execution,
 enforced scoped keys, Cloud integration, and deployment remain unavailable. Start with
 the [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md), and use the
@@ -160,9 +162,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
   operations, schema-v7 environment persistence, mandatory revision
   compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
   request adapters. Local Worker integrations configure through MCP and exercise
-  official SDK model list/retrieve, non-streaming text/tool/error calls,
-  provider-specific authentication/versioning, isolation, rotation, and fresh
-  transport identity. SSE/betas, runtime/conversation state, reset, LLM
+  official SDK model list/retrieve, JSON text/tool/error calls, bounded OpenAI SSE
+  usage/obfuscation/cancellation, provider-specific authentication/versioning,
+  isolation, rotation, and fresh transport identity. Configured midstream errors,
+  OpenAI Responses, Anthropic streaming/betas, runtime/conversation state, reset, LLM
   observation/assertion, Wrangler-network or deployed conformance, and Cloud pinning
   remain unavailable
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
@@ -425,10 +428,11 @@ It also does not configure the F2 definition/provider workflow. Use the
 [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md) for a short end-to-end
 path, or [MCP-managed mock OpenAI and Anthropic](docs/mock-llm.md) for exact revision,
 credential, request, persistence, and cleanup contracts. That partial F2 workflow
-enables bounded model discovery plus non-streaming OpenAI Chat Completions and
+enables bounded model discovery, OpenAI JSON/SSE Chat Completions, and non-streaming
 Anthropic Messages. It does not enable:
 
-- broad Anthropic provider/beta APIs, the OpenAI Responses API, or SSE;
+- broad Anthropic provider/beta APIs, Anthropic SSE, configured midstream errors, or
+  the OpenAI Responses API;
 - LLM conversation state, reset, observations, or assertions;
 - Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);
@@ -463,7 +467,7 @@ surface are supporting interfaces, not separate sources of product behavior.
 | Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
-| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI Chat Completions and Anthropic Messages/model subsets source-qualified locally; streaming/betas, state, observations, and deployment unavailable |
+| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI JSON/SSE Chat Completions and non-streaming Anthropic Messages/model subsets source-qualified locally; configured midstream errors, Responses, Anthropic streaming/betas, state, observations, and deployment unavailable |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](docs/README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -498,7 +502,7 @@ management routes.
 
 The four F2 management tools define mock-LLM dependencies and have no HTTP management
 projection. The configured application-facing route is separate: the current bounded
-source exposes OpenAI `/models`, `/models/{model}`, and non-streaming
+source exposes OpenAI `/models`, `/models/{model}`, and JSON or SSE
 `/chat/completions` plus Anthropic `/v1/models`, `/v1/models/{model}`, and
 non-streaming `/v1/messages`. The tools existed before those routes, so their presence
 alone is not provider capability evidence; use authenticated OpenAI `GET /models` or
@@ -586,7 +590,7 @@ Repository path: `docs/reference/management-tools.md`
 
 # Management MCP tool reference
 
-Status: Generated from the implemented 24-tool management registry; F1 mock MCP and bounded F2 OpenAI/Anthropic data planes are source-qualified locally
+Status: Generated from the implemented 24-tool management registry; F1 mock MCP, bounded streaming OpenAI, and bounded non-streaming Anthropic data planes are source-qualified locally
 Last reviewed: 2026-07-25
 
 <!-- Generated by scripts/generate-f0-artifacts.ts. Do not edit. -->
@@ -9308,9 +9312,14 @@ invented HTTP path.
 - The bounded OpenAI data plane is source-qualified locally at
   `/e/{environmentId}/llm-mock/{slug}/openai/v1` or
   `https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1`.
-- It implements `GET /models`, `GET /models/{model}`, and non-streaming
-  `POST /chat/completions`. Use `GET /models` as the non-mutating capability
-  probe.
+- It implements `GET /models`, `GET /models/{model}`, and bounded JSON or SSE
+  `POST /chat/completions`. OpenAI streaming accepts only boolean
+  `include_usage` and `include_obfuscation` options while `stream: true`; use
+  `GET /models` as the non-mutating capability probe.
+- Stream preflight requires
+  `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  to be strictly less than `maximumDurationMilliseconds`; payload frames are
+  Unicode code-point chunks of text and canonical tool arguments.
 - Both `accept_any` and `strict` require a syntactically valid provider-scoped
   Bearer Mock Credential. Strict mode verifies the current SHA-256 verifier;
   platform management keys and alternate provider headers are rejected.
@@ -9323,8 +9332,8 @@ invented HTTP path.
 - Anthropic requires a provider-scoped `x-api-key` Mock Credential and the exact
   `anthropic-version: 2023-06-01`; authorization aliases and every beta header are
   rejected. The official `@anthropic-ai/sdk` 0.115.0 local Worker flow is qualified.
-- Streaming, beta APIs, OpenAI Responses, conversation state,
-  observations/assertions, Cloud pinning,
+- Anthropic streaming, beta APIs, OpenAI Responses, durable conversation state,
+  configured mid-stream errors, observations/assertions, Cloud pinning,
   hosted deployment, and live-provider parity remain unqualified or unavailable.
 - Deployed acceptance remains `unqualified`.
 - Use [the mock LLM guide](docs/mock-llm.md) for the exact definition, revision,
@@ -9335,7 +9344,7 @@ invented HTTP path.
 
 ## Unavailable MCP surfaces
 
-- OpenAI Responses, provider streaming/betas, durable conversations, and
+- OpenAI Responses, Anthropic streaming/betas, durable conversations, and
   LLM-specific observation/assertion MCP surfaces remain unavailable.
 - Code Mode `search` and `execute` are planned for F6 and remain disabled.
 
@@ -9542,7 +9551,7 @@ These are deliberately separate trust boundaries:
 - `/llm-mock/{slug}/openai/v1` under an environment requires a syntactically valid
   provider Bearer Mock Credential. `accept_any` skips verifier comparison but is not
   unauthenticated; `strict` compares the current stored verifier. The route supports
-  only model list/retrieve and non-streaming Chat Completions.
+  only model list/retrieve and bounded JSON/SSE Chat Completions.
 - `/llm-mock/{slug}/anthropic` under an environment requires a syntactically valid
   provider `x-api-key` Mock Credential plus exactly
   `anthropic-version: 2023-06-01`. It supports model list/retrieve and non-streaming
@@ -10524,7 +10533,7 @@ beyond the tested clients.
 - No script execution; `script` falls back explicitly or fails closed.
 - No `proxy` or record/replay behavior.
 - This F1 mock-MCP route exposes no LLM API. The separate partial F2 surface supports
-  bounded OpenAI and Anthropic non-streaming provider routes.
+  bounded OpenAI JSON/SSE and Anthropic non-streaming provider routes.
 - No enforced `env:ro` or `env:rw` Access Key scopes before F4.
 - No direct HTTP management routes for the five F1 operations.
 - No npm publication, hosted acceptance, deployment acceptance, load envelope, or
@@ -10543,7 +10552,7 @@ Repository path: `docs/mock-llm.md`
 
 # MCP-managed mock OpenAI and Anthropic
 
-Status: Bounded OpenAI and Anthropic non-streaming provider data planes source-qualified locally; F2 remains partial
+Status: Bounded OpenAI streaming and Anthropic non-streaming provider data planes source-qualified locally; F2 remains partial
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first. Agents and automation create, inspect, replace, and delete mock
@@ -10551,9 +10560,9 @@ LLM definitions through management MCP. An application under test then calls a
 separate, environment-hosted OpenAI- or Anthropic-shaped data plane. Configuration
 never moves to provider HTTP, and application traffic never becomes a management API.
 
-The current source-qualified slice supports model list/retrieve plus non-streaming
-OpenAI Chat Completions and Anthropic Messages through pinned official JavaScript
-SDKs. It is a pair of bounded compatibility subsets, not a general OpenAI or Anthropic API,
+The current source-qualified slice supports model list/retrieve, JSON and SSE OpenAI
+Chat Completions, and non-streaming Anthropic Messages through pinned official
+JavaScript SDKs. It is a pair of bounded compatibility subsets, not a general OpenAI or Anthropic API,
 deployed service, live-provider comparison, or complete F2 runtime.
 Start with the [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md). The generated
@@ -10614,7 +10623,7 @@ It is not an alternative way to configure mockOS.
 | --- | --- |
 | Configuration | Four MCP-only definition tools with explicit revision compare-and-swap |
 | OpenAI Models | Ordered list and exact retrieve |
-| OpenAI Chat Completions | One non-streaming choice with text, function tool calls, usage, deterministic behavior, and provider-shaped configured errors |
+| OpenAI Chat Completions | One JSON or SSE choice with text, function tool calls, optional stream usage, deterministic behavior, and provider-shaped configured errors |
 | Anthropic Models | Ordered single-page list and exact retrieve |
 | Anthropic Messages | One non-streaming message with text/custom `tool_use`, usage, deterministic behavior, and provider-shaped configured errors |
 | Authentication | Provider-scoped Bearer for OpenAI and `x-api-key` for Anthropic in both `accept_any` and `strict` modes |
@@ -10622,11 +10631,12 @@ It is not an alternative way to configure mockOS.
 | Hosting forms | Environment path mode and environment subdomain mode |
 | SDK evidence | Pinned `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0 through local Worker integrations using injected Fetch |
 | Runtime state | Stateless; the prior `assistant` message count selects the turn |
-| Timing | Bounded initial response/error delay with abort-aware edge waiting |
+| Timing | OpenAI pre-header initial delay, payload-only SSE pacing, absolute duration/backpressure deadline, and abort/cancel cleanup |
 | Evidence | Package and local Worker source qualification only |
 
-Streaming, Anthropic beta APIs, the OpenAI Responses API, conversation state, LLM
-observations/assertions, Cloud pinning, and deployment remain unavailable.
+Anthropic streaming/betas, the OpenAI Responses API, configured mid-stream errors,
+conversation state, LLM observations/assertions, Cloud pinning, and deployment remain
+unavailable.
 
 ## Prerequisites
 
@@ -10821,7 +10831,7 @@ Only the six generated provider operations are supported:
 | --- | --- | --- | --- |
 | OpenAI | `GET` | `/models` | Ordered configured model list |
 | OpenAI | `GET` | `/models/{model}` | One exact configured model |
-| OpenAI | `POST` | `/chat/completions` | One non-streaming Chat Completion |
+| OpenAI | `POST` | `/chat/completions` | One JSON or SSE Chat Completion |
 | Anthropic | `GET` | `/v1/models` | Ordered configured model list |
 | Anthropic | `GET` | `/v1/models/{model}` | One exact configured model |
 | Anthropic | `POST` | `/v1/messages` | One non-streaming Message |
@@ -10934,15 +10944,16 @@ The request body accepts only these top-level fields:
 | `model` | Required configured model ID |
 | `messages` | Required array of 1–256 bounded messages |
 | `n` | Absent or exactly `1` |
-| `stream` | Absent or `false` |
+| `stream` | Absent/`false` for JSON; `true` for SSE |
+| `stream_options` | Only with `stream: true`; optional Boolean `include_usage` and `include_obfuscation` fields only |
 | `tools` | Optional array of at most 64 unique function definitions |
 | `tool_choice` | Absent or exactly `"auto"` |
 
-Unknown top-level fields fail closed. In particular, `response_format`,
-`stream_options`, multimodal input, and sampling/token-control fields are not
-silently ignored. `stream: true` returns `400 streaming_not_supported`;
-`stream_options` is rejected even when `stream` is false. `tool_choice` values
-`"none"`, `"required"`, and named-tool objects are unavailable.
+Unknown top-level fields fail closed. In particular, `response_format`, multimodal
+input, and sampling/token-control fields are not silently ignored. `stream_options`
+is rejected when `stream` is absent or false, when it is not an object, when either
+supported value is not Boolean, or when it contains another field. `tool_choice`
+values `"none"`, `"required"`, and named-tool objects are unavailable.
 
 ### Message forms
 
@@ -10976,7 +10987,7 @@ Each tool value is capped at 65,536 bytes, depth 16, and 2,000 JSON nodes.
 | Messages | 256 |
 | Tools | 64 |
 | Text/tool value | 65,536 UTF-8 bytes |
-| Response body | 2,097,152 UTF-8 bytes |
+| JSON or complete precomputed SSE response body | 2,097,152 UTF-8 bytes |
 
 `POST /chat/completions` requires `Content-Type: application/json`; an optional
 parameter must be exactly `charset=utf-8`. Missing/other media types and other charset
@@ -11013,11 +11024,50 @@ headers do not. OpenAI returns configured default usage as `prompt_tokens`,
 `input_tokens` and `output_tokens`. mockOS does not tokenize request text or claim
 provider-accurate accounting.
 
-Initial response or error delay is honored outside the Environment Durable Object
-with abort-aware waiting. With no streaming, chunk delay, chunk size, and maximum
-stream duration remain inert cadence metadata. An observed local Fetch abort during
-the initial wait returns an empty `499`; this is not SSE or message-level
-cancellation support.
+Planning and its staged behavior commit complete inside the Environment Durable
+Object after the current definition revision is rechecked and before the plan returns
+to the edge. The current default remains stateless: `sequence` selection comes only
+from `turnIndex`, so this commit writes no conversation or evaluator cursor.
+
+For OpenAI, initial response or configured-error delay is honored before response
+headers with abort-aware waiting. An observed Fetch abort during that wait returns an
+empty `499`. For a successful SSE response, `chunkSize` splits text and canonical
+tool arguments by Unicode code point. `chunkDelayMilliseconds` paces only payload
+deltas; the opening role chunk, terminal chunk, optional usage chunk, and
+`data: [DONE]` are emitted without intentional delay.
+
+One absolute maximum duration, `maximumDurationMilliseconds`, covers the initial
+wait, payload pacing, and backpressure. A schedule is admissible only when
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+is strictly less than `maximumDurationMilliseconds`; equality is rejected so the
+last planned payload does not race the deadline. The payload frame count is derived
+by Unicode code-point chunking of every text segment and canonical tool-argument
+string at `chunkSize`.
+
+Before returning HTTP `200`, the edge precomputes the whole SSE body, enforces the
+2,097,152-byte UTF-8 ceiling, and rejects an inadmissible schedule or other preflight
+failure with generic JSON. After `200`, client cancellation or expiry of that absolute
+deadline truncates the stream, clears pending work, and does not fabricate a terminal
+chunk, usage chunk, or `[DONE]` success sentinel. Anthropic remains non-streaming, so
+its chunk cadence metadata is inert.
+
+### Stream OpenAI output
+
+With `stream: true`, OpenAI emits an assistant-role chunk, zero or more text or
+function-argument payload deltas, a terminal finish-reason chunk, an optional usage
+chunk, then `data: [DONE]`. Tool-call identity, index, type, and function name appear
+on the first delta for that call; later deltas continue its canonical JSON argument
+string.
+
+`include_usage` defaults to false. When true, regular chunks carry `usage: null` and
+one empty-choices usage chunk appears immediately before `[DONE]`. If cancellation or
+the deadline interrupts the stream, that final usage chunk is not guaranteed.
+
+`include_obfuscation` defaults to true. Regular delta chunks receive fresh,
+response-scoped opaque compatibility padding; set it to false to omit that field.
+mockOS does not claim to reproduce OpenAI's undisclosed padding distribution,
+payload-size normalization, or security properties. Padding counts toward the
+complete response-byte ceiling.
 
 ## Use function tools
 
@@ -11152,8 +11202,8 @@ OpenAI local request failures use a bounded OpenAI-shaped envelope and fresh
   "error": {
     "message": "The request is not valid for this mock OpenAI endpoint.",
     "type": "invalid_request_error",
-    "param": "stream",
-    "code": "streaming_not_supported"
+    "param": "stream_options",
+    "code": "invalid_request"
   }
 }
 ```
@@ -11167,7 +11217,6 @@ material, runtime exceptions, or validation-library details.
 | `400 invalid_content_type` | Media type or charset is unsupported | Use `application/json` with optional UTF-8 charset |
 | `400 unsupported_content_encoding` | Compressed/other content encoding was supplied | Send identity/unencoded JSON |
 | `400 invalid_request` | Shape, role, field, model syntax, choice count, or tool contract is invalid | Use only the documented subset and inspect `param` when present |
-| `400 streaming_not_supported` | `stream: true` was supplied | Use non-streaming completion |
 | `400 credential_reflection_not_allowed` | Body contains a presented provider or platform credential | Remove the credential from all body keys and string values |
 | `401 invalid_api_key` | Bearer syntax/policy/verifier failed | Present the provider-scoped Mock Credential; never substitute the management key |
 | `404 mock_llm_server_not_found` | Slug is absent or OpenAI is disabled | Inspect the definition through MCP; the provider error deliberately does not distinguish those cases |
@@ -11175,7 +11224,13 @@ material, runtime exceptions, or validation-library details.
 | `404 route_not_found` | Relative provider path is unsupported | Use one of the three generated operations |
 | `405 method_not_allowed` | Known path used the wrong method | Follow the response `Allow` header |
 | `413 request_too_large` | Body, depth, node, or structural budget was exceeded | Reduce the request; do not retry unchanged |
-| `500 internal_error` | Runtime failed, definition changed repeatedly, output was invalid/oversized, or a tool call was undeclared | Treat as failed source behavior and inspect non-secret local diagnostics |
+| `500 internal_error` | Runtime failed, definition changed repeatedly, output was invalid/oversized, a tool call was undeclared, or SSE preflight could not satisfy its byte/timing contract | Treat as failed source behavior and inspect non-secret local diagnostics |
+
+Configured neutral errors always remain provider-shaped JSON responses after their
+pre-header delay, even when the request asked for streaming. This slice cannot inject
+a configured error after SSE has started. Post-`200` cancellation, deadline, or
+delivery failure is an incomplete stream without `[DONE]`, not a fabricated
+provider-error event or successful completion.
 
 Anthropic local failures use a bounded envelope and put the same fresh ID in the
 `request-id` header and `request_id` body field:
@@ -11256,8 +11311,8 @@ After the management put:
 2. confirm strict auth appears only as `configured: true`;
 3. call OpenAI `GET /models` with Bearer or Anthropic `GET /v1/models` with
    `x-api-key` plus the exact stable version;
-4. run one non-streaming text or declared-tool completion/message with SDK retries
-   disabled;
+4. run one JSON or SSE OpenAI completion, or one non-streaming Anthropic message, with
+   SDK retries disabled;
 5. record only source evidence unless an exact deployment record exists; and
 6. delete the definition with the latest positive revision in `finally`.
 
@@ -11277,8 +11332,8 @@ This partial slice does not provide:
   embeddings, audio, images, or other OpenAI APIs;
 - Anthropic beta APIs, legacy Text Completions, Message Batches, token counting,
   Files, Skills, or other Anthropic APIs;
-- SSE, timed chunk delivery, `stream_options`, mid-stream errors, or stream
-  cancellation for either dialect;
+- Anthropic SSE or timed chunk delivery, configured OpenAI mid-stream errors, or
+  guaranteed OpenAI usage/terminal events after cancellation;
 - multimodal messages, JSON response format, sampling/token-control parameters,
   parallel choice counts, named/required/no-tool selection, or general Chat
   Completions compatibility;
@@ -11295,11 +11350,11 @@ This partial slice does not provide:
 
 Do not call F2 complete. The strongest current wording is:
 
-> MCP-managed definitions plus bounded OpenAI Chat Completions and Anthropic Messages
-> non-streaming provider data planes are source-qualified locally through package
-> tests and pinned official SDK Worker integrations. Streaming/betas, state,
-> observations, Cloud integration, deployment, and live-provider parity remain
-> unqualified or unavailable.
+> MCP-managed definitions plus bounded JSON/SSE OpenAI Chat Completions and
+> non-streaming Anthropic Messages are source-qualified locally through package tests
+> and pinned official SDK Worker integrations. Anthropic streaming/betas, configured
+> mid-stream errors, state, observations, Cloud integration, deployment, and
+> live-provider parity remain unqualified or unavailable.
 
 ## Source ownership and exact reference
 
@@ -11310,7 +11365,7 @@ Do not call F2 complete. The strongest current wording is:
 | [`packages/core/src/mock-llm/repository.ts`](packages/core/src/mock-llm/repository.ts) | Canonical definition persistence, revision allocation, replay, and compare-and-swap |
 | [`packages/llm-mock/src/planner.ts`](packages/llm-mock/src/planner.ts) | Provider-neutral deterministic response planning |
 | [`packages/llm-mock/src/openai.ts`](packages/llm-mock/src/openai.ts) | OpenAI JSON and pure SSE-frame projection |
-| [`packages/llm-mock/src/openai-http.ts`](packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, timing, and transport IDs |
+| [`packages/llm-mock/src/openai-http.ts`](packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, SSE preflight/pacing/cancellation, and transport IDs |
 | [`packages/llm-mock/src/anthropic.ts`](packages/llm-mock/src/anthropic.ts) | Anthropic JSON and pure SSE-frame projection |
 | [`packages/llm-mock/src/anthropic-http.ts`](packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, version/auth boundary, bounded Messages adapter, model projection, timing, and fresh transport IDs |
 | [`packages/worker-kit/src/mock-llm-runtime.ts`](packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition authentication, stateless planning, and revision recheck |
@@ -11333,11 +11388,11 @@ Repository path: `docs/quickstarts/openai-sdk.md`
 
 # Test an application with the mock OpenAI SDK surface
 
-Status: OpenAI-only non-streaming source workflow; no hosted or deployed qualification
+Status: OpenAI JSON/SSE source workflow; no hosted or deployed qualification
 Last reviewed: 2026-07-25
 
 This quickstart creates a deterministic model through management MCP, proves the
-separate provider data plane with `GET /models`, and calls non-streaming Chat
+separate provider data plane with `GET /models`, and calls JSON and SSE Chat
 Completions through the official OpenAI JavaScript SDK. It uses path-mode URLs from a
 local source Worker.
 
@@ -11434,9 +11489,9 @@ Credential from caller-owned secret storage before sending the call; the
       "outputTokens": 5
     },
     "defaultCadence": {
-      "chunkDelayMilliseconds": 0,
-      "chunkSize": 256,
-      "maximumDurationMilliseconds": 60000
+      "chunkDelayMilliseconds": 20,
+      "chunkSize": 8,
+      "maximumDurationMilliseconds": 5000
     }
   }
 }
@@ -11542,18 +11597,72 @@ Expect:
 The usage values are definition-controlled synthetic values. They are not calculated
 by tokenizing the prompt.
 
-## 4. Prove one negative case
+## 4. Stream the same deterministic completion
+
+Add this after the JSON assertion:
+
+```js
+const stream = await client.chat.completions.create({
+  model: "mock-agent-1",
+  messages: [{ role: "user", content: "Hello" }],
+  stream: true,
+  stream_options: {
+    include_usage: true,
+    include_obfuscation: false,
+  },
+});
+
+let streamedText = "";
+let streamedUsage;
+for await (const chunk of stream) {
+  streamedText += chunk.choices[0]?.delta.content ?? "";
+  if (chunk.usage) streamedUsage = chunk.usage;
+}
+
+if (streamedText !== "This response is deterministic.") {
+  throw new Error(`unexpected streamed response: ${JSON.stringify(streamedText)}`);
+}
+if (streamedUsage?.total_tokens !== 16) {
+  throw new Error(`unexpected streamed usage: ${JSON.stringify(streamedUsage)}`);
+}
+```
+
+`include_usage` defaults to false. When requested, regular chunks carry
+`usage: null` and the complete usage arrives in one final empty-choices chunk before
+`[DONE]`. `include_obfuscation` defaults to true; this example turns it off so captured
+fixtures stay compact. When enabled, regular delta chunks carry fresh opaque
+compatibility padding. mockOS does not claim OpenAI's undisclosed payload-size
+normalization or security properties.
+
+The configured initial delay occurs before response headers. Only text and tool
+argument payload deltas use `chunkDelayMilliseconds`; the role, terminal, usage, and
+`[DONE]` frames are immediate. One absolute maximum duration includes that initial
+wait, pacing, and backpressure. The entire precomputed SSE body must fit within
+2,097,152 UTF-8 bytes.
+
+Before starting, the schedule must satisfy
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+strictly less than `maximumDurationMilliseconds`; equality is rejected to avoid a
+deadline race. The payload frame count comes from Unicode code-point chunks of text
+and canonical tool-argument strings at the configured `chunkSize`.
+
+To test application cancellation, break the iterator or call
+`stream.controller.abort()` after a received chunk. Do not require a final usage
+chunk or `[DONE]` after cancellation: post-`200` cancellation or deadline expiry
+deliberately truncates the stream instead of fabricating success.
+
+## 5. Prove one negative case
 
 Keep `maxRetries: 0`, then choose one bounded negative case:
 
 - call a missing model and require `404 model_not_found`;
 - present a different provider Mock Credential and require `401 invalid_api_key`; or
-- set `stream: true` and require `400 streaming_not_supported`.
+- send `stream_options` without `stream: true` and require `400 invalid_request`.
 
 Do not submit the credential inside a prompt. The adapter rejects credential
 reflection, and request-log observation is not part of this LLM slice.
 
-## 5. Clean up with the latest revision
+## 6. Clean up with the latest revision
 
 In `finally`:
 
@@ -11576,9 +11685,10 @@ prove a Wrangler network round trip, hosted CI, Cloud consumption, staging,
 production, or live OpenAI parity.
 
 This OpenAI workflow does not exercise the separately source-qualified bounded
-Anthropic route. The current F2 slice still has no SSE, Responses API, multimodal
-content, persisted conversation state, reset, LLM observations/assertions, or broad
-Chat Completions parameter support. Use the
+Anthropic route. The current F2 slice still has no Responses API, multimodal content,
+configured mid-stream errors, persisted conversation state, reset, LLM
+observations/assertions, or broad Chat Completions parameter support. Anthropic
+streaming also remains unavailable. Use the
 [machine-readable provider manifest](docs/reference/mock-llm-openai.v1.json) instead of
 guessing from OpenAI's broader API.
 
@@ -12050,18 +12160,34 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
   strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
-  Environment routes source-qualify ordered model list/retrieve plus non-streaming
-  Chat Completions and Messages. OpenAI requires Bearer and Anthropic requires
-  `x-api-key` plus exactly `anthropic-version: 2023-06-01`; both auth modes require a
-  valid provider Mock Credential. `accept_any` skips verifier comparison, while
-  `strict` checks the dialect's current hash-only verifier. The OpenAI parser accepts
-  only bounded text messages,
-  function tools, `n` absent/one, `stream` absent/false, and `tool_choice`
-  absent/`auto`; unknown fields, multimodal content, `stream_options`, and the broader
-  OpenAI parameter surface fail closed. It derives a stateless turn from prior
-  assistant messages and injects fresh request/completion IDs, while content-derived
-  plan IDs stay internal. Initial response/error delay is abort-aware, but there is no
-  SSE listener or timed chunk delivery. The Anthropic parser accepts only bounded
+  Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
+  Completions as JSON or bounded SSE, and non-streaming Anthropic Messages. OpenAI
+  requires Bearer and Anthropic requires `x-api-key` plus exactly
+  `anthropic-version: 2023-06-01`; both auth modes require a valid provider Mock
+  Credential. `accept_any` skips verifier comparison, while `strict` checks the
+  dialect's current hash-only verifier. The OpenAI parser accepts only bounded text
+  messages, function tools, `n` absent/one, `stream` absent/false/true, and
+  `tool_choice` absent/`auto`. `stream_options` is valid only with `stream: true`,
+  accepts only optional Boolean `include_usage` and `include_obfuscation`, and rejects
+  unknown fields. Usage is omitted by default. Obfuscation defaults on and adds fresh
+  opaque compatibility padding to regular delta chunks; it is not qualified as
+  upstream size normalization or a security control. Unknown fields, multimodal
+  content, and the broader OpenAI parameter surface fail closed.
+  The runtime derives a stateless turn from prior assistant messages, commits the
+  selected plan in the Environment Durable Object after the final definition-revision
+  check and before returning it to the edge, and injects fresh request/completion IDs
+  while content-derived plan IDs stay internal. OpenAI initial delay is abort-aware
+  and occurs before response headers. Only payload deltas are cadence-paced; role,
+  terminal, optional usage, and `[DONE]` frames are immediate. One absolute maximum
+  duration includes initial wait, pacing, and response backpressure, and the complete
+  precomputed SSE body is capped at 2,097,152 UTF-8 bytes. The schedule is accepted
+  only when `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  is strictly less than `maximumDurationMilliseconds`;
+  equality is rejected. Payload frame count comes from Unicode code-point chunks of
+  text and canonical tool arguments. Preflight failures return a generic JSON error
+  before HTTP `200`; cancellation or deadline after HTTP `200` truncates the stream
+  without fabricating terminal success. Configured midstream errors are not
+  supported. The Anthropic parser accepts only bounded
   `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
   streaming/betas/broad parameters, and deliberately does not enforce turn alternation
   or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
@@ -12233,13 +12359,14 @@ persistence, mandatory revision compare-and-swap, and write-only provider-key vi
 The [task guide](docs/mock-llm.md) records the exact management and provider contracts.
 Bounded OpenAI and Anthropic request adapters, the shared environment runtime, route
 composition, generated provider manifests, and local Worker integrations now
-source-qualify ordered model list/retrieve plus non-streaming Chat Completions and
-Messages through pinned official SDKs. Both auth modes require the dialect's valid
-provider credential; strict mode checks only its current hash-only verifier.
-Anthropic additionally requires exactly `anthropic-version: 2023-06-01` and rejects
-beta headers. SSE/betas, runtime/conversation state or reset, LLM
-observation/assertion, Wrangler-network/deployed conformance, and private Cloud pinning
-remain unavailable. F2 therefore remains incomplete.
+source-qualify ordered model list/retrieve, OpenAI JSON/SSE Chat Completions, and
+non-streaming Anthropic Messages through pinned official SDKs. Both auth modes require
+the dialect's valid provider credential; strict mode checks only its current hash-only
+verifier. Anthropic additionally requires exactly
+`anthropic-version: 2023-06-01` and rejects beta headers. Configured midstream errors,
+OpenAI Responses, Anthropic streaming/betas, runtime/conversation state or reset, LLM
+observation/assertion, Wrangler-network/deployed conformance, and private Cloud
+pinning remain unavailable. F2 therefore remains incomplete.
 
 Evidence tiers are intentionally separate. **Source** means exact-revision local or
 hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
@@ -12253,7 +12380,7 @@ organization. No current fixture or milestone is verified-live.
 | Contracts v0 | Accepted through the bounded M6 runtime slice | The accepted contract includes SCIM resources, directory lifecycle state/actions/results, and the M5 [provisioning contract](packages/contracts/src/provisioning.ts) for safe target metadata, snapshots, watermarks, plans, operations, responses, and `run_provisioning_cycle` as tool 15. M6 adds seeded Authn `passwordState`, request-derived `oktaAuthnEndpoint`, and exact-only token rotation/clock-skew scenario actions. Exact M6 revision `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da` passed source and sampled deployed acceptance; packages remain unpublished. |
 | F0 contract, OpenAPI, client, and documentation foundation | Source-complete locally; hosted CI and merge pending | The version-one [shared behavior contract](packages/contracts/src/behavior.ts) freezes `static`, `template`, `sequence`, `match`, `error`, and exact-version `script` variants with seeded latency while rejecting `proxy`. The canonical [management operation registry](packages/contracts/src/operations/management.ts) now covers all 24 source MCP operations; MCP consumes that metadata, while only the five implemented HTTP routes enter the checked [OpenAPI document](packages/openapi/openapi/mockos-management.v1.json) and generated [client operation map](packages/client/src/generated.ts). The same generation step produces the [human tool reference](docs/reference/management-tools.md), [machine operation catalog](docs/reference/management-operations.v1.json), [product capability index](docs/reference/product-capabilities.v1.json), self-hosted HTTP reference, [mock OpenAI](docs/reference/mock-llm-openai.v1.json) and [mock Anthropic](docs/reference/mock-llm-anthropic.v1.json) provider manifests, and agent-readable indexes with exact-count, repository-reference, JSON-Pointer/Markdown-anchor, evidence-reference, executable-export, drift, and inert-secret checks. The capability index explicitly declares a partial F0-F2 interface slice containing management MCP, companion management HTTP, mock-MCP, bounded OpenAI/Anthropic, and disabled Code Mode. It names identity-provider, SCIM/provisioning-outcome, and private Cloud product rows as unindexed, so absence never means unsupported; their existing management operations remain covered inside the MCP/HTTP rows. Public provider/outcome rows await exact public contracts, while private Cloud remains a private evidence/policy overlay on an immutable public revision. Each included row identifies executable authorities and anchored limitations. Support describes the referenced bounded contract; source, hosted CI, private Cloud pin, deployment, and verified-live evidence independently record qualification, coverage, and current-versus-historical revision relation. The historical M6 bundle did not remotely exercise the five companion HTTP routes, so that deployed claim remains unqualified even though its context is retained. Each provider manifest is generated from its executable operation table and remains separate from management OpenAPI. The fetch-based [client](packages/client/src/client.ts), fail-closed [Code Mode wrapper](packages/codemode/src/index.ts), and [`NoSandbox`](packages/sandbox/src/index.ts) pass focused tests. Exact package pins and generated drift are root/CI gates. Code Mode and scripts remain unwired, and the workspace packages remain private pending distribution/runtime qualification. |
 | F1 environment-hosted mock MCP | Locally source-qualified; hosted CI/merge/deployment unqualified | Strict [mock-MCP contracts](packages/contracts/src/mock-mcp.ts), bounded JSON Schema/templates/results, [declarative evaluation](packages/core/src/behavior/evaluator.ts), schema-v6 revision/state/hash-only-session tables, the atomic [repository](packages/core/src/mock-mcp/repository.ts), five MCP-only management operations, and the hand-written [`@mockos/mcp-mock`](packages/mcp-mock) `2025-11-25` adapter pass their focused suites and the complete repository gate. The [path-mode Worker integration](apps/worker/test/mock-mcp.integration.test.ts) configures through management MCP and exercises the routed official SDK, separate credential/session boundary, pagination and all capability kinds, reset, idempotent/revision-changing writes, delete, and redacted MCP observations; host-resolver tests separately cover both endpoint forms. State is capped per value and at 256 rows/2 MiB in aggregate. Identical writes preserve revision/state/sessions; changed replacements and in-flight revision checks prevent stale results; result validation and HTTP-abort handling during configured latency happen before staged sequence commit; scripts fail closed. Resource-template reverse matching is bounded/linear and deterministic for empty, percent-encoded, and adjacent-variable captures. Message-level `notifications/cancelled` remains deliberately unenforced. The [F1 guide](docs/mock-mcp.md) records exact limits and gaps. Hosted CI, merge, package publication, deployment, wildcard TLS, private hosted integration, GET/list-change streaming, a second protocol version, scripts, proxy, and broader client/ecosystem conformance remain unqualified or unavailable. |
-| F2 mock-LLM kernel, management definitions, and provider data planes | Partial source-qualified implementation; hosted/deployed provider evidence unqualified | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, behavior adapter, pure OpenAI/Anthropic projections, and exact provider boundary. The [task guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v7 canonical persistence, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply, hash-only provider credentials, secret-safe validation, and non-round-trippable safe views. Executable OpenAI and Anthropic adapters add exact path/subdomain routes, model list/retrieve, bounded non-streaming Chat Completions/Messages parsing, provider-shaped local/configured errors, fresh transport IDs, alternate/platform-key rejection, credential non-reflection, response limits, and abort-aware initial delay. Anthropic additionally owns exact `x-api-key`, `anthropic-version: 2023-06-01`, and beta-header rejection. The environment runtime hashes before reading the current definition, compares strict verifiers without early exit, derives stateless turns from prior assistant messages, and rechecks the revision before plan commit. Package suites plus [OpenAI](apps/worker/test/mock-llm.integration.test.ts) and [Anthropic](apps/worker/test/mock-llm-anthropic.integration.test.ts) local Worker integrations configure through MCP and exercise pinned official-SDK model, text, tool, usage, error, isolation, and key-rotation flows. Generated [OpenAI](docs/reference/mock-llm-openai.v1.json) and [Anthropic](docs/reference/mock-llm-anthropic.v1.json) manifests record the exact bounded contracts. Management remains 24 MCP tools and five management HTTP routes. SSE/betas, conversation/evaluator state, reset, LLM observations/assertions, Wrangler-network, hosted CI, Cloud pinning, deployment, and live-provider parity remain unavailable or unqualified, so the F2 exit gate is not satisfied. |
+| F2 mock-LLM kernel, management definitions, and provider data planes | Partial source-qualified implementation; hosted/deployed provider evidence unqualified | The [F2 kernel record](docs/f-series/f2-llm-kernel.md) maps the bounded/deep-frozen plan, behavior adapter, pure OpenAI/Anthropic projections, and exact provider boundary. The [task guide](docs/mock-llm.md) maps strict bounded definitions, four MCP-only operations, schema-v7 canonical persistence, monotonic revisions, mandatory put/delete CAS with idempotent put replay, full strict-key resupply, hash-only provider credentials, secret-safe validation, and non-round-trippable safe views. Executable OpenAI and Anthropic adapters add exact path/subdomain routes, model list/retrieve, bounded Chat Completions/Messages parsing, provider-shaped local/configured errors, fresh transport IDs, alternate/platform-key rejection, credential non-reflection, response limits, and abort-aware initial delay. OpenAI additionally owns bounded SSE for `stream: true`, Boolean-only `include_usage`/`include_obfuscation`, default-on opaque compatibility padding, payload-delta pacing, an absolute initial-wait/pacing/backpressure duration, strict preflight rejection when planned initial-plus-payload delay is not less than that duration, precomputed 2 MiB body enforcement, and cancel/deadline truncation without fabricated success. Anthropic remains non-streaming and owns exact `x-api-key`, `anthropic-version: 2023-06-01`, and beta-header rejection. The environment runtime hashes before reading the current definition, compares strict verifiers without early exit, derives stateless turns from prior assistant messages, and rechecks the revision before committing the plan inside the Durable Object and returning it to the edge. Package suites plus [OpenAI](apps/worker/test/mock-llm.integration.test.ts) and [Anthropic](apps/worker/test/mock-llm-anthropic.integration.test.ts) local Worker integrations configure through MCP and exercise pinned official-SDK model, text, tool, usage, error, isolation, and key-rotation flows. Generated [OpenAI](docs/reference/mock-llm-openai.v1.json) and [Anthropic](docs/reference/mock-llm-anthropic.v1.json) manifests record the exact bounded contracts. Management remains 24 MCP tools and five management HTTP routes. OpenAI Responses/configured mid-stream errors, Anthropic SSE/betas, conversation/evaluator state, reset, LLM observations/assertions, Wrangler-network, hosted CI, Cloud pinning, deployment, and live-provider parity remain unavailable or unqualified, so the F2 exit gate is not satisfied. |
 | Synchronous SQL store | Accepted through the tested M5 slice | The Node [adapter](packages/testkit/src/sql-store.ts) and [unit test](packages/testkit/src/testkit.test.ts) share the synchronous store contract exercised through SQLite Durable Object Worker integrations. M5 adds append-only provisioning target, staged-run target, run/step, and watermark state, including one active run per app/target; local gates and the controlled-target hosted run passed. |
 | Core migrations and directory repositories | Accepted through M5; bounded M6 source suite and deployed sample green | The accepted [core substrate](packages/core/src/core.test.ts), [directory/lifecycle](packages/core/src/directory-lifecycle.test.ts), [Okta OAuth](packages/core/src/okta.test.ts), and [scenario/log](packages/core/src/scenario-log.test.ts) cover the M3 engine. The M5 [provisioning planner/interpreter](packages/core/src/provisioning) passed focused/full and controlled-target gates. M6 focused tests cover the bounded [Classic Authn service](packages/core/src/authn/okta-authn.ts), deterministic broken-token mutations, active/successor key handling, private-key scrubbing, bounded retention, and stale-instance/sign-rotate races. Authn state retrieval uses a sliding five-minute expiry while session capabilities retain their fixed five-minute issuance expiry. Each table is capped at 10,000 retained rows and each User at 32 retained rows per kind; ordered oldest-expiry eviction and a 256-row-per-table issuance GC pass are index-backed without advancing schema v5, preserving rollback compatibility. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises the externally observable slices, not every source-only retention/concurrency/security assertion. |
 | Deterministic test seams | Complete through M3; bounded M6 token/key paths accepted | The [clock/RNG](packages/testkit/src/determinism.ts) and persisted [scenario service](packages/core/src/scenario/scenario-service.ts) have deterministic unit coverage. The M6 token stream adds exact-only rotation and claim-skew actions with fixed broken-token mutations; the deployed sample exercised rotation, skew, and every mutation. Production signing-key material remains cryptographically generated, and deeper deterministic assertions remain source evidence. |
@@ -12353,9 +12480,9 @@ this document: the focused suites and complete repository gate are green. F2 add
 focused kernel/definition tests and bounded routed OpenAI/Anthropic provider runtimes that are
 source-qualified locally through the official SDK Worker integration. It is not a
 hosted or deployed provider runtime. Hosted CI, merge, package publication,
-deployment, private Cloud integration, streaming/state/observation work,
-F3 runtime, F4 authorization/audit, broader client/ecosystem conformance, and F6 Code
-Mode activation remain pending.
+deployment, private Cloud integration, Anthropic streaming/configured-midstream/state/
+observation work, F3 runtime, F4 authorization/audit, broader client/ecosystem
+conformance, and F6 Code Mode activation remain pending.
 
 ---
 
@@ -12486,10 +12613,12 @@ tool history, and model-pagination assumptions.
   applies depth-24/10,000-node structural limits before strict message/tool parsing.
   Messages, text, tools, nested tool values, and responses have independent count and
   byte/depth/node ceilings. Unknown top-level OpenAI fields, multimodal content,
-  streaming, `stream_options`, unsupported `tool_choice`, unsafe keys, malformed
-  JSON/UTF-8, and undeclared behavior-selected tools fail closed. Provider-shaped
-  request errors use generic fixed messages and never serialize validation-library
-  issues, input values, credentials, or runtime exceptions.
+  unsupported `tool_choice`, unsafe keys, malformed JSON/UTF-8, and undeclared
+  behavior-selected tools fail closed. `stream_options` is accepted only with
+  `stream: true`; it accepts only optional Boolean `include_usage` and
+  `include_obfuscation`, so unknown or wrongly typed fields fail before dispatch.
+  Provider-shaped request errors use generic fixed messages and never serialize
+  validation-library issues, input values, credentials, or runtime exceptions.
 - Each adapter rejects the presented provider credential or active platform key when
   either appears in a Chat Completions or Messages JSON key or string value. The planner receives
   normalized message/tool material rather than transport or internal routing headers.
@@ -12501,10 +12630,27 @@ tool history, and model-pagination assumptions.
   after a concurrent replacement; repeated instability fails generically. The edge
   rejects a planned tool call unless the request declared that function/custom tool.
   Every invocation receives fresh random request/completion or request/message IDs,
-  while content-derived
-  deterministic plan IDs remain internal. Initial response/error delay runs outside
-  the Environment Durable Object with abort-aware waiting; chunk cadence stays inert
-  because the data plane does not stream.
+  while content-derived deterministic plan IDs remain internal. After the final
+  definition-revision check, the runtime commits the selected plan inside the
+  Environment Durable Object before returning it to the edge; current turn selection
+  remains stateless and does not persist conversation state.
+- OpenAI streaming precomputes the complete SSE sequence and rejects a body over
+  2,097,152 UTF-8 bytes with a generic JSON error before HTTP `200`. Initial delay is
+  abort-aware and occurs before response headers. Only payload deltas are
+  cadence-paced; role, terminal, optional usage, and `[DONE]` frames are immediate.
+  One absolute maximum duration includes initial wait, pacing, and response
+  backpressure. Preflight also requires
+  `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  to be strictly less than `maximumDurationMilliseconds`; equality is rejected to
+  avoid a deadline race. Payload frame count comes from Unicode code-point chunks of
+  text and canonical tool arguments. Cancellation or deadline after HTTP `200`
+  truncates the stream without fabricating a terminal chunk or success. Configured
+  midstream errors are unsupported.
+- `include_obfuscation` defaults to true and adds fresh opaque compatibility padding
+  to regular OpenAI delta chunks. The padding is not derived from request material
+  and is rejected from provider-body reflection checks, but it is not qualified as
+  upstream size normalization, traffic-analysis resistance, or another security
+  parity claim. Callers may explicitly disable it for stable fixture assertions.
 - Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
   persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
   revision, negotiated version, initialization state, expiry, and termination.
@@ -12664,9 +12810,10 @@ accepts any syntactically valid credential through the provider's required chann
 without verifier comparison; it is suitable only for synthetic tests and is not
 public/anonymous access or production authorization. `strict` compares the current
 hash-only verifier, but a successful mock check still grants only this synthetic
-provider behavior. Conversation/response state, reset, LLM observation/assertion,
-paced streaming, Anthropic betas/broad parameters, Wrangler-network qualification,
-deployment, and private Cloud pinning remain absent.
+  provider behavior. Conversation/response state, reset, LLM observation/assertion,
+  configured midstream errors, OpenAI Responses, Anthropic streaming/betas/broad
+  parameters, Wrangler-network qualification, deployment, and private Cloud pinning
+  remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
 

@@ -282,6 +282,7 @@
           "coverage": "full",
           "proofRefs": [
             "packages/llm-mock/src/openai-http.test.ts",
+            "packages/llm-mock/src/edge-stream.test.ts",
             "packages/llm-mock/src/sdk-conformance.test.ts",
             "apps/worker/test/mock-llm.integration.test.ts"
           ],
@@ -304,7 +305,7 @@
         "management": "mcp-only"
       },
       "limitationRefs": [
-        "docs/reference/mock-llm-openai.v1.json#/request/streaming",
+        "docs/reference/mock-llm-openai.v1.json#/response/streaming/configuredMidstreamErrors",
         "docs/reference/mock-llm-openai.v1.json#/request/multimodal"
       ],
       "provenance": {
@@ -318,6 +319,11 @@
             "export": "createMockLlmOpenAiFetchHandler",
             "kind": "runtime",
             "path": "packages/llm-mock/src/openai-http.ts"
+          },
+          {
+            "export": "prepareEdgeSseStream",
+            "kind": "runtime",
+            "path": "packages/llm-mock/src/edge-stream.ts"
           },
           {
             "export": "EnvironmentMockLlmOpenAiRuntime",

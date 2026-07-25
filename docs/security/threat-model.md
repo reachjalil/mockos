@@ -124,10 +124,12 @@ tool history, and model-pagination assumptions.
   applies depth-24/10,000-node structural limits before strict message/tool parsing.
   Messages, text, tools, nested tool values, and responses have independent count and
   byte/depth/node ceilings. Unknown top-level OpenAI fields, multimodal content,
-  streaming, `stream_options`, unsupported `tool_choice`, unsafe keys, malformed
-  JSON/UTF-8, and undeclared behavior-selected tools fail closed. Provider-shaped
-  request errors use generic fixed messages and never serialize validation-library
-  issues, input values, credentials, or runtime exceptions.
+  unsupported `tool_choice`, unsafe keys, malformed JSON/UTF-8, and undeclared
+  behavior-selected tools fail closed. `stream_options` is accepted only with
+  `stream: true`; it accepts only optional Boolean `include_usage` and
+  `include_obfuscation`, so unknown or wrongly typed fields fail before dispatch.
+  Provider-shaped request errors use generic fixed messages and never serialize
+  validation-library issues, input values, credentials, or runtime exceptions.
 - Each adapter rejects the presented provider credential or active platform key when
   either appears in a Chat Completions or Messages JSON key or string value. The planner receives
   normalized message/tool material rather than transport or internal routing headers.
@@ -139,10 +141,27 @@ tool history, and model-pagination assumptions.
   after a concurrent replacement; repeated instability fails generically. The edge
   rejects a planned tool call unless the request declared that function/custom tool.
   Every invocation receives fresh random request/completion or request/message IDs,
-  while content-derived
-  deterministic plan IDs remain internal. Initial response/error delay runs outside
-  the Environment Durable Object with abort-aware waiting; chunk cadence stays inert
-  because the data plane does not stream.
+  while content-derived deterministic plan IDs remain internal. After the final
+  definition-revision check, the runtime commits the selected plan inside the
+  Environment Durable Object before returning it to the edge; current turn selection
+  remains stateless and does not persist conversation state.
+- OpenAI streaming precomputes the complete SSE sequence and rejects a body over
+  2,097,152 UTF-8 bytes with a generic JSON error before HTTP `200`. Initial delay is
+  abort-aware and occurs before response headers. Only payload deltas are
+  cadence-paced; role, terminal, optional usage, and `[DONE]` frames are immediate.
+  One absolute maximum duration includes initial wait, pacing, and response
+  backpressure. Preflight also requires
+  `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  to be strictly less than `maximumDurationMilliseconds`; equality is rejected to
+  avoid a deadline race. Payload frame count comes from Unicode code-point chunks of
+  text and canonical tool arguments. Cancellation or deadline after HTTP `200`
+  truncates the stream without fabricating a terminal chunk or success. Configured
+  midstream errors are unsupported.
+- `include_obfuscation` defaults to true and adds fresh opaque compatibility padding
+  to regular OpenAI delta chunks. The padding is not derived from request material
+  and is rejected from provider-body reflection checks, but it is not qualified as
+  upstream size normalization, traffic-analysis resistance, or another security
+  parity claim. Callers may explicitly disable it for stable fixture assertions.
 - Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
   persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
   revision, negotiated version, initialization state, expiry, and termination.
@@ -329,9 +348,10 @@ accepts any syntactically valid credential through the provider's required chann
 without verifier comparison; it is suitable only for synthetic tests and is not
 public/anonymous access or production authorization. `strict` compares the current
 hash-only verifier, but a successful mock check still grants only this synthetic
-provider behavior. Conversation/response state, reset, LLM observation/assertion,
-paced streaming, Anthropic betas/broad parameters, Wrangler-network qualification,
-deployment, and private Cloud pinning remain absent.
+  provider behavior. Conversation/response state, reset, LLM observation/assertion,
+  configured midstream errors, OpenAI Responses, Anthropic streaming/betas/broad
+  parameters, Wrangler-network qualification, deployment, and private Cloud pinning
+  remain absent.
 Do not expose the definition store, place real credentials in test traffic, or infer a
 hosted security boundary from the local Worker integration.
 

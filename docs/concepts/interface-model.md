@@ -15,7 +15,7 @@ surface are supporting interfaces, not separate sources of product behavior.
 | Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
-| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI Chat Completions and Anthropic Messages/model subsets source-qualified locally; streaming/betas, state, observations, and deployment unavailable |
+| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI JSON/SSE Chat Completions and non-streaming Anthropic Messages/model subsets source-qualified locally; configured midstream errors, Responses, Anthropic streaming/betas, state, observations, and deployment unavailable |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](../README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -50,7 +50,7 @@ management routes.
 
 The four F2 management tools define mock-LLM dependencies and have no HTTP management
 projection. The configured application-facing route is separate: the current bounded
-source exposes OpenAI `/models`, `/models/{model}`, and non-streaming
+source exposes OpenAI `/models`, `/models/{model}`, and JSON or SSE
 `/chat/completions` plus Anthropic `/v1/models`, `/v1/models/{model}`, and
 non-streaming `/v1/messages`. The tools existed before those routes, so their presence
 alone is not provider capability evidence; use authenticated OpenAI `GET /models` or
