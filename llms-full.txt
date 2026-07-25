@@ -12782,14 +12782,17 @@ Repository path: `docs/known-limitations.md`
 
 # Known limitations
 
-Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI/Anthropic F2 with bounded metadata observation, and locally qualified F0/F1
-Last reviewed: 2026-07-25
+Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
+source-qualified F0/F1, partial OpenAI/Anthropic F2 with bounded metadata observation,
+bounded MSAL Node local X/Q, and remaining limits; deliberately candid
+Last reviewed: 2026-07-26
 
-Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
-evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
-evidence; only sanitized, reviewed comparison with a real provider can be
-verified-live. The bounded M6 slice has sampled exact-version deployment evidence, but
-no M6 fixture/corpus is verified-live and no current fixture has verified-live status.
+Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
+SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
+(P) are separate levels. Hosted CI is source execution; H requires an exact remote
+serving version and recorded smoke; V requires sanitized, reviewed real-provider
+comparison. The bounded MSAL Node slice is D/I/S/X/Q yes and H/V/P no. The bounded M6
+slice has sampled H evidence, but no current fixture is V or P.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -12802,6 +12805,15 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Entra remains a narrow OIDC/OAuth slice. Authorization code and rotating refresh
   grants have local evidence; client credentials, device flow, UserInfo, logout
   fidelity, and SAML remain unimplemented or unqualified.
+- The only official Entra identity-client qualification is `@azure/msal-node` 5.4.2
+  as a confidential client for one tenant-specific custom authority, authorization
+  code with S256 PKCE, and forced silent refresh. It uses host-only
+  `knownAuthorities` plus `ProtocolMode.OIDC` and passes through local Wrangler HTTPS.
+  The management path is separately driven by `@modelcontextprotocol/sdk` 1.29.0. This
+  is local X/Q evidence, not workers.dev, hosted Cloud, or custom-domain H. It does not
+  qualify `@azure/msal-browser`, public-client helpers, device or client-credential
+  grants, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real Entra
+  tenant, or P.
 - The bounded SCIM parser/PATCH/core service, HTTP adapter, and Worker mount are
   accepted for M3. All 113 SCIM fixtures execute green against the HTTP composition
   locally and in hosted CI, with focused Worker integration tested separately. The
@@ -12847,6 +12859,21 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   cookies, and token/secret-like headers are redacted. The deployed smoke sampled the
   public state, CORS, privacy, and redaction behavior; deeper retention/revocation/race
   tests remain source evidence, and neither tier is a general log-security audit.
+- Structured provider request-log capture now redacts secret-bearing form and JSON
+  keys across routes, sensitive request/response header families, and secret query or
+  fragment fields in redirect `Location` values before persistence. The MSAL
+  actual-network flow and focused lifecycle Worker test prove absence of its password,
+  client secret, authorization code, PKCE verifier, and issued token values while
+  retaining the safe request sequence. This is not a general content-classification or
+  log-security audit: non-secret structured protocol fields and non-JSON response bodies
+  may still be retained. Malformed form/JSON, primitive JSON request, and
+  unsupported-media request bodies are replaced rather than stored, but production
+  credentials and personal data remain prohibited.
+- The MSAL harness has focused normal-completion and ready-Worker `SIGTERM` cleanup
+  evidence: the signal probe observes exit `143`, port release, Wrangler process-group
+  exit, and temporary-state removal. It does not qualify uncatchable `SIGKILL`, Windows
+  process-tree behavior, abrupt machine loss, or every interruption point while the
+  client is active.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
   Authn state/session capabilities. There are no production sessions, external
@@ -13076,9 +13103,10 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
-- workers.dev cannot provide wildcard subdomains. Path mode needs explicit SDK
-  authority configuration; SDKs that require an Okta-style bare organization host
-  may not work before custom-domain cutover.
+- workers.dev cannot provide wildcard subdomains. The MSAL Node local qualification
+  proves an explicit request-derived path authority only against an HTTPS loopback
+  Wrangler listener; no workers.dev or Cloud client smoke has run. SDKs that require
+  an Okta-style bare organization host may not work before custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
 - The staging and production workers.dev targets most recently passed the sampled M6
@@ -13102,12 +13130,15 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.
-- Environment request logs are designed to retain protocol bodies, including many
-  synthetic test tokens. The M6 Classic Authn slice is an explicit exception: it
-  recursively redacts password, state-token, and session-token fields in Authn request
-  and response bodies, including malformed-body fallback redaction. Never put
-  production tokens, account API keys, Cloudflare credentials, or real personal data
-  into a mock environment.
+- Environment request logs are designed to retain assertable protocol structure and
+  may retain non-secret synthetic fields. Structured form/JSON secret keys, sensitive
+  headers, and redirect-location secrets are now redacted generally. Malformed JSON,
+  malformed form requests, primitive JSON requests, and unsupported-media request
+  bodies are replaced with markers. Credential-bearing OAuth, device, activation, and
+  Classic Authn paths use a stricter authentication-body marker where applicable.
+  These rules are path-, key-, and media-type based, not a promise to detect every
+  credential in arbitrary retained content. Never put production tokens, account API
+  keys, Cloudflare credentials, or real personal data into a mock environment.
 - Absolute issuer URLs must never be persisted. Any violation would make host cutover
   unsafe and should block release.
 
@@ -13119,8 +13150,10 @@ Repository path: `docs/IMPLEMENTATION_STATUS.md`
 
 # Implementation status
 
-Status: M0-M3/M5 accepted; bounded M6 deployed; M7/F0 complete in source; F1 local; partial OpenAI/Anthropic F2 plus metadata-only observation source-qualified locally
-Last reviewed: 2026-07-25
+Status: Accepted M0-M3/M5 and sampled M6 evidence retained; M7/F0 are
+source-complete, F1 is locally source-qualified, F2 has a partial OpenAI/Anthropic
+source and metadata-observation slice, and bounded Entra MSAL Node local X/Q passed
+Last reviewed: 2026-07-26
 
 This is an evidence ledger, not a roadmap completion claim. “Partial” can mean that
 types, fixtures, or a narrow slice exist while the complete behavior does not. The
@@ -13131,49 +13164,50 @@ acceptance record; it does not inherit M3 evidence or qualify the guarded deploy
 workflow. M6 has its own exact-source, CI, version, and sampled workers.dev acceptance
 record; it does not inherit M3/M5 evidence or qualify the guarded Cloudflare-credential
 deployment workflow. The additive M7 application/scenario management-read substrate is
-source-complete in the repository revision carrying this document, but has no hosted CI,
-deployed-version, or console acceptance evidence yet. The F0 contracts, management
-operation registry, checked OpenAPI/client artifacts, and disabled wrapper boundaries
-also pass the full local repository gate in the revision carrying this document. F0
-has no hosted CI or merge evidence yet and does not activate an F-series runtime.
-The [locally source-qualified F1 implementation](docs/f-series/f1-mcp-foundation.md)
-adds the hand-written
-`2025-11-25` adapter, five management tools, revisioned state/hash-only sessions,
-declarative evaluation, path/subdomain routing, and MCP-aware request assertions. Its
-source availability guards include request-local repeated-work caches, incremental
-256-KiB UTF-8 template rendering, and a sticky JSON Schema work budget whose tool-input
-exhaustion is a bounded `isError` result rather than behavior execution. Its focused
-layer suites and complete repository `pnpm check` gate are green in the revision
-carrying this document. Hosted CI, merge, package publication, deployment, private
-Cloud consumption, and broader ecosystem compatibility remain separate claims until
-recorded.
-The [partial F2 LLM slice](docs/f-series/f2-llm-kernel.md) combines provider-neutral
-response-plan schemas, a behavior-to-plan adapter, pure OpenAI/Anthropic
-JSON/SSE-frame renderers, and in-process pinned-SDK consumption with strict
-server-definition contracts, four MCP-only operations, schema-v8 environment
-persistence, mandatory revision compare-and-swap, and write-only provider-key views.
-The [task guide](docs/mock-llm.md) records the exact management and provider contracts.
-Bounded OpenAI and Anthropic request adapters, the shared environment runtime, route
-composition, generated provider manifests, and local Worker integrations now
-source-qualify ordered model list/retrieve, OpenAI JSON/SSE Chat Completions, and
-Anthropic JSON/SSE Messages through pinned official SDKs. Both auth modes require
-the dialect's valid provider credential; strict mode checks only its current hash-only
-verifier. Anthropic additionally requires exactly
-`anthropic-version: 2023-06-01` and rejects beta headers. Successfully
-parsed/planned provider POSTs that pass response preflight now attempt one
-metadata-only reservation within a 50-millisecond fail-open budget; prospective
-metadata/credential collisions skip it. In-budget rows finalize in place, and the
-existing MCP log query/count/ordered-sequence tools accept exact lifecycle matchers.
-This bounded observation path is source- and mounted-Worker-tested and is not an audit
-guarantee. Configured midstream errors, OpenAI Responses, Anthropic betas,
-runtime/conversation state or reset, Wrangler-network/deployed conformance, and
-private Cloud pinning remain unavailable. F2 therefore remains incomplete.
+source-complete in the repository revision carrying this document, but has no hosted
+CI, deployed-version, or console acceptance evidence yet. The additive Entra MSAL Node
+tranche is a separate source candidate with local actual-network and official-client
+evidence only. The F0 contracts, management operation registry, checked OpenAPI/client
+artifacts, and disabled wrapper boundaries also pass the full local repository gate in
+the revision carrying this document. F0 has no hosted CI, deployment, or distribution
+evidence yet and does not activate an experimental runtime. The
+[locally source-qualified F1 implementation](docs/f-series/f1-mcp-foundation.md) adds the
+hand-written `2025-11-25` adapter, five management tools, revisioned state/hash-only
+sessions, declarative evaluation, path/subdomain routing, and MCP-aware request
+assertions. Its source availability guards include request-local repeated-work caches,
+incremental 256-KiB UTF-8 template rendering, and a sticky JSON Schema work budget
+whose tool-input exhaustion is a bounded `isError` result rather than behavior
+execution. Its focused layer suites and complete repository `pnpm check` gate are green
+in the revision carrying this document. Hosted CI, merge, package publication,
+deployment, private Cloud consumption, and broader ecosystem compatibility remain
+separate claims until recorded. The
+[partial F2 LLM slice](docs/f-series/f2-llm-kernel.md) combines provider-neutral
+response-plan schemas, a behavior-to-plan adapter, pure OpenAI/Anthropic JSON/SSE-frame
+renderers, in-process pinned-SDK consumption, strict server-definition contracts, four
+MCP-only operations, schema-v8 environment persistence, mandatory revision
+compare-and-swap, and write-only provider-key views. Bounded OpenAI and Anthropic
+request adapters, the shared environment runtime, route composition, generated
+provider manifests, and local Worker integrations now source-qualify ordered model
+list/retrieve, OpenAI JSON/SSE Chat Completions, and Anthropic JSON/SSE Messages through
+pinned official SDKs. Both auth modes require the dialect's valid provider credential;
+strict mode checks only its current hash-only verifier. Anthropic additionally requires
+exactly `anthropic-version: 2023-06-01` and rejects beta headers. Configured midstream
+errors, OpenAI Responses, Anthropic betas, and runtime/conversation state or reset
+remain unavailable. Successfully parsed/planned provider POSTs that pass response
+preflight now attempt one metadata-only reservation within a 50-millisecond fail-open
+budget; prospective metadata/credential collisions skip it. In-budget rows finalize in
+place, and the existing MCP log query/count/ordered-sequence tools accept exact
+lifecycle matchers. This bounded observation path is source- and mounted-Worker-tested
+and is not an audit guarantee. Wrangler-network/deployed conformance and private Cloud
+pinning remain unavailable. F2 therefore remains incomplete.
 
-Evidence tiers are intentionally separate. **Source** means exact-revision local or
-hosted-CI execution; **deployed** additionally binds that revision to an exact mockOS
-deployment/version and recorded acceptance; **verified-live** is reserved for
-sanitized, independently reviewed evidence from a real Entra ID tenant or Okta
-organization. No current fixture or milestone is verified-live.
+Evidence levels are intentionally separate. The
+[documentation index](docs/README.md) defines designed (D), implemented (I),
+source-tested (S), integration-tested (X), pinned SDK/client-qualified (Q),
+hosted-smoke (H), verified-live (V), and production-ready (P). The MSAL tranche is
+D/I/S/X/Q yes and H/V/P no. Existing exact-version workers.dev records may establish H
+for their raw-protocol samples without establishing Q, V, or P. No current fixture or
+milestone is V or P.
 
 | Area | State | Evidence and boundary |
 | --- | --- | --- |
@@ -13188,6 +13222,7 @@ organization. No current fixture or milestone is verified-live.
 | Fixture schema, loader, and runner | Complete for M3 SCIM; bounded M6 executors and sampled deployment green | The [schema](packages/testkit/fixtures/fixture.schema.json), [loader](packages/testkit/src/fixtures.ts), and [runner](packages/testkit/src/runner.ts) load 38 Entra and 22 Okta source-reviewed OIDC fixtures, 113 SCIM fixtures, and five M6 Okta Authn fixtures. The [M6 Worker executor](apps/worker/test/token-fixtures.integration.test.ts) supplies authenticated MCP/session, environment, client, subject, and Graph-bearer setup for Entra fixtures 31–38; the [Authn executor](packages/engine-http/src/okta-authn-fixtures.test.ts) runs all five Authn cases against the core-backed HTTP composition. The M6 smoke sampled all six areas but was not a remote execution of this complete generated case index. The other OIDC fixtures remain documented targets, and no live-provider comparison is claimed. |
 | Provider fixture corpora | Mixed evidence | The 38 [Entra OIDC](packages/testkit/fixtures/entra/oidc) fixtures contain 30 documented targets and eight implemented, locally Worker-executed M6 token/key/overage cases; all 22 [Okta OIDC](packages/testkit/fixtures/okta/oidc) fixtures remain documented. The SCIM corpus contains 113 source-implemented cases. Five [Okta Authn fixtures](packages/testkit/fixtures/okta/authn) are source-reviewed, marked `implemented`, and execute green locally. None claims comparison with a live provider tenant. |
 | Entra OIDC runtime | Accepted M3 slice; bounded M6 token/key/Graph slice sampled in deployment | [Core](packages/core/src/core.test.ts), [Worker OIDC](apps/worker/test/oidc.integration.test.ts), and [lifecycle cascade](apps/worker/test/lifecycle-cascade.integration.test.ts) tests cover the accepted M3 hosted-login, authorization-code, refresh/lifecycle, Entra-claim, and RS256/JWKS slice; the [M3 deployed smoke](docs/evidence/m3-workers-dev-smoke.md) exercised those principal paths. M6 source tests add deterministic broken tokens, skew, one-key rollover overlap, and group overage with trusted same-environment Graph fallback capped at 1,000 returned IDs. The [M6 deployed sample](docs/evidence/m6-workers-dev-smoke.md) exercises rotation/stale-JWKS verification, plus-300-second skew, all five broken variants, and the exact path-mode 200/201 boundary. The 1,001-ID ceiling, concurrency, private-key scrubbing, and subdomain routing remain source evidence; broader error fidelity and verified-live comparison remain open. |
+| Entra MSAL Node client | Bounded local D/I/S/X/Q passed; H/V/P unqualified | Pinned `@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local Wrangler HTTPS socket. The official MCP client creates and cleans up the environment; MSAL uses the request-derived custom authority with host-only `knownAuthorities` and `ProtocolMode.OIDC`, completes code + S256 PKCE and forced refresh, then receives `invalid_grant`/`AADSTS50057` after lifecycle disable. The exact six-request sequence and absence of password, secret, code, verifier, and token values from durable evidence pass. See the [quickstart](docs/quickstarts/entra-msal-node.md) and [local record](docs/evidence/entra-msal-node-local-qualification.md). No remote Worker, hosted Cloud, real Entra tenant, broad MSAL matrix, or production-readiness result is claimed. |
 | Okta runtime | Accepted M3 implementation plus bounded M6 Classic Authn deployed sample | Existing [core](packages/core/src/okta.test.ts), [HTTP adapter](packages/engine-http/src/okta.test.ts), and [Worker integration](apps/worker/test/okta.integration.test.ts) cover the M3 OAuth/device/directory slice. M6 adds core/HTTP/Worker coverage for `SUCCESS`, `MFA_REQUIRED`, `PASSWORD_EXPIRED`, explicit `LOCKED_OUT`, state retrieval/cancellation, hash-only capabilities, replay denial, lifecycle and SCIM-password-change revocation, and issuance-race denial. Successful retrieval slides state expiry; session expiry remains fixed. The HTTP shape uses singular `_embedded.factor` (an array), omits `passwordChanged`, permits same-origin CORS only for `POST` with `accept`/`content-type`, emits no credentialed-CORS allowance, and returns `403` cross-origin. Request/response bodies are recursively secret-redacted, malformed bodies are wholly redacted, and sensitive Authn headers are redacted. The [M6 smoke](docs/evidence/m6-workers-dev-smoke.md) samples initial states, state retrieval, CORS, privacy, and redaction; factor verification, cancellation/replay and revocation details not sampled there, verified-live comparison, and the rest of the Classic machine remain open or source-only as stated. |
 | Scenario injection and request log | Accepted through the tested M5 assertion slice; M6 actions sampled in deployment; bounded F1/F2 metadata source-qualified | Accepted M3 [scenario/log tests](packages/core/src/scenario-log.test.ts) cover deterministic scenarios, filtering, retention, and assertions. M5 response-body predicates, repeated non-overlapping ordered counts, Worker capture/redaction, local process e2e, and both hosted four-request assertions passed. M6 key rotation and clock skew are restricted to exact internal `token.before_sign` evaluation rather than the generic catch-all; both were sampled by the exact-version M6 deployed smoke. F1 adds exact MCP metadata. F2 schema v8 adds metadata-only OpenAI/Anthropic pending/terminal lifecycle rows plus exact query/count/sequence matchers, tested in core and mounted Worker/MCP integration. F1/F2 additions inherit no M5/M6 hosted or deployed evidence, and F2 observation is fail-open rather than an audit guarantee. |
 | M7 application/scenario management reads | Source-complete; hosted CI, rollout, and console acceptance pending | Strict [contracts](packages/contracts/src/index.ts) cap management pages at 25 records and bind cursors to the application or scenario resource kind. [Core](packages/core/src/directory/applications.ts) and [scenario](packages/core/src/scenario/scenario-service.ts) keyset pagination is covered by focused tests, and the [Durable Object integration](apps/worker/test/management-rpc.integration.test.ts) exercises the additive `listApplications`/`listScenarios` RPCs. Application summaries are constructed field-by-field and exclude both the creation-only plaintext `clientSecret` and the persisted hash. No MCP tool, public HTTP route, CLI command, schema migration, hosted deployment, or private-console result is claimed by this source slice. |
@@ -13253,6 +13288,37 @@ every fixture or source-only denial/concurrency/cap assertion remotely. This acc
 does not qualify the guarded Cloudflare-credential deploy workflow, corpus-wide parity,
 or verified-live provider comparison.
 
+## Entra MSAL Node local client qualification
+
+The source candidate carrying this document pins `@azure/msal-node` 5.4.2 and adds a
+dedicated actual-network harness. An owned local Wrangler process serves HTTPS. The
+parent anchors the captured `localhost` leaf and validates its hostname plus ownership
+nonce before the child adds that certificate as a process-local CA through
+`NODE_EXTRA_CA_CERTS`, retaining standard Node trust. The child independently requires
+an HTTPS `localhost` origin and the same nonce; no alternate-certificate rejection is
+qualified. It connects to management through the official MCP SDK and configures the
+Entra application entirely through the discovered tool contract. MSAL uses the returned
+issuer with
+`knownAuthorities: [new URL(authority).host]` and
+`system.protocolMode: ProtocolMode.OIDC`.
+
+The client completes authorization code with S256 PKCE, validates account/tenant/token
+claims, forces a successful token-endpoint refresh, disables the User through MCP, and
+observes a rejected forced refresh with `invalid_grant` and `AADSTS50057`. It matches the exact
+discovery/login/code/refresh/disabled-refresh sequence, proves durable credential
+redaction, deletes the environment, closes MCP, and removes the temporary CA. The
+focused lifecycle Worker test independently protects the persistent redaction
+boundary. A separate `SIGTERM` cleanup probe observes parent exit `143`, releases the
+port, removes the detached Wrangler process group, and removes temporary state.
+
+`pnpm e2e:entra-msal`, `pnpm e2e:entra-msal-cleanup`, and the focused Worker tests
+passed locally; exact output is in the
+[qualification record](docs/evidence/entra-msal-node-local-qualification.md). This is
+D/I/S/X/Q evidence for the named version and flow only. The signal probe covers a ready
+Worker on this local platform, not `SIGKILL`, Windows, or every active-client
+interruption point. No hosted-CI result is claimed by this local record, and there is no
+H, V, or P evidence.
+
 The M7 application/scenario management-read substrate is source-complete but not
 deployed. Its strict query contract defaults to and caps pages at 25 records with a
 512-character cursor ceiling. Core reads use stable `(created_at, id)` keysets and
@@ -13293,8 +13359,10 @@ Repository path: `docs/security/threat-model.md`
 
 # Threat model
 
-Status: M3/M5 accepted, bounded M6 deployed, and F1/partial OpenAI/Anthropic F2 controls source-only
-Last reviewed: 2026-07-25
+Status: M3/M5 controls accepted; bounded M6 deployed sample retained; F1 controls are
+source-only; partial OpenAI/Anthropic F2 controls are source-only; OAuth evidence
+redaction has local MSAL X/Q and Worker source proof
+Last reviewed: 2026-07-26
 
 ## Assets and trust boundaries
 
@@ -13328,13 +13396,14 @@ redirect abuse, code replay, refresh-token theft, signing-key confusion, stored 
 hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, authentication-state user enumeration, Authn
 state/session capability theft or replay, parser or body resource exhaustion, secret
-leakage through logs, unbounded SQLite growth, denial of service, and SSRF through
+leakage through form/JSON bodies or redirect locations in durable logs, unbounded
+SQLite growth, denial of service, local-development CA overtrust, and SSRF through
 outbound provisioning targets. F1 additionally considers forged internal routing
 metadata, platform-key confusion with a mock Bearer value, raw session disclosure,
-  session fixation or cross-server replay, stale sessions/cursors after definition
-  replacement or delete/recreate, pathological JSON Schema and URI-template input,
-  prototype traversal, configured error-map ambiguity, sequence-state races, aborted
-  latency that commits state, and secret reflection through observations.
+session fixation or cross-server replay, stale sessions/cursors after definition
+replacement or delete/recreate, pathological JSON Schema and URI-template input,
+prototype traversal, configured error-map ambiguity, sequence-state races, aborted
+latency that commits state, and secret reflection through observations.
 F2 definition threats add platform-key confusion with either provider key, plaintext
 or verifier reflection through safe reads/behavior material, cross-environment
 definition access, lost updates, delete/recreate revision reuse, canonicalization
@@ -13562,11 +13631,16 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   provider-shaped data disclosure. Deactivating lifecycle transitions and SCIM
   password changes remove outstanding Authn capabilities atomically so reactivation
   cannot restore them.
-- Authn log capture recursively redacts password, passcode, secret, token, credential,
-  code, API-key, private-key, and authorization body keys; malformed or non-object
-  bodies are replaced wholesale. Sensitive authorization, proxy-authorization,
+- Structured request-log capture recursively redacts password, passcode, secret, token,
+  credential, code, code-verifier, client-assertion, API-key, private-key, and related
+  form/JSON keys. It redacts sensitive authorization, proxy-authorization,
   cookie/set-cookie, API-key, credential, password, private-key, secret, and token
-  header families are redacted on requests and responses.
+  request/response header families. Redirect `Location` values are parsed and secret
+  query or fragment fields are replaced before persistence; malformed locations fail
+  closed. Malformed JSON, primitive JSON requests, and unsupported-media request bodies
+  on provider routes are replaced with markers; malformed form requests are also
+  replaced. Credential-bearing OAuth, device, activation, and Classic Authn routes use
+  the stricter authentication-body marker where applicable.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
@@ -13590,6 +13664,19 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
+- The local MSAL acceptance harness keeps TLS verification enabled. For readiness, the
+  parent anchors the captured Wrangler leaf, validates its `localhost` hostname, and
+  requires the owned child's nonce. It writes the certificate to a temporary
+  mode-`0600` CA file and passes that file to the client through
+  `NODE_EXTRA_CA_CERTS`; this augments standard Node roots rather than exclusively
+  pinning the certificate. The client independently requires an HTTPS `localhost`
+  origin and the same nonce. Cleanup deletes the file, and the harness neither installs
+  a system CA nor uses `NODE_TLS_REJECT_UNAUTHORIZED=0`. No alternate-certificate
+  rejection is qualified.
+- The local signal-cleanup probe interrupts a ready harness with `SIGTERM` and requires
+  parent exit `143`, a reusable loopback port, an absent Wrangler process group, and
+  removed temporary state. It does not establish uncatchable `SIGKILL`, Windows
+  process-tree, or every active-client interruption boundary.
 - F1 captures MCP method, tool, canonical arguments, top-level error code, and
   tool-level `isError` as bounded synthetic test evidence. Authorization and session
   headers are redacted, trusted routing headers are omitted, and raw JSON-RPC request
@@ -13613,6 +13700,13 @@ conflict/race/tolerances, same-origin Authn CORS, account-state privacy, and exa
 header/body redaction. It is not a penetration test or a remote execution of every
 storage, retention, concurrency, and denial assertion above.
 
+The [MSAL Node local record](docs/evidence/entra-msal-node-local-qualification.md)
+separately exercises a real local HTTPS socket with pinned `@azure/msal-node` 5.4.2
+and the official MCP SDK. The exact code/refresh/disabled-refresh sequence passes, and
+the harness plus focused lifecycle Worker test prove that its password, client secret,
+authorization code, PKCE verifier, issued tokens, and redirect code are absent from
+durable evidence. This is local S/X/Q evidence, not H, a penetration test, V, or P.
+
 Those records establish deployed mock acceptance only when an exact revision is bound
 to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
 separate tier reserved for sanitized, independently reviewed comparison with a real
@@ -13627,8 +13721,10 @@ separate private boundary and does not change this self-hosted threat model. wor
 path mode also lacks provider-shaped wildcard hosts, so client compatibility remains
 intentionally bounded.
 
-Environment logs intentionally retain test protocol bodies and mock tokens because
-assertion is the product. This is not permission to send production secrets, account
+Environment logs intentionally retain safe test protocol structure because assertion
+is the product. Structured secret-bearing fields and headers are redacted, but the
+policy is based on names and media types and cannot classify every credential embedded
+in arbitrary content. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
 
