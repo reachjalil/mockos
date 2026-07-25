@@ -15,7 +15,7 @@ import {
 } from "@mockos/contracts/mock-llm-server";
 import { renderAnthropicPlan } from "./anthropic";
 import { canonicalMockLlmJson } from "./canonical-json";
-import { mockLlmValueContainsSecret } from "./openai-http";
+import { mockLlmPlanContainsSecret, mockLlmValueContainsSecret } from "./openai-http";
 
 export const MOCK_LLM_ANTHROPIC_VERSION = "2023-06-01";
 export const MOCK_LLM_ANTHROPIC_MAX_REQUEST_BODY_BYTES = 256 * 1_024;
@@ -895,7 +895,10 @@ export const createMockLlmAnthropicFetchHandler = (
     } catch {
       return internalError(identity.requestId);
     }
-    if (mockLlmValueContainsSecret(plan, [credential, options.platformApiKey])) {
+    if (plan.model !== parsed.model) {
+      return internalError(identity.requestId);
+    }
+    if (mockLlmPlanContainsSecret(plan, [credential, options.platformApiKey])) {
       return internalError(identity.requestId);
     }
     if (plan.kind === "response") {

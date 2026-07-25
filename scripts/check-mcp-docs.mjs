@@ -170,6 +170,27 @@ if (
   failures.push("product capability IDs and specification references must be unique");
 }
 
+const openAiCapability = (capabilities ?? []).find(
+  ({ id }) => id === "mock-llm.openai"
+);
+if (
+  !openAiCapability?.provenance?.executableAuthorities?.some(
+    ({ path, export: exportedName }) =>
+      path === "packages/llm-mock/src/edge-stream.ts" &&
+      exportedName === "prepareEdgeSseStream"
+  ) ||
+  !openAiCapability?.evidence?.source?.proofRefs?.includes(
+    "packages/llm-mock/src/edge-stream.test.ts"
+  ) ||
+  !openAiCapability?.limitationRefs?.includes(
+    "docs/reference/mock-llm-openai.v1.json#/response/streaming/configuredMidstreamErrors"
+  )
+) {
+  failures.push(
+    "the OpenAI capability must trace streaming policy to the edge-stream authority/test and its configured-midstream limitation"
+  );
+}
+
 for (const capability of capabilities ?? []) {
   const actualEvidenceTiers = Object.keys(capability.evidence ?? {});
   const executableAuthorities = capability.provenance?.executableAuthorities;
@@ -489,7 +510,7 @@ if (
   catalog.future?.mockLlmApis?.status !== "partial-source-qualified" ||
   catalog.future?.mockLlmApis?.phase !== "F2" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.status !==
-    "openai-and-anthropic-non-streaming-source-qualified" ||
+    "openai-streaming-and-anthropic-non-streaming-source-qualified" ||
   catalog.future?.mockLlmApis?.providerDataPlane?.managementConfiguration !==
     "MCP-only" ||
   !equal(catalog.future?.mockLlmApis?.providerDataPlane?.manifests, [
@@ -548,7 +569,7 @@ if (
   )
 ) {
   failures.push(
-    "F2 must expose exactly four MCP-only definition tools plus generated bounded OpenAI and Anthropic non-streaming data-plane contracts while deployment remains unqualified"
+    "F2 must expose exactly four MCP-only definition tools plus generated bounded streaming OpenAI and non-streaming Anthropic data-plane contracts while deployment remains unqualified"
   );
 }
 if (
@@ -574,15 +595,60 @@ if (
   mockLlmOpenAiProvider?.request?.maxTools !== 64 ||
   mockLlmOpenAiProvider?.request?.modelId !==
     "1-256-visible-ascii-excluding-dot-segments" ||
-  mockLlmOpenAiProvider?.request?.streaming !== "rejected" ||
-  mockLlmOpenAiProvider?.request?.streamOptions !== "rejected" ||
+  mockLlmOpenAiProvider?.request?.streaming !== "absent-or-false-json-true-sse" ||
+  mockLlmOpenAiProvider?.request?.streamOptions?.availability !== "stream-true-only" ||
+  !equal(mockLlmOpenAiProvider?.request?.streamOptions?.fields, [
+    "include_usage",
+    "include_obfuscation",
+  ]) ||
+  mockLlmOpenAiProvider?.request?.streamOptions?.values !== "optional-booleans" ||
+  mockLlmOpenAiProvider?.request?.streamOptions?.unknownFields !== "rejected" ||
+  mockLlmOpenAiProvider?.request?.streamOptions?.includeUsageDefault !== false ||
+  mockLlmOpenAiProvider?.request?.streamOptions?.includeObfuscationDefault !== true ||
   mockLlmOpenAiProvider?.request?.unknownTopLevelFields !== "rejected" ||
   mockLlmOpenAiProvider?.response?.maxBodyBytes !== 2097152 ||
   mockLlmOpenAiProvider?.response?.transportIds !== "fresh-per-invocation" ||
   mockLlmOpenAiProvider?.response?.deterministicPlanIdExposure !== "never" ||
+  mockLlmOpenAiProvider?.response?.streaming?.format !== "server-sent-events" ||
+  mockLlmOpenAiProvider?.response?.streaming?.order !==
+    "role-payload-terminal-optional-usage-done" ||
+  mockLlmOpenAiProvider?.response?.streaming?.initialDelay !== "pre-header" ||
+  mockLlmOpenAiProvider?.response?.streaming?.pacedFrames !== "payload-deltas-only" ||
+  mockLlmOpenAiProvider?.response?.streaming?.immediateFrames !==
+    "role-terminal-usage-done" ||
+  mockLlmOpenAiProvider?.response?.streaming?.maximumDuration !==
+    "absolute-includes-initial-pacing-backpressure" ||
+  mockLlmOpenAiProvider?.response?.streaming?.scheduleAdmissibility !==
+    "initial+max(payload-count-minus-one,zero)*delay<maximum" ||
+  mockLlmOpenAiProvider?.response?.streaming?.payloadFrameCount !==
+    "unicode-code-point-chunks-of-text-and-canonical-tool-arguments" ||
+  mockLlmOpenAiProvider?.response?.streaming?.deadlineEquality !== "rejected" ||
+  mockLlmOpenAiProvider?.response?.streaming?.bodySizing !==
+    "entire-precomputed-sse-utf8" ||
+  mockLlmOpenAiProvider?.response?.streaming?.preflightFailure !==
+    "generic-json-before-200" ||
+  mockLlmOpenAiProvider?.response?.streaming?.cancellationOrDeadline !==
+    "truncate-without-fabricated-success" ||
+  mockLlmOpenAiProvider?.response?.streaming?.configuredMidstreamErrors !==
+    "unsupported" ||
+  mockLlmOpenAiProvider?.response?.streaming?.usageChunk !==
+    "optional-empty-choices-before-done" ||
+  mockLlmOpenAiProvider?.response?.streaming?.obfuscation !==
+    "default-on-fresh-opaque-regular-delta-padding" ||
+  mockLlmOpenAiProvider?.response?.streaming?.obfuscationParity !==
+    "upstream-size-normalization-and-security-not-qualified" ||
   mockLlmOpenAiProvider?.planning?.conversationState !== "stateless" ||
   mockLlmOpenAiProvider?.planning?.turnIndex !== "prior-assistant-message-count" ||
-  mockLlmOpenAiProvider?.planning?.initialDelay !== "abort-aware" ||
+  mockLlmOpenAiProvider?.planning?.definitionRevision !==
+    "rechecked-before-plan-commit" ||
+  mockLlmOpenAiProvider?.planning?.stateCommit !==
+    "durable-object-before-edge-plan-return" ||
+  mockLlmOpenAiProvider?.planning?.initialDelay !== "abort-aware-pre-header" ||
+  mockLlmOpenAiProvider?.planning?.chunkCadence !== "payload-deltas-only" ||
+  mockLlmOpenAiProvider?.security?.requestCredentialReflection !== "rejected" ||
+  mockLlmOpenAiProvider?.security?.responseCredentialReflection !==
+    "rejected-before-header" ||
+  mockLlmOpenAiProvider?.evidence?.officialSdkVersion !== "6.49.0" ||
   mockLlmOpenAiProvider?.evidence?.localWorkerOfficialOpenAiSdk !== "qualified" ||
   mockLlmOpenAiProvider?.evidence?.cloudPin !== "unqualified" ||
   mockLlmOpenAiProvider?.evidence?.hostedDeployment !== "unqualified" ||
@@ -598,7 +664,7 @@ if (
         id: "create_chat_completion",
         method: "POST",
         path: "/chat/completions",
-        streaming: false,
+        streaming: true,
       },
       {
         id: "list_models",
@@ -907,13 +973,22 @@ for (const required of [
   "`max_tokens` does not truncate",
   "accept_any",
   "visible-ASCII strings",
-  "streaming_not_supported",
+  "stream: true",
+  "include_usage",
+  "include_obfuscation",
+  "payload deltas",
+  "absolute maximum duration",
+  "strictly less than",
+  "payload frame count",
+  "backpressure",
+  "pre-header",
+  "2,097,152",
+  "[DONE]",
   "turnIndex",
   "abort-aware",
   "empty `499`",
   "fresh `x-request-id`",
   "`planId` values are never exposed",
-  "2,097,152",
   "no mock-LLM reset operation",
   "LLM-specific observations or assertions",
   "Cloud pinning",
@@ -938,7 +1013,11 @@ for (const required of [
   "openai@6.49.0",
   "maxRetries: 0",
   "invalid_api_key",
-  "streaming_not_supported",
+  "stream: true",
+  "include_usage",
+  "include_obfuscation",
+  "for await",
+  "strictly less than",
   "delete_mock_llm_server",
   "MOCK_LLM_SERVER_REVISION_CONFLICT",
   "source-qualified",
@@ -988,7 +1067,10 @@ for (const [path, body] of [
     "6.49.0",
     "0.115.0",
     "maxRetries: 0",
-    "streaming_not_supported",
+    "stream: true",
+    "include_usage",
+    "include_obfuscation",
+    "strictly less than",
     "anthropic-version: 2023-06-01",
     "GET /v1/models",
     "delete_mock_llm_server",
@@ -1010,5 +1092,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded OpenAI/Anthropic F2, and inert secrets\n"
+  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded streaming OpenAI/non-streaming Anthropic F2, and inert secrets\n"
 );

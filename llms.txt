@@ -15,7 +15,7 @@
 - [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
   resources, resource templates, and prompts from an agent under test.
 - [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call
-  its bounded OpenAI- or Anthropic-shaped non-streaming provider data plane.
+  its bounded streaming OpenAI or non-streaming Anthropic provider data plane.
 - [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,
   probe models, call Chat Completions, test failures, and clean up safely.
 - [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md): create through
@@ -50,9 +50,10 @@
   `unqualified`.
 - F2 mock LLM definitions: four MCP-only operations are source-implemented with
   schema-v7 environment persistence and write-only provider Mock Credentials.
-- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic
-  Messages/model subsets are source-qualified locally; state/reset, observations,
-  streaming/betas, Cloud pinning, and deployment remain unavailable or unqualified.
+- F2 mock LLM provider data plane: bounded OpenAI Chat Completions including SSE,
+  plus non-streaming Anthropic Messages/model subsets, are source-qualified locally;
+  state/reset, observations, Anthropic streaming/betas, Cloud pinning, and deployment
+  remain unavailable or unqualified.
 - F3 script execution: unavailable; `NoSandbox` fails closed.
 - F6 Code Mode `search` and `execute`: unavailable and disabled.
 - CLI and typed client: unpublished.

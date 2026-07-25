@@ -59,9 +59,10 @@ The partial F2 routes always require a syntactically valid dialect Mock Credenti
 OpenAI uses Bearer; Anthropic uses `x-api-key` plus exactly
 `anthropic-version: 2023-06-01`. `accept_any` skips verifier comparison and `strict`
 compares the current dialect verifier. Source-qualified operations are model
-list/retrieve plus non-streaming Chat Completions/Messages. Local Worker integrations
-use pinned official SDKs; neither recorded workers.dev origin has F2 deployment
-acceptance. SSE/betas remain unavailable. See
+list/retrieve plus OpenAI JSON/SSE Chat Completions and non-streaming Anthropic
+Messages. Local Worker integrations use pinned official SDKs; neither recorded
+workers.dev origin has F2 deployment acceptance. Configured midstream errors, OpenAI
+Responses, and Anthropic streaming/betas remain unavailable. See
 [MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
 
 Path mode works without an account-owned zone, but some SDKs assume provider-shaped

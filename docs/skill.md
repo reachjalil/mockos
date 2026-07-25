@@ -27,8 +27,9 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   `simulate_lifecycle` and `run_provisioning_cycle` and recognizing the five F1
   mock-MCP definition/state operations plus four F2 mock-LLM definition operations;
 - MCP-managed OpenAI definitions, an authenticated model-discovery capability probe,
-  official-SDK non-streaming Chat Completions, one bounded negative case, and
-  revision-safe cleanup without confusing provider traffic for management;
+  official-SDK JSON and bounded SSE Chat Completions, stream-option and cancellation
+  checks, one bounded negative case, and revision-safe cleanup without confusing
+  provider traffic for management;
 - MCP-managed Anthropic definitions, authenticated `GET /v1/models`, official
   `@anthropic-ai/sdk` 0.115.0 non-streaming Messages with `maxRetries: 0`, exact
   `anthropic-version: 2023-06-01`, one auth/version/stream negative, and the same
@@ -104,20 +105,40 @@ own synthetic Bearer Mock Credential.
    Bearer credential to probe `GET /models`. The four management tools do not prove
    that the connected deployment serves the provider route.
 4. Point the official OpenAI JavaScript SDK at that base URL, set `maxRetries: 0`, and
-   call model list/retrieve plus one non-streaming Chat Completion. The exact local
-   source evidence pins `openai` 6.49.0.
-5. In `strict` mode, prove either wrong authentication or `stream: true` rejection.
-   `accept_any` accepts every syntactically valid provider Bearer Mock Credential
-   without verifier comparison. Expect
-   `401 invalid_api_key` or `400 streaming_not_supported`; do not expect an LLM
-   observation because no LLM-specific request-log/assertion surface exists.
-6. In `finally`, read the current definition, pass its latest positive revision to
+   call model list/retrieve plus one JSON Chat Completion. The exact local source
+   evidence pins `openai` 6.49.0.
+5. Call Chat Completions again with `stream: true`. For a stable fixture, send
+   `stream_options: { include_usage: true, include_obfuscation: false }`, consume it
+   with `for await`, and require ordered role, payload, terminal, usage, and `[DONE]`
+   semantics. Also exercise cancellation after a payload delta and do not require a
+   fabricated terminal success.
+6. In `strict` mode, prove wrong authentication, or send `stream_options` without
+   `stream: true` and require `400 invalid_request_error`. `accept_any` accepts every
+   syntactically valid provider Bearer Mock Credential without verifier comparison.
+   Do not expect an LLM observation because no LLM-specific request-log/assertion
+   surface exists.
+7. In `finally`, read the current definition, pass its latest positive revision to
    `delete_mock_llm_server`, reconcile a typed stale conflict rather than overwriting,
    delete the disposable environment, and close management MCP.
 
-The source-qualified contract includes model list/retrieve and non-streaming Chat
-Completions only. Streaming, conversation state, LLM observations/assertions, Cloud
-pinning, and deployment remain outside that evidence
+The source-qualified contract includes model list/retrieve and Chat Completions as JSON
+or bounded SSE. `stream_options` accepts only optional Boolean `include_usage` and
+`include_obfuscation`, and only with `stream: true`. Obfuscation defaults on and adds
+fresh opaque compatibility padding to regular delta chunks; it is not evidence of
+upstream size normalization or security parity. Initial delay is pre-header, only
+payload deltas are paced, structural/terminal/optional-usage/`[DONE]` frames are
+immediate, and one absolute maximum duration covers initial wait, pacing, and
+backpressure. The complete precomputed SSE is capped at 2,097,152 UTF-8 bytes.
+The schedule is valid only when
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+is strictly less than `maximumDurationMilliseconds`; equality is rejected. The
+payload frame count comes from Unicode code-point chunks of text and canonical tool
+arguments.
+Preflight failure is generic JSON before HTTP `200`; cancellation or deadline after
+HTTP `200` truncates without fabricated success. Current turn selection is stateless;
+the selected plan is committed in the Environment Durable Object before edge return.
+Configured midstream errors, the Responses API, conversation state, LLM
+observations/assertions, Cloud pinning, and deployment remain outside that evidence
 boundary. A passing local source workflow must never be reported as deployed or
 verified-live OpenAI parity.
 
@@ -140,8 +161,7 @@ management interface; `/v1/messages` is the application-under-test data plane.
 5. In `strict` mode, prove `401 authentication_error` for a wrong key. `accept_any`
    accepts every syntactically valid `x-api-key` Mock Credential without verifier
    comparison. Alternatively, prove `400 invalid_request_error` for a version/beta
-   header or `stream: true`. Streaming is unsupported; this route does not use the
-   OpenAI `streaming_not_supported` code.
+   header or `stream: true`. Streaming is unsupported on this Anthropic route.
 6. Read the latest revision and call `delete_mock_llm_server` in `finally`; reconcile
    `MOCK_LLM_SERVER_REVISION_CONFLICT` rather than deleting another agent's
    replacement.

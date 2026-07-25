@@ -1,6 +1,10 @@
 import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
 import { canonicalMockLlmJson } from "./canonical-json";
-import type { RenderedLlmWire, RenderLlmPlanOptions } from "./wire";
+import type {
+  RenderedLlmSseFrame,
+  RenderedLlmWire,
+  RenderLlmPlanOptions,
+} from "./wire";
 
 type MockLlmResponsePlan = Extract<MockLlmPlan, { readonly kind: "response" }>;
 type MockLlmErrorPlan = Extract<MockLlmPlan, { readonly kind: "error" }>;
@@ -133,14 +137,18 @@ const renderAnthropicJsonResponse = (
 
 const anthropicSseFrame = (
   eventName: string,
-  event: Readonly<Record<string, unknown>>
-): string => `event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`;
+  event: Readonly<Record<string, unknown>>,
+  cadence: RenderedLlmSseFrame["cadence"] = "immediate"
+): RenderedLlmSseFrame => ({
+  data: `event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`,
+  cadence,
+});
 
 const renderAnthropicSseResponse = (
   plan: MockLlmResponsePlan,
   identity: AnthropicWireIdentity
 ): RenderedLlmWire => {
-  const frames: string[] = [
+  const frames: RenderedLlmSseFrame[] = [
     anthropicSseFrame("message_start", {
       type: "message_start",
       message: {
@@ -169,11 +177,15 @@ const renderAnthropicSseResponse = (
       );
       for (const text of splitCodePoints(segment.text, plan.cadence.chunkSize)) {
         frames.push(
-          anthropicSseFrame("content_block_delta", {
-            type: "content_block_delta",
-            index,
-            delta: { type: "text_delta", text },
-          })
+          anthropicSseFrame(
+            "content_block_delta",
+            {
+              type: "content_block_delta",
+              index,
+              delta: { type: "text_delta", text },
+            },
+            "payload"
+          )
         );
       }
     } else {
@@ -195,11 +207,15 @@ const renderAnthropicSseResponse = (
         plan.cadence.chunkSize
       )) {
         frames.push(
-          anthropicSseFrame("content_block_delta", {
-            type: "content_block_delta",
-            index,
-            delta: { type: "input_json_delta", partial_json: partialJson },
-          })
+          anthropicSseFrame(
+            "content_block_delta",
+            {
+              type: "content_block_delta",
+              index,
+              delta: { type: "input_json_delta", partial_json: partialJson },
+            },
+            "payload"
+          )
         );
       }
     }

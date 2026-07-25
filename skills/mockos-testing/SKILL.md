@@ -4,14 +4,16 @@ description: >-
   Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic workflows
   through authenticated management MCP: create isolated Entra ID or Okta
   environments, seed identities, register OIDC clients, configure MCP-managed mock
-  LLM definitions, call model discovery and non-streaming Chat Completions or Messages, run
+  LLM definitions, call model discovery, OpenAI JSON or bounded SSE Chat Completions,
+  and non-streaming Anthropic Messages, run
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, and clean up. Use when wiring or testing an application's
   enterprise identity or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped
-  failures; do not claim unrecorded deployment qualification, streaming/betas,
-  the complete Okta Classic Authn transaction machine, or broad provider parity.
+  failures; do not claim unrecorded deployment qualification, Anthropic streaming/betas,
+  configured midstream errors, the complete Okta Classic Authn transaction machine,
+  or broad provider parity.
 ---
 
 # Test with mockOS
@@ -133,22 +135,43 @@ evidence state.
    not that the connected deployment serves the provider route. Stop and report the
    evidence boundary if the probe fails.
 6. Point the official OpenAI JavaScript SDK at that base URL, set `maxRetries: 0`, and
-   exercise model list/retrieve plus one non-streaming
-   `chat.completions.create` call. The locally qualified source pins `openai` 6.49.0;
-   another version needs its own evidence. The current request surface rejects
-   `stream: true`, multimodal content, the Responses API, and unknown top-level keys.
-7. Prove one bounded negative case: missing model, a wrong credential in `strict`
-   mode, or
-   `400 streaming_not_supported`. Do not expect an LLM request log or assertion
-   result; this slice has no LLM-specific observation surface.
-8. In `finally`, read the latest safe definition, delete it with that positive
+   exercise model list/retrieve plus one JSON `chat.completions.create` call. The
+   locally qualified source pins `openai` 6.49.0; another version needs its own
+   evidence. Multimodal content, the Responses API, and unknown top-level keys remain
+   outside the bounded request surface.
+7. Exercise `chat.completions.create` with `stream: true`. For stable assertions, send
+   `stream_options: { include_usage: true, include_obfuscation: false }`, consume the
+   result with `for await`, and require ordered role, payload, terminal, usage, and
+   `[DONE]` semantics. Run a separate cancellation case after receiving a payload
+   delta and do not require a fabricated terminal success.
+8. Prove one bounded negative case: missing model, a wrong credential in `strict`
+   mode, or `stream_options` without `stream: true`, which must return
+   `400 invalid_request_error`. Do not expect an LLM request log or assertion result;
+   this slice has no LLM-specific observation surface.
+9. In `finally`, read the latest safe definition, delete it with that positive
    `expectedRevision`, then delete the disposable environment and close management
    MCP. A stale revision must be reconciled, not overwritten blindly.
 
-The provider is stateless: prior `assistant` messages select the deterministic turn.
-Initial delay is abort-aware, but configured chunk cadence is inert without streaming.
-Do not claim SSE, conversation state, LLM observation/assertion, Wrangler/network
-qualification, Cloud pinning, deployment, or live OpenAI parity.
+The provider is stateless: prior `assistant` messages select the deterministic turn,
+and the selected plan is committed in the Environment Durable Object before edge
+return. `stream_options` is valid only with `stream: true` and accepts only optional
+Boolean `include_usage` and `include_obfuscation`. Obfuscation defaults on and places
+fresh opaque compatibility padding on regular delta chunks; it does not prove upstream
+size normalization or security parity. Initial delay is abort-aware and pre-header.
+Only payload deltas are paced; role, terminal, optional usage, and `[DONE]` frames are
+immediate. One absolute maximum duration includes initial wait, pacing, and
+backpressure, while the complete precomputed SSE body is capped at 2,097,152 UTF-8
+bytes. Preflight failure returns generic JSON before HTTP `200`; cancellation or
+deadline after HTTP `200` truncates without fabricated success. Do not claim
+configured midstream errors, the Responses API, conversation state, LLM
+observation/assertion, Wrangler/network qualification, Cloud pinning, deployment, or
+live OpenAI parity.
+
+Reject a definition/plan whose schedule does not satisfy
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+strictly less than `maximumDurationMilliseconds`; equality is invalid. Derive the
+payload frame count from Unicode code-point chunks of text and canonical tool
+arguments at `chunkSize`.
 
 ## Exercise the bounded mock-Anthropic flow
 

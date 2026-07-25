@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { describe, expect, it } from "vitest";
 import { renderAnthropicPlan } from "./anthropic";
 import { renderOpenAiPlan } from "./openai";
+import { createMockLlmOpenAiFetchHandler } from "./openai-http";
 import {
   errorPlan,
   requestFromFetchInput,
@@ -51,8 +52,50 @@ const readJsonBody = async (
   (await request.json()) as Readonly<Record<string, unknown>>;
 
 describe("official OpenAI SDK source conformance", () => {
-  it("deserializes models, text, tools, usage, request IDs, and immediate SSE", async () => {
+  it("deserializes models, text, tools, usage, request IDs, and edge-owned SSE", async () => {
     const paths: string[] = [];
+    const immediatePlan = (plan: ReturnType<typeof textPlan>) =>
+      plan.kind === "response"
+        ? {
+            ...plan,
+            cadence: {
+              ...plan.cadence,
+              initialDelayMilliseconds: 0,
+              chunkDelayMilliseconds: 0,
+            },
+          }
+        : plan;
+    const providerFetch = createMockLlmOpenAiFetchHandler({
+      runtime: {
+        getCatalog: async () => ({
+          ok: true as const,
+          value: {
+            models: [
+              {
+                id: TEST_MODEL,
+                createdAtEpochSeconds: TEST_CREATED_EPOCH_SECONDS,
+              },
+            ],
+          },
+        }),
+        planChatCompletion: async ({ request }) => ({
+          ok: true as const,
+          value: immediatePlan(
+            typeof request === "object" &&
+              request !== null &&
+              !Array.isArray(request) &&
+              Array.isArray(request.tools)
+              ? toolPlan()
+              : textPlan()
+          ),
+        }),
+      },
+      createIdentity: () => ({
+        requestId: "req_sdk_conformance",
+        responseId: "chatcmpl-sdk-conformance",
+      }),
+    });
+    const providerBasePath = new URL(OPENAI_BASE_URL).pathname;
     const fetch = async (
       input: RequestInfo | URL,
       init?: RequestInit
@@ -63,27 +106,10 @@ describe("official OpenAI SDK source conformance", () => {
       expect(request.headers.get("authorization")).toBe(
         "Bearer mock-openai-credential"
       );
-
-      if (request.method === "GET" && url.pathname.endsWith("/models")) {
-        return jsonResponse({ object: "list", data: [openAiModel] }, "x-request-id");
-      }
-      if (request.method === "GET" && url.pathname.endsWith(`/models/${TEST_MODEL}`)) {
-        return jsonResponse(openAiModel, "x-request-id");
-      }
-      const body = await readJsonBody(request);
-      const plan = Array.isArray(body.tools) ? toolPlan() : textPlan();
-      return wireToResponse(
-        renderOpenAiPlan(plan, {
-          stream: body.stream === true,
-          includeUsage:
-            body.stream_options !== null &&
-            typeof body.stream_options === "object" &&
-            !Array.isArray(body.stream_options) &&
-            body.stream_options !== undefined &&
-            (body.stream_options as Readonly<Record<string, unknown>>).include_usage ===
-              true,
-        })
-      );
+      return providerFetch(request, {
+        slug: "demo",
+        providerPath: url.pathname.slice(providerBasePath.length),
+      });
     };
     const client = new OpenAI({
       apiKey: "mock-openai-credential",
@@ -96,7 +122,7 @@ describe("official OpenAI SDK source conformance", () => {
     expect(models.data).toEqual([openAiModel]);
     const model = await client.models.retrieve(TEST_MODEL);
     expect(model).toEqual(expect.objectContaining(openAiModel));
-    expect(model._request_id).toBe(`llmp_${"D".repeat(43)}`);
+    expect(model._request_id).toBe("req_sdk_conformance");
 
     const completion = await client.chat.completions.create({
       model: TEST_MODEL,
@@ -108,7 +134,7 @@ describe("official OpenAI SDK source conformance", () => {
       completion_tokens: 5,
       total_tokens: 16,
     });
-    expect(completion._request_id).toBe(`llmp_${"A".repeat(43)}`);
+    expect(completion._request_id).toBe("req_sdk_conformance");
 
     const toolCompletion = await client.chat.completions.create({
       model: TEST_MODEL,
@@ -159,6 +185,45 @@ describe("official OpenAI SDK source conformance", () => {
         total_tokens: 16,
       },
     });
+    expect(
+      chunks
+        .filter((chunk) => chunk.choices.length > 0)
+        .every(
+          (chunk) =>
+            typeof (chunk as unknown as { obfuscation?: unknown }).obfuscation ===
+            "string"
+        )
+    ).toBe(true);
+
+    const unpaddedStream = await client.chat.completions.create({
+      model: TEST_MODEL,
+      messages: [{ role: "user", content: "Stream without padding" }],
+      stream: true,
+      stream_options: { include_obfuscation: false },
+    });
+    const unpaddedChunks = [];
+    for await (const chunk of unpaddedStream) unpaddedChunks.push(chunk);
+    expect(
+      unpaddedChunks.every(
+        (chunk) =>
+          !Object.hasOwn(
+            chunk as unknown as Readonly<Record<string, unknown>>,
+            "obfuscation"
+          )
+      )
+    ).toBe(true);
+
+    const accumulated = await client.chat.completions
+      .stream({
+        model: TEST_MODEL,
+        messages: [{ role: "user", content: "Accumulate the stream" }],
+      })
+      .finalChatCompletion();
+    expect(accumulated.choices[0]?.message).toMatchObject({
+      role: "assistant",
+      content: "Hello from mockOS.",
+    });
+    expect(accumulated.choices[0]?.finish_reason).toBe("stop");
     expect(paths).toContain("/e/env_fixture/llm-mock/demo/openai/v1/chat/completions");
     expect(paths).toEqual(
       expect.arrayContaining([

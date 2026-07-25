@@ -65,7 +65,15 @@ describe("OpenAI Chat Completions rendering", () => {
     });
     expect(wire.kind).toBe("sse");
     if (wire.kind !== "sse") throw new Error("Expected SSE wire output.");
-    expect(wire.frames).toEqual(expectedStream);
+    expect(wire.frames.map((frame) => frame.data)).toEqual(expectedStream);
+    expect(wire.frames.map((frame) => frame.cadence)).toEqual([
+      "immediate",
+      "payload",
+      "payload",
+      "immediate",
+      "immediate",
+      "immediate",
+    ]);
   });
 
   it("chunks by Unicode code point without emitting an unrequested usage chunk", () => {
@@ -83,6 +91,7 @@ describe("OpenAI Chat Completions rendering", () => {
       readonly usage?: unknown;
     };
     const chunks = wire.frames
+      .map((frame) => frame.data)
       .filter((frame) => frame !== "data: [DONE]\n\n")
       .map(
         (frame) => JSON.parse(frame.slice("data: ".length).trim()) as Readonly<Chunk>
@@ -94,6 +103,37 @@ describe("OpenAI Chat Completions rendering", () => {
     ).toEqual(["Hi 🧪", "!"]);
     expect(chunks.every((chunk) => !("usage" in chunk))).toBe(true);
     expect(chunks.some((chunk) => chunk.choices?.length === 0)).toBe(false);
+  });
+
+  it("adds fresh-response opaque compatibility padding only when requested", () => {
+    const wire = renderOpenAiPlan(responsePlan(), {
+      stream: true,
+      responseId: "chatcmpl-transport-response-1234",
+      includeObfuscation: true,
+    });
+    if (wire.kind !== "sse") throw new Error("Expected SSE wire output.");
+
+    const chunks = wire.frames
+      .map((frame) => frame.data)
+      .filter((frame) => frame !== "data: [DONE]\n\n")
+      .map(
+        (frame) =>
+          JSON.parse(frame.slice("data: ".length).trim()) as Readonly<{
+            choices: readonly unknown[];
+            obfuscation?: unknown;
+          }>
+      );
+    const deltaChunks = chunks.filter((chunk) => chunk.choices.length > 0);
+    expect(
+      deltaChunks.every(
+        (chunk) =>
+          typeof chunk.obfuscation === "string" &&
+          chunk.obfuscation.startsWith("mockos_")
+      )
+    ).toBe(true);
+    expect(new Set(deltaChunks.map((chunk) => chunk.obfuscation)).size).toBe(
+      deltaChunks.length
+    );
   });
 
   it.each([

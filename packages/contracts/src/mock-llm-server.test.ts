@@ -394,6 +394,27 @@ describe("mock LLM server contract", () => {
         ],
       })
     ).toThrow(/neutral response-plan bounds/);
+
+    expect(() =>
+      mockLlmServerWriteSchema.parse({
+        ...serverWrite(),
+        defaultCadence: {
+          chunkDelayMilliseconds: 400,
+          chunkSize: 1,
+          maximumDurationMilliseconds: 1_000,
+        },
+        models: [
+          {
+            ...serverWrite().models[0],
+            behavior: {
+              version: 1,
+              type: "static",
+              value: "four",
+            },
+          },
+        ],
+      })
+    ).toThrow(/neutral response-plan bounds/);
   });
 
   it("rejects copied credentials and oversized definitions before persistence", () => {

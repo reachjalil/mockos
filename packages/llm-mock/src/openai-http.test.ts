@@ -1,4 +1,4 @@
-import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
+import { type MockLlmPlan, parseMockLlmPlan } from "@mockos/contracts/mock-llm";
 import { describe, expect, it, vi } from "vitest";
 import {
   createMockLlmOpenAiFetchHandler,
@@ -86,7 +86,7 @@ const responseJson = async (response: Response) =>
   (await response.json()) as Record<string, unknown>;
 
 describe("mock OpenAI provider manifest", () => {
-  it("freezes the exact non-streaming source operation table", () => {
+  it("freezes the exact source operation table", () => {
     expect(mockLlmOpenAiProviderManifest).toEqual({
       version: 1,
       dialect: "openai",
@@ -100,7 +100,7 @@ describe("mock OpenAI provider manifest", () => {
           id: "create_chat_completion",
           method: "POST",
           path: "/chat/completions",
-          streaming: false,
+          streaming: true,
         },
         {
           id: "list_models",
@@ -167,13 +167,64 @@ describe("bounded OpenAI Chat Completions parsing", () => {
     });
 
     expect(omitted.turnIndex).toBe(1);
+    expect(omitted.stream).toBe(false);
+    expect(omitted.includeUsage).toBe(false);
+    expect(omitted.includeObfuscation).toBe(false);
     expect(explicit.fingerprint).toEqual(omitted.fingerprint);
     expect(omitted.fingerprint.toolNames).toEqual(["get_weather"]);
   });
 
+  it("accepts the bounded current streaming options without changing behavior selection", () => {
+    const nonStreaming = parseMockLlmOpenAiChatRequest(chatBody());
+    const defaults = parseMockLlmOpenAiChatRequest(
+      chatBody({
+        stream: true,
+      })
+    );
+    const explicit = parseMockLlmOpenAiChatRequest(
+      chatBody({
+        stream: true,
+        stream_options: {
+          include_usage: true,
+          include_obfuscation: false,
+        },
+      })
+    );
+
+    expect(defaults).toMatchObject({
+      stream: true,
+      includeUsage: false,
+      includeObfuscation: true,
+    });
+    expect(explicit).toMatchObject({
+      stream: true,
+      includeUsage: true,
+      includeObfuscation: false,
+    });
+    expect(defaults.fingerprint).toEqual(nonStreaming.fingerprint);
+    expect(explicit.fingerprint).toEqual(nonStreaming.fingerprint);
+  });
+
   it.each([
-    [{ ...chatBody(), stream: true }, "streaming_not_supported", "stream"],
     [{ ...chatBody(), stream_options: {} }, "invalid_request", "stream_options"],
+    [
+      {
+        ...chatBody(),
+        stream: true,
+        stream_options: { include_usage: "yes" },
+      },
+      "invalid_request",
+      "stream_options",
+    ],
+    [
+      {
+        ...chatBody(),
+        stream: true,
+        stream_options: { unknown: false },
+      },
+      "invalid_request",
+      "stream_options",
+    ],
     [{ ...chatBody(), n: 2 }, "invalid_request", "n"],
     [{ ...chatBody(), tool_choice: "none" }, "invalid_request", "tool_choice"],
     [
@@ -332,6 +383,93 @@ describe("mock OpenAI HTTP adapter", () => {
     });
   });
 
+  it("streams exact text, usage, DONE, and bounded compatibility padding", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const streamingPlan: MockLlmPlan = {
+      ...basePlan,
+      cadence: {
+        ...basePlan.cadence,
+        initialDelayMilliseconds: 0,
+        chunkDelayMilliseconds: 0,
+      },
+    };
+    const fetch = handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => success(streamingPlan)),
+      })
+    );
+    const response = await fetch(
+      jsonRequest(
+        chatBody({
+          stream: true,
+          stream_options: { include_usage: true },
+        })
+      ),
+      { slug: "demo", providerPath: "/chat/completions" }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    expect(response.headers.get("x-request-id")).toBe(FIXED_IDENTITY.requestId);
+    const raw = await response.text();
+    expect(raw).not.toContain(basePlan.planId);
+    const events = raw
+      .split("\n\n")
+      .filter(Boolean)
+      .map((event) => event.slice("data: ".length));
+    expect(events.at(-1)).toBe("[DONE]");
+    const chunks = events.slice(0, -1).map(
+      (event) =>
+        JSON.parse(event) as Readonly<{
+          id: string;
+          choices: readonly {
+            delta: { role?: string; content?: string };
+            finish_reason: string | null;
+          }[];
+          usage?: unknown;
+          obfuscation?: unknown;
+        }>
+    );
+    expect(new Set(chunks.map((chunk) => chunk.id))).toEqual(
+      new Set([FIXED_IDENTITY.responseId])
+    );
+    expect(
+      chunks
+        .flatMap((chunk) => chunk.choices)
+        .map((choice) => choice.delta.content ?? "")
+        .join("")
+    ).toBe("Hello from mockOS.");
+    const regularChunks = chunks.filter((chunk) => chunk.choices.length > 0);
+    expect(regularChunks.every((chunk) => chunk.usage === null)).toBe(true);
+    expect(regularChunks.every((chunk) => typeof chunk.obfuscation === "string")).toBe(
+      true
+    );
+    expect(new Set(regularChunks.map((chunk) => chunk.obfuscation)).size).toBe(
+      regularChunks.length
+    );
+    expect(chunks.at(-1)).toMatchObject({
+      choices: [],
+      usage: {
+        completion_tokens: 5,
+        prompt_tokens: 11,
+        total_tokens: 16,
+      },
+    });
+    expect(chunks.at(-1)).not.toHaveProperty("obfuscation");
+
+    const withoutPadding = await fetch(
+      jsonRequest(
+        chatBody({
+          stream: true,
+          stream_options: { include_obfuscation: false },
+        })
+      ),
+      { slug: "demo", providerPath: "/chat/completions" }
+    );
+    expect(await withoutPadding.text()).not.toContain('"obfuscation"');
+  });
+
   it("requires declared tools before returning a behavior-selected tool call", async () => {
     const fetch = handler(
       runtime({
@@ -384,6 +522,18 @@ describe("mock OpenAI HTTP adapter", () => {
     expect(response.headers.get("retry-after")).toBe("3");
     expect(response.headers.get("x-request-id")).toBe(FIXED_IDENTITY.requestId);
     expect(await responseJson(response)).toMatchObject({
+      error: { type: "rate_limit_error", code: "rate_limit" },
+    });
+
+    const streamingRequestError = await fetch(jsonRequest(chatBody({ stream: true })), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    expect(streamingRequestError.status).toBe(429);
+    expect(streamingRequestError.headers.get("content-type")).toContain(
+      "application/json"
+    );
+    expect(await responseJson(streamingRequestError)).toMatchObject({
       error: { type: "rate_limit_error", code: "rate_limit" },
     });
   });
@@ -548,7 +698,7 @@ describe("mock OpenAI HTTP adapter", () => {
     }
   );
 
-  it("fails closed on runtime output larger than the public response limit", async () => {
+  it("fails closed on an invalid oversized runtime plan", async () => {
     const oversizedPlan = {
       ...textPlan(),
       segments: [
@@ -574,6 +724,51 @@ describe("mock OpenAI HTTP adapter", () => {
       MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES
     );
     expect(JSON.parse(serialized)).toMatchObject({
+      error: { code: "internal_error" },
+    });
+  });
+
+  it("rejects a valid complete SSE body over 2 MiB before returning 200", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const model = "m".repeat(256);
+    const oversizedSsePlan = parseMockLlmPlan({
+      ...basePlan,
+      model,
+      segments: [
+        {
+          type: "tool_call",
+          id: "call_large_1",
+          name: "lookup",
+          input: { value: "x".repeat(4_084) },
+        },
+      ],
+      stopReason: "tool_use",
+      cadence: {
+        initialDelayMilliseconds: 0,
+        chunkDelayMilliseconds: 0,
+        chunkSize: 1,
+        maximumDurationMilliseconds: 60_000,
+      },
+    });
+    const response = await handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => success(oversizedSsePlan)),
+      })
+    )(
+      jsonRequest(
+        chatBody({
+          model,
+          stream: true,
+          tools: [{ type: "function", function: { name: "lookup" } }],
+        })
+      ),
+      { slug: "demo", providerPath: "/chat/completions" }
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await responseJson(response)).toMatchObject({
       error: { code: "internal_error" },
     });
   });
@@ -605,7 +800,6 @@ describe("mock OpenAI HTTP adapter", () => {
         }),
         401,
       ],
-      [jsonRequest(chatBody({ stream: true })), 400],
       [
         jsonRequest(chatBody(), {
           headers: { "content-encoding": "gzip" },
@@ -673,6 +867,91 @@ describe("mock OpenAI HTTP adapter", () => {
     expect(providerRuntime.planChatCompletion).not.toHaveBeenCalled();
   });
 
+  it("fails closed on secret-bearing runtime plans and catalogs", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const reflectedPlan: MockLlmPlan = {
+      ...basePlan,
+      segments: [{ type: "text", text: VALID_CREDENTIAL }],
+    };
+    const reflectedResponse = await handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => success(reflectedPlan)),
+      })
+    )(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    expect(reflectedResponse.status).toBe(500);
+    expect(JSON.stringify(await responseJson(reflectedResponse))).not.toContain(
+      VALID_CREDENTIAL
+    );
+
+    const splitReflectedPlan: MockLlmPlan = {
+      ...basePlan,
+      segments: [
+        { type: "text", text: VALID_CREDENTIAL.slice(0, 12) },
+        { type: "text", text: VALID_CREDENTIAL.slice(12) },
+      ],
+    };
+    const splitReflectedResponse = await handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => success(splitReflectedPlan)),
+      })
+    )(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    expect(splitReflectedResponse.status).toBe(500);
+    expect(JSON.stringify(await responseJson(splitReflectedResponse))).not.toContain(
+      VALID_CREDENTIAL
+    );
+
+    const secretCatalog = await handler(
+      runtime({
+        getCatalog: vi.fn(async () =>
+          success({
+            models: [
+              {
+                id: `model-${VALID_CREDENTIAL}`,
+                createdAtEpochSeconds: 1_785_000_000,
+              },
+            ],
+          })
+        ),
+      })
+    )(
+      new Request("https://mockos.test", {
+        headers: { authorization: `Bearer ${VALID_CREDENTIAL}` },
+      }),
+      { slug: "demo", providerPath: "/models" }
+    );
+    expect(secretCatalog.status).toBe(500);
+    expect(JSON.stringify(await responseJson(secretCatalog))).not.toContain(
+      VALID_CREDENTIAL
+    );
+  });
+
+  it("fails closed when the runtime returns a plan for another model", async () => {
+    const basePlan = textPlan();
+    if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const response = await handler(
+      runtime({
+        planChatCompletion: vi.fn(async () =>
+          success({ ...basePlan, model: "different-model" })
+        ),
+      })
+    )(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+
+    expect(response.status).toBe(500);
+    expect(await responseJson(response)).toMatchObject({
+      error: { code: "internal_error" },
+    });
+  });
+
   it("maps runtime auth, model, and route failures without reflecting details", async () => {
     const providerRuntime = runtime({
       getCatalog: vi.fn(async () => ({
@@ -738,6 +1017,25 @@ describe("mock OpenAI HTTP adapter", () => {
       providerPath: "/chat/completions",
     });
     expect(aborted.status).toBe(499);
+
+    const streamingController = new AbortController();
+    const streamingFetch = handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => {
+          streamingController.abort("client disconnected");
+          return success(delayedPlan);
+        }),
+      })
+    );
+    const streamingRequest = new Request(jsonRequest(chatBody({ stream: true })), {
+      signal: streamingController.signal,
+    });
+    const abortedStream = await streamingFetch(streamingRequest, {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    expect(abortedStream.status).toBe(499);
+    expect(await abortedStream.text()).toBe("");
 
     const wrongMethod = await handler(runtime())(
       new Request("https://mockos.test", {

@@ -141,10 +141,11 @@ It also does not configure the F2 definition/provider workflow. Use the
 [Anthropic SDK quickstart](../quickstarts/anthropic-sdk.md) for a short end-to-end
 path, or [MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for exact revision,
 credential, request, persistence, and cleanup contracts. That partial F2 workflow
-enables bounded model discovery plus non-streaming OpenAI Chat Completions and
+enables bounded model discovery, OpenAI JSON/SSE Chat Completions, and non-streaming
 Anthropic Messages. It does not enable:
 
-- broad Anthropic provider/beta APIs, the OpenAI Responses API, or SSE;
+- broad Anthropic provider/beta APIs, Anthropic SSE, configured midstream errors, or
+  the OpenAI Responses API;
 - LLM conversation state, reset, observations, or assertions;
 - Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);

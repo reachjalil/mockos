@@ -15,6 +15,7 @@
     "hostedDeployment": "unqualified",
     "liveProviderParity": "unqualified",
     "localWorkerOfficialOpenAiSdk": "qualified",
+    "officialSdkVersion": "6.49.0",
     "packageTests": "qualified"
   },
   "generatedFrom": "packages/llm-mock/src/openai-http.ts",
@@ -23,7 +24,7 @@
       "id": "create_chat_completion",
       "method": "POST",
       "path": "/chat/completions",
-      "streaming": false
+      "streaming": true
     },
     {
       "id": "list_models",
@@ -39,10 +40,11 @@
     }
   ],
   "planning": {
-    "chunkCadence": "inert-without-streaming",
+    "chunkCadence": "payload-deltas-only",
     "conversationState": "stateless",
     "definitionRevision": "rechecked-before-plan-commit",
-    "initialDelay": "abort-aware",
+    "initialDelay": "abort-aware-pre-header",
+    "stateCommit": "durable-object-before-edge-plan-return",
     "stateKey": "server-slug+dialect+model",
     "turnIndex": "prior-assistant-message-count"
   },
@@ -60,8 +62,15 @@
     "messageRoles": ["developer", "system", "user", "assistant", "tool"],
     "modelId": "1-256-visible-ascii-excluding-dot-segments",
     "multimodal": "unsupported",
-    "streamOptions": "rejected",
-    "streaming": "rejected",
+    "streamOptions": {
+      "availability": "stream-true-only",
+      "fields": ["include_usage", "include_obfuscation"],
+      "includeObfuscationDefault": true,
+      "includeUsageDefault": false,
+      "unknownFields": "rejected",
+      "values": "optional-booleans"
+    },
+    "streaming": "absent-or-false-json-true-sse",
     "toolChoice": "absent-or-auto",
     "unknownTopLevelFields": "rejected"
   },
@@ -70,6 +79,24 @@
     "deterministicPlanIdExposure": "never",
     "maxBodyBytes": 2097152,
     "requestIdHeader": "x-request-id",
+    "streaming": {
+      "bodySizing": "entire-precomputed-sse-utf8",
+      "cancellationOrDeadline": "truncate-without-fabricated-success",
+      "configuredMidstreamErrors": "unsupported",
+      "deadlineEquality": "rejected",
+      "format": "server-sent-events",
+      "immediateFrames": "role-terminal-usage-done",
+      "initialDelay": "pre-header",
+      "maximumDuration": "absolute-includes-initial-pacing-backpressure",
+      "obfuscation": "default-on-fresh-opaque-regular-delta-padding",
+      "obfuscationParity": "upstream-size-normalization-and-security-not-qualified",
+      "order": "role-payload-terminal-optional-usage-done",
+      "pacedFrames": "payload-deltas-only",
+      "payloadFrameCount": "unicode-code-point-chunks-of-text-and-canonical-tool-arguments",
+      "preflightFailure": "generic-json-before-200",
+      "scheduleAdmissibility": "initial+max(payload-count-minus-one,zero)*delay<maximum",
+      "usageChunk": "optional-empty-choices-before-done"
+    },
     "transportIds": "fresh-per-invocation"
   },
   "routeBases": {
@@ -77,5 +104,9 @@
     "subdomainMode": "https://{environmentId}.{baseDomain}/llm-mock/{slug}/openai/v1"
   },
   "schemaVersion": 1,
+  "security": {
+    "requestCredentialReflection": "rejected",
+    "responseCredentialReflection": "rejected-before-header"
+  },
   "status": "source-qualified"
 }

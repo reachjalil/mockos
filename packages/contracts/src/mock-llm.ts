@@ -348,6 +348,17 @@ export const mockLlmResponsePlanSchema = z
         break;
       }
     }
+    const nominalDurationMilliseconds =
+      plan.cadence.initialDelayMilliseconds +
+      Math.max(streamChunks - 1, 0) * plan.cadence.chunkDelayMilliseconds;
+    if (nominalDurationMilliseconds >= plan.cadence.maximumDurationMilliseconds) {
+      context.addIssue({
+        code: "custom",
+        path: ["cadence", "maximumDurationMilliseconds"],
+        message:
+          "Initial delay and configured payload cadence must finish before maximum stream duration.",
+      });
+    }
   });
 export type MockLlmResponsePlan = z.infer<typeof mockLlmResponsePlanSchema>;
 

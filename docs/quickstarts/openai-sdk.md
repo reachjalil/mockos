@@ -1,10 +1,10 @@
 # Test an application with the mock OpenAI SDK surface
 
-Status: OpenAI-only non-streaming source workflow; no hosted or deployed qualification
+Status: OpenAI JSON/SSE source workflow; no hosted or deployed qualification
 Last reviewed: 2026-07-25
 
 This quickstart creates a deterministic model through management MCP, proves the
-separate provider data plane with `GET /models`, and calls non-streaming Chat
+separate provider data plane with `GET /models`, and calls JSON and SSE Chat
 Completions through the official OpenAI JavaScript SDK. It uses path-mode URLs from a
 local source Worker.
 
@@ -101,9 +101,9 @@ Credential from caller-owned secret storage before sending the call; the
       "outputTokens": 5
     },
     "defaultCadence": {
-      "chunkDelayMilliseconds": 0,
-      "chunkSize": 256,
-      "maximumDurationMilliseconds": 60000
+      "chunkDelayMilliseconds": 20,
+      "chunkSize": 8,
+      "maximumDurationMilliseconds": 5000
     }
   }
 }
@@ -209,18 +209,72 @@ Expect:
 The usage values are definition-controlled synthetic values. They are not calculated
 by tokenizing the prompt.
 
-## 4. Prove one negative case
+## 4. Stream the same deterministic completion
+
+Add this after the JSON assertion:
+
+```js
+const stream = await client.chat.completions.create({
+  model: "mock-agent-1",
+  messages: [{ role: "user", content: "Hello" }],
+  stream: true,
+  stream_options: {
+    include_usage: true,
+    include_obfuscation: false,
+  },
+});
+
+let streamedText = "";
+let streamedUsage;
+for await (const chunk of stream) {
+  streamedText += chunk.choices[0]?.delta.content ?? "";
+  if (chunk.usage) streamedUsage = chunk.usage;
+}
+
+if (streamedText !== "This response is deterministic.") {
+  throw new Error(`unexpected streamed response: ${JSON.stringify(streamedText)}`);
+}
+if (streamedUsage?.total_tokens !== 16) {
+  throw new Error(`unexpected streamed usage: ${JSON.stringify(streamedUsage)}`);
+}
+```
+
+`include_usage` defaults to false. When requested, regular chunks carry
+`usage: null` and the complete usage arrives in one final empty-choices chunk before
+`[DONE]`. `include_obfuscation` defaults to true; this example turns it off so captured
+fixtures stay compact. When enabled, regular delta chunks carry fresh opaque
+compatibility padding. mockOS does not claim OpenAI's undisclosed payload-size
+normalization or security properties.
+
+The configured initial delay occurs before response headers. Only text and tool
+argument payload deltas use `chunkDelayMilliseconds`; the role, terminal, usage, and
+`[DONE]` frames are immediate. One absolute maximum duration includes that initial
+wait, pacing, and backpressure. The entire precomputed SSE body must fit within
+2,097,152 UTF-8 bytes.
+
+Before starting, the schedule must satisfy
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+strictly less than `maximumDurationMilliseconds`; equality is rejected to avoid a
+deadline race. The payload frame count comes from Unicode code-point chunks of text
+and canonical tool-argument strings at the configured `chunkSize`.
+
+To test application cancellation, break the iterator or call
+`stream.controller.abort()` after a received chunk. Do not require a final usage
+chunk or `[DONE]` after cancellation: post-`200` cancellation or deadline expiry
+deliberately truncates the stream instead of fabricating success.
+
+## 5. Prove one negative case
 
 Keep `maxRetries: 0`, then choose one bounded negative case:
 
 - call a missing model and require `404 model_not_found`;
 - present a different provider Mock Credential and require `401 invalid_api_key`; or
-- set `stream: true` and require `400 streaming_not_supported`.
+- send `stream_options` without `stream: true` and require `400 invalid_request`.
 
 Do not submit the credential inside a prompt. The adapter rejects credential
 reflection, and request-log observation is not part of this LLM slice.
 
-## 5. Clean up with the latest revision
+## 6. Clean up with the latest revision
 
 In `finally`:
 
@@ -243,8 +297,9 @@ prove a Wrangler network round trip, hosted CI, Cloud consumption, staging,
 production, or live OpenAI parity.
 
 This OpenAI workflow does not exercise the separately source-qualified bounded
-Anthropic route. The current F2 slice still has no SSE, Responses API, multimodal
-content, persisted conversation state, reset, LLM observations/assertions, or broad
-Chat Completions parameter support. Use the
+Anthropic route. The current F2 slice still has no Responses API, multimodal content,
+configured mid-stream errors, persisted conversation state, reset, LLM
+observations/assertions, or broad Chat Completions parameter support. Anthropic
+streaming also remains unavailable. Use the
 [machine-readable provider manifest](../reference/mock-llm-openai.v1.json) instead of
 guessing from OpenAI's broader API.

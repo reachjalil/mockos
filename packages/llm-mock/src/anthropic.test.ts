@@ -58,9 +58,9 @@ describe("Anthropic Messages rendering", () => {
     });
     expect(wire.kind).toBe("sse");
     if (wire.kind !== "sse") throw new Error("Expected SSE wire output.");
-    expect(wire.frames).toEqual(expectedStream);
+    expect(wire.frames.map((frame) => frame.data)).toEqual(expectedStream);
     expect(
-      wire.frames.map((frame) => frame.slice("event: ".length).split("\n")[0])
+      wire.frames.map((frame) => frame.data.slice("event: ".length).split("\n")[0])
     ).toEqual([
       "message_start",
       "content_block_start",
@@ -72,6 +72,11 @@ describe("Anthropic Messages rendering", () => {
       "message_delta",
       "message_stop",
     ]);
+    expect(
+      wire.frames
+        .filter((frame) => frame.cadence === "payload")
+        .map((frame) => frame.data.slice("event: ".length).split("\n")[0])
+    ).toEqual(["content_block_delta", "content_block_delta"]);
   });
 
   it("preserves the matched stop sequence in Messages JSON", () => {

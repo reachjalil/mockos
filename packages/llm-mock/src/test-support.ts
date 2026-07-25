@@ -67,7 +67,9 @@ export const errorPlan = (
 
 export const wireToResponse = (wire: RenderedLlmWire): Response =>
   new Response(
-    wire.kind === "json" ? JSON.stringify(wire.body) : wire.frames.join(""),
+    wire.kind === "json"
+      ? JSON.stringify(wire.body)
+      : wire.frames.map((frame) => frame.data).join(""),
     {
       status: wire.status,
       headers: wire.headers,

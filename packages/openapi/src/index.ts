@@ -102,7 +102,7 @@ export type MockLlmOpenAiProviderDocumentation = {
     id: "create_chat_completion" | "list_models" | "retrieve_model";
     method: "GET" | "POST";
     path: "/chat/completions" | "/models" | "/models/{model}";
-    streaming: false;
+    streaming: boolean;
   }>;
   request: {
     mediaType: "application/json";
@@ -118,8 +118,15 @@ export type MockLlmOpenAiProviderDocumentation = {
     messageRoles: readonly ["developer", "system", "user", "assistant", "tool"];
     toolChoice: "absent-or-auto";
     choiceCount: "absent-or-one";
-    streaming: "rejected";
-    streamOptions: "rejected";
+    streaming: "absent-or-false-json-true-sse";
+    streamOptions: {
+      availability: "stream-true-only";
+      fields: readonly ["include_usage", "include_obfuscation"];
+      values: "optional-booleans";
+      unknownFields: "rejected";
+      includeUsageDefault: false;
+      includeObfuscationDefault: true;
+    };
     multimodal: "unsupported";
     unknownTopLevelFields: "rejected";
   };
@@ -129,17 +136,41 @@ export type MockLlmOpenAiProviderDocumentation = {
     completionIdPrefix: "chatcmpl-";
     transportIds: "fresh-per-invocation";
     deterministicPlanIdExposure: "never";
+    streaming: {
+      format: "server-sent-events";
+      order: "role-payload-terminal-optional-usage-done";
+      initialDelay: "pre-header";
+      pacedFrames: "payload-deltas-only";
+      immediateFrames: "role-terminal-usage-done";
+      maximumDuration: "absolute-includes-initial-pacing-backpressure";
+      scheduleAdmissibility: "initial+max(payload-count-minus-one,zero)*delay<maximum";
+      payloadFrameCount: "unicode-code-point-chunks-of-text-and-canonical-tool-arguments";
+      deadlineEquality: "rejected";
+      bodySizing: "entire-precomputed-sse-utf8";
+      preflightFailure: "generic-json-before-200";
+      cancellationOrDeadline: "truncate-without-fabricated-success";
+      configuredMidstreamErrors: "unsupported";
+      usageChunk: "optional-empty-choices-before-done";
+      obfuscation: "default-on-fresh-opaque-regular-delta-padding";
+      obfuscationParity: "upstream-size-normalization-and-security-not-qualified";
+    };
   };
   planning: {
     conversationState: "stateless";
     turnIndex: "prior-assistant-message-count";
     stateKey: "server-slug+dialect+model";
     definitionRevision: "rechecked-before-plan-commit";
-    initialDelay: "abort-aware";
-    chunkCadence: "inert-without-streaming";
+    stateCommit: "durable-object-before-edge-plan-return";
+    initialDelay: "abort-aware-pre-header";
+    chunkCadence: "payload-deltas-only";
+  };
+  security: {
+    requestCredentialReflection: "rejected";
+    responseCredentialReflection: "rejected-before-header";
   };
   evidence: {
     packageTests: "qualified";
+    officialSdkVersion: "6.49.0";
     localWorkerOfficialOpenAiSdk: "qualified";
     cloudPin: "unqualified";
     hostedDeployment: "unqualified";
@@ -523,7 +554,7 @@ export type MockosManagementDocumentationCatalog = {
       };
       guide: "docs/mock-llm.md";
       providerDataPlane: {
-        status: "openai-and-anthropic-non-streaming-source-qualified";
+        status: "openai-streaming-and-anthropic-non-streaming-source-qualified";
         managementConfiguration: "MCP-only";
         manifests: readonly [
           "docs/reference/mock-llm-openai.v1.json",
@@ -581,8 +612,15 @@ export const generateMockLlmOpenAiProviderDocumentation =
       messageRoles: ["developer", "system", "user", "assistant", "tool"],
       toolChoice: "absent-or-auto",
       choiceCount: "absent-or-one",
-      streaming: "rejected",
-      streamOptions: "rejected",
+      streaming: "absent-or-false-json-true-sse",
+      streamOptions: {
+        availability: "stream-true-only",
+        fields: ["include_usage", "include_obfuscation"],
+        values: "optional-booleans",
+        unknownFields: "rejected",
+        includeUsageDefault: false,
+        includeObfuscationDefault: true,
+      },
       multimodal: "unsupported",
       unknownTopLevelFields: "rejected",
     },
@@ -592,17 +630,43 @@ export const generateMockLlmOpenAiProviderDocumentation =
       completionIdPrefix: "chatcmpl-",
       transportIds: "fresh-per-invocation",
       deterministicPlanIdExposure: "never",
+      streaming: {
+        format: "server-sent-events",
+        order: "role-payload-terminal-optional-usage-done",
+        initialDelay: "pre-header",
+        pacedFrames: "payload-deltas-only",
+        immediateFrames: "role-terminal-usage-done",
+        maximumDuration: "absolute-includes-initial-pacing-backpressure",
+        scheduleAdmissibility:
+          "initial+max(payload-count-minus-one,zero)*delay<maximum",
+        payloadFrameCount:
+          "unicode-code-point-chunks-of-text-and-canonical-tool-arguments",
+        deadlineEquality: "rejected",
+        bodySizing: "entire-precomputed-sse-utf8",
+        preflightFailure: "generic-json-before-200",
+        cancellationOrDeadline: "truncate-without-fabricated-success",
+        configuredMidstreamErrors: "unsupported",
+        usageChunk: "optional-empty-choices-before-done",
+        obfuscation: "default-on-fresh-opaque-regular-delta-padding",
+        obfuscationParity: "upstream-size-normalization-and-security-not-qualified",
+      },
     },
     planning: {
       conversationState: "stateless",
       turnIndex: "prior-assistant-message-count",
       stateKey: "server-slug+dialect+model",
       definitionRevision: "rechecked-before-plan-commit",
-      initialDelay: "abort-aware",
-      chunkCadence: "inert-without-streaming",
+      stateCommit: "durable-object-before-edge-plan-return",
+      initialDelay: "abort-aware-pre-header",
+      chunkCadence: "payload-deltas-only",
+    },
+    security: {
+      requestCredentialReflection: "rejected",
+      responseCredentialReflection: "rejected-before-header",
     },
     evidence: {
       packageTests: "qualified",
+      officialSdkVersion: "6.49.0",
       localWorkerOfficialOpenAiSdk: "qualified",
       cloudPin: "unqualified",
       hostedDeployment: "unqualified",
@@ -888,7 +952,7 @@ export const generateMockosManagementDocumentationCatalog =
           },
           guide: "docs/mock-llm.md",
           providerDataPlane: {
-            status: "openai-and-anthropic-non-streaming-source-qualified",
+            status: "openai-streaming-and-anthropic-non-streaming-source-qualified",
             managementConfiguration: "MCP-only",
             manifests: [
               "docs/reference/mock-llm-openai.v1.json",
@@ -1253,6 +1317,11 @@ export const generateMockosProductCapabilityIndex =
               },
               {
                 kind: "runtime",
+                path: "packages/llm-mock/src/edge-stream.ts",
+                export: "prepareEdgeSseStream",
+              },
+              {
+                kind: "runtime",
                 path: "packages/worker-kit/src/mock-llm-runtime.ts",
                 export: "EnvironmentMockLlmOpenAiRuntime",
               },
@@ -1271,6 +1340,7 @@ export const generateMockosProductCapabilityIndex =
               "bounded-openai-current-source",
               [
                 "packages/llm-mock/src/openai-http.test.ts",
+                "packages/llm-mock/src/edge-stream.test.ts",
                 "packages/llm-mock/src/sdk-conformance.test.ts",
                 "apps/worker/test/mock-llm.integration.test.ts",
               ]
@@ -1296,7 +1366,7 @@ export const generateMockosProductCapabilityIndex =
             limitations: "docs/known-limitations.md",
           },
           limitationRefs: [
-            "docs/reference/mock-llm-openai.v1.json#/request/streaming",
+            "docs/reference/mock-llm-openai.v1.json#/response/streaming/configuredMidstreamErrors",
             "docs/reference/mock-llm-openai.v1.json#/request/multimodal",
           ],
         },

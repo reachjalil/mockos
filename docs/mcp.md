@@ -117,7 +117,7 @@ These are deliberately separate trust boundaries:
 - `/llm-mock/{slug}/openai/v1` under an environment requires a syntactically valid
   provider Bearer Mock Credential. `accept_any` skips verifier comparison but is not
   unauthenticated; `strict` compares the current stored verifier. The route supports
-  only model list/retrieve and non-streaming Chat Completions.
+  only model list/retrieve and bounded JSON/SSE Chat Completions.
 - `/llm-mock/{slug}/anthropic` under an environment requires a syntactically valid
   provider `x-api-key` Mock Credential plus exactly
   `anthropic-version: 2023-06-01`. It supports model list/retrieve and non-streaming

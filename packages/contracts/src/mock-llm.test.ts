@@ -285,6 +285,30 @@ describe("neutral mock LLM plan contracts", () => {
         cadence: { ...cadence, chunkSize: 1 },
       })
     ).toThrow(/payload chunks/);
+    expect(() =>
+      parseMockLlmPlan({
+        ...responsePlan,
+        segments: [{ type: "text", text: "four" }],
+        cadence: {
+          initialDelayMilliseconds: 10,
+          chunkDelayMilliseconds: 10,
+          chunkSize: 1,
+          maximumDurationMilliseconds: 41,
+        },
+      })
+    ).not.toThrow();
+    expect(() =>
+      parseMockLlmPlan({
+        ...responsePlan,
+        segments: [{ type: "text", text: "four" }],
+        cadence: {
+          initialDelayMilliseconds: 10,
+          chunkDelayMilliseconds: 10,
+          chunkSize: 1,
+          maximumDurationMilliseconds: 40,
+        },
+      })
+    ).toThrow(/payload cadence/);
   });
 
   it("bounds UTF-8 bytes, depth, nodes, cycles, unsafe keys, and each tool input", () => {

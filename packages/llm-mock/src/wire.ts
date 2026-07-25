@@ -1,3 +1,12 @@
+export type RenderedLlmSseFrame = {
+  readonly data: string;
+  /**
+   * Payload frames participate in configured chunk cadence. Provider envelope,
+   * terminal, usage, and sentinel frames are emitted without intentional delay.
+   */
+  readonly cadence: "immediate" | "payload";
+};
+
 export type RenderedLlmWire =
   | {
       readonly kind: "json";
@@ -9,7 +18,7 @@ export type RenderedLlmWire =
       readonly kind: "sse";
       readonly status: 200;
       readonly headers: Readonly<Record<string, string>>;
-      readonly frames: readonly string[];
+      readonly frames: readonly RenderedLlmSseFrame[];
     };
 
 export type RenderLlmPlanOptions = {
