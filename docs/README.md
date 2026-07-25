@@ -2,7 +2,7 @@
 
 Status: MCP-first public documentation for accepted M0-M3/M5 and sampled M6, locally
 source-qualified F0/F1, the partial OpenAI/Anthropic F2 source slice, and bounded MSAL
-Node local X/Q qualification
+Node and Okta Auth JS local X/Q qualifications
 Last reviewed: 2026-07-26
 
 mockOS is an MCP-first, deterministic identity-platform and agent-dependency test
@@ -87,15 +87,23 @@ public machine contracts. Private Cloud remains a separate overlay that joins pr
 product evidence and policy to an immutable public revision without exposing private
 authorities in this artifact.
 
-The current source candidate adds one bounded client qualification:
-`@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 traverse an actual local
-Wrangler HTTPS socket for custom-authority authorization code with S256 PKCE, forced
-MSAL refresh, lifecycle disable, request assertion, durable credential-redaction
-checks, normal cleanup, and a focused ready-Worker `SIGTERM` cleanup probe. This is
-D/I/S/X/Q evidence only. Read the
-[MSAL Node quickstart](./quickstarts/entra-msal-node.md) and
-[local qualification record](./evidence/entra-msal-node-local-qualification.md).
-There is no H, V, or P claim for that slice.
+The current source carries two bounded official-client qualifications over the same
+owned local Wrangler HTTPS and focused signal-cleanup harnesses:
+
+- `@azure/msal-node` 5.4.2 uses a custom Entra authority as a confidential client for
+  authorization code with S256 PKCE, forced refresh, lifecycle disable, exact request
+  assertion, and durable credential-redaction checks. Read the
+  [MSAL Node quickstart](./quickstarts/entra-msal-node.md) and
+  [local record](./evidence/entra-msal-node-local-qualification.md).
+- `@okta/okta-auth-js` 8.0.1 uses an Okta custom authorization server as a public
+  client for `getWithRedirect`, S256 PKCE, `parseFromUrl` code exchange and JWKS
+  ID-token verification, refresh rotation, owner-bound public revocation, lifecycle
+  suspend, exact request assertion, and durable credential/token-redaction checks.
+  Read the [Okta Auth JS quickstart](./quickstarts/okta-auth-js-node.md) and
+  [local record](./evidence/okta-auth-js-local-qualification.md).
+
+Both use `@modelcontextprotocol/sdk` 1.29.0 for setup, observation, lifecycle, and
+cleanup. Each is D/I/S/X/Q evidence only; neither has H, V, or P evidence.
 
 The public source remains independently self-hostable. The later public docs-only close
 commit `e446eeda357b5e765401b97b892128fd70ac9ab8` was consumed by the separately
@@ -164,6 +172,7 @@ Mode also remain unavailable.
 - [M5 deployment and provisioning acceptance](./evidence/m5-workers-dev-smoke.md)
 - [M6 sampled staging and production acceptance](./evidence/m6-workers-dev-smoke.md)
 - [Entra MSAL Node local X/Q qualification](./evidence/entra-msal-node-local-qualification.md)
+- [Okta Auth JS local X/Q qualification](./evidence/okta-auth-js-local-qualification.md)
 
 Documentation uses four distinct claims:
 
@@ -180,6 +189,19 @@ is deployed mock evidence, never real-provider evidence.
 
 ## Project and contribution reference
 
+- Identity notes: [Entra ID](./identity/entra.md), [Okta](./identity/okta.md),
+  [SCIM](./identity/scim.md)
+- Security: [threat model](./security/threat-model.md) and
+  [outbound provisioning](./security/outbound-provisioning.md)
+- [Hosting modes](./hosting-modes.md)
+- Quickstarts: [curl probe](./quickstarts/curl.md),
+  [Entra SSO](./quickstarts/entra-sso.md),
+  [Entra with MSAL Node](./quickstarts/entra-msal-node.md),
+  [Okta with Okta Auth JS](./quickstarts/okta-auth-js-node.md), and
+  [provisioning cycle](./quickstarts/provisioning-cycle.md)
+- Agent interfaces: [MCP](./mcp.md) and [testing skill](./skill.md)
+- [Source-built CLI](../packages/cli/README.md)
+- [Self-hosting](./self-hosting.md)
 - [Brand and asset usage](./brand.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Security policy](../SECURITY.md)

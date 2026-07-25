@@ -1,7 +1,10 @@
 # Management MCP interface
 
-Status: M5 management runtime accepted; 20-tool F1 locally qualified; 24-tool F2 source registry with separate partial OpenAI/Anthropic data planes
-Last reviewed: 2026-07-25
+Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact
+deployed versions; 20-tool F1 locally qualified; 24-tool F2 source registry with
+separate partial OpenAI/Anthropic data planes; MSAL and Okta Auth JS local
+official-client management qualified
+Last reviewed: 2026-07-26
 
 mockOS exposes an authenticated management server at `/mcp`. The Worker uses
 Streamable HTTP through a Cloudflare Agents SDK `McpAgent`; the CLI uses the official
@@ -12,6 +15,9 @@ the exact tested slice: public revision
 `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93` passed the full local gate, hosted CI,
 and source-paired manual controlled-target acceptance. That remote acceptance started
 the provisioning tool; it did not re-exercise every tool or qualify npm distribution.
+Separate local official-client candidates use the same MCP registry for environment
+creation, seeding, application registration, URL discovery, request observation,
+lifecycle, and cleanup. Those local results do not add hosted evidence.
 
 The current source appends five F1 and four F2 management tools without changing that
 historical acceptance claim. Management MCP controls mockOS; it is not a simulated
@@ -72,6 +78,24 @@ readers. The generated
 separate application-facing provider operations; those operations are not management
 tools.
 
+| Tool | Implemented behavior |
+| --- | --- |
+| `create_environment` | Create an isolated Entra ID or Okta environment and select it for this session |
+| `list_environments` | List account environments and the session's selected ID |
+| `delete_environment` | Purge one named or selected environment and clear the cursor when applicable |
+| `configure_environment` | Update name, idle TTL, or request-log row limit |
+| `seed_identities` | Create synthetic users and groups, including named group membership |
+| `create_application` | Register a confidential or public OIDC/OAuth client; return a creation-only synthetic secret only for confidential clients |
+| `run_provisioning_cycle` | Queue a deterministic outbound SCIM cycle against a saved or inline validated test target |
+| `mint_token` | Mint an ID-token-shaped bearer JWT for a seeded subject, optionally broken |
+| `set_scenario` | Create or completely replace a deterministic injected behavior by scenario ID |
+| `clear_scenario` | Clear one scenario or all scenarios in an environment |
+| `get_request_log` | Return a filtered, newest-first page of captured request entries |
+| `assert_requests` | Count exact request matches and return matching request IDs |
+| `simulate_lifecycle` | Apply a provider- and state-valid User lifecycle action and report state/version/ETag plus effective token revocations |
+| `get_wellknown_urls` | Derive provider URLs from the active public origin and environment |
+| `set_current_environment` | Set or clear the transport session's environment cursor |
+
 All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
 to those routes.
@@ -94,6 +118,44 @@ Successful calls return both text content and structured content shaped as an en
 with `data` and `meta.requestId`. Failures after handler entry are normalized to an MCP
 error result containing a problem document. SDK schema-validation failures occur before
 handler entry and return the SDK's generic input-validation error instead.
+
+## Application registration authentication
+
+`create_application` accepts `clientType: "confidential" | "public"`.
+`confidential` is the default for backward compatibility. A confidential registration
+returns `clientSecret` exactly once; later application summaries contain neither that
+plaintext nor its stored hash.
+
+A public registration:
+
+- requires `clientType: "public"`;
+- rejects `clientSecret` rather than ignoring or storing it;
+- rejects the `client_credentials` grant;
+- returns `clientType: "public"` with no `clientSecret`; and
+- authenticates bounded code and refresh grants with a known client ID and no secret.
+
+Do not invent or persist an empty placeholder secret for a public client. A spurious
+secret makes token authentication fail.
+
+This conditional is machine-readable in the SDK 1.29 `tools/list` result using JSON
+Schema Draft-7 `if`/`then`. The input is a strict object with only `name` and
+`redirectUris` unconditionally required.
+`clientType`, `grantTypes`, `appRoles`, and `groupClaimsMode` retain advertised
+defaults without being placed in `required`. An `allOf` `if`/`then` branch for
+`clientType: "public"` forbids `clientSecret` and narrows `grantTypes` so
+`client_credentials` is not an allowed item. The output envelope's `data` uses exact
+confidential/public branches: the confidential branch requires `clientSecret`, while
+the public branch has no such property. Runtime Zod validation and discovery therefore
+describe the same bounded contract.
+
+For the Okta profile, discovery advertises `none` for token and revocation endpoint
+authentication. Introspection deliberately remains confidential and advertises only
+`client_secret_basic` and `client_secret_post`. Public revocation is not anonymous:
+the caller identifies its public client, and the core changes only tokens owned by that
+client ID. The pinned Okta Auth JS 8.0.1 path sends a client-ID-only Basic compatibility
+shape, which the adapter normalizes to public `none`. A core negative regression proves
+an unrelated public client cannot change another application's active access token or
+rotated refresh family.
 
 ## Returned protocol URLs and mock authentication
 
@@ -179,6 +241,10 @@ or concurrently redeeming an already consumed token invalidates its refresh fami
 associated access tokens. A known token belonging to a newly disabled User returns the
 provider-shaped disabled-account error: Entra `invalid_grant` with `AADSTS50057`, or
 Okta `invalid_grant` with `The resource owner account is disabled.`
+
+The same family rules apply to confidential and public registrations. Public refresh
+tokens are still bearer credentials; client type does not add DPoP, sender constraint,
+or browser-storage protection.
 
 ## Token minting
 
@@ -276,9 +342,12 @@ path, exact status, MCP method, and MCP tool. `assert_requests` supports:
 - `count.atLeast`, `count.atMost`, or `count.exactly` constraints.
 
 It does not currently assert headers, parsed JSON/JSONPath, or regular expressions.
-Use synthetic identities and tokens: captured protocol bodies can contain test
-credentials or tokens even though management API keys and outbound target Bearer
-values are redacted.
+Use synthetic identities and tokens. Structured secret-bearing form/JSON fields,
+token response values, sensitive headers, and redirect `Location` secrets are redacted
+before durable insertion, while safe request structure remains assertable. This
+key/media-type policy is not general content classification: non-secret fields and
+some non-JSON bodies may still be retained. Never use production credentials or real
+personal data.
 
 ## Outbound provisioning
 
@@ -329,6 +398,13 @@ The [M6 deployment record](./evidence/m6-workers-dev-smoke.md) separately binds 
 public source, CI, staging/production versions, the sampled six-slice acceptance, and
 cleanup. It does not qualify every tool or fixture, the guarded Cloudflare-credential
 deployment workflow, or verified-live parity.
+
+The [Entra MSAL Node](./evidence/entra-msal-node-local-qualification.md) and
+[Okta Auth JS](./evidence/okta-auth-js-local-qualification.md) records separately bind
+the official MCP SDK to exact local client versions and actual-network Wrangler HTTPS
+flows. They qualify only the tools and provider sequences each record names. Neither
+is a hosted MCP command matrix, remote Worker smoke, verified-live comparison, or
+production-readiness result.
 
 Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
 additionally binds that revision to an exact mockOS deployment/version and recorded

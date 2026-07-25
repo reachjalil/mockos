@@ -123,6 +123,7 @@ const createApplication = (
 ): Promise<ApplicationRegistration> =>
   environment.createApplication({
     name,
+    clientType: "confidential",
     redirectUris: [`https://client.example/${name}`],
     grantTypes: ["authorization_code"],
     appRoles: [],

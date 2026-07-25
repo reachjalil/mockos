@@ -241,7 +241,7 @@ export class OAuthService {
   async redeemRefreshToken(
     input: RedeemRefreshTokenForTokensInput
   ): Promise<OAuthTokenResponse> {
-    await this.#authenticateClient(input.clientId, input.clientSecret);
+    await this.#authenticateTokenClient(input.clientId, input.clientSecret);
     const application = this.#applications.requireByClientId(input.clientId);
     if (!application.grantTypes.includes("refresh_token")) {
       throw new OAuthError(
@@ -321,7 +321,7 @@ export class OAuthService {
   async introspectToken(
     input: IntrospectTokenInput
   ): Promise<OAuthIntrospectionResponse> {
-    await this.#authenticateClient(input.clientId, input.clientSecret);
+    await this.#authenticateConfidentialClient(input.clientId, input.clientSecret);
     const tokenHash = await hashSecret(input.token);
     const access = this.#store.get<AccessTokenRow>(
       `SELECT token_hash, client_id, user_id, scope, jti, issued_at, expires_at,
@@ -386,7 +386,7 @@ export class OAuthService {
 
   /** RFC 7009 deliberately returns success for unknown and already-revoked tokens. */
   async revokeToken(input: RevokeTokenInput): Promise<void> {
-    await this.#authenticateClient(input.clientId, input.clientSecret);
+    await this.#authenticateTokenClient(input.clientId, input.clientSecret);
     const tokenHash = await hashSecret(input.token);
     const now = this.#clock.now().toISOString();
     this.#store.transaction(() => {
@@ -700,7 +700,18 @@ export class OAuthService {
     };
   }
 
-  async #authenticateClient(
+  async #authenticateTokenClient(
+    clientId: string,
+    clientSecret: string | undefined
+  ): Promise<void> {
+    if (
+      !(await this.#applications.verifyClientAuthentication(clientId, clientSecret))
+    ) {
+      throw new OAuthError("BAD_CLIENT_SECRET", "Client authentication failed.");
+    }
+  }
+
+  async #authenticateConfidentialClient(
     clientId: string,
     clientSecret: string | undefined
   ): Promise<void> {

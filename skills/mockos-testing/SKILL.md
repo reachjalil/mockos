@@ -1,19 +1,20 @@
 ---
 name: mockos-testing
 description: >-
-  Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic workflows
-  through authenticated management MCP: create isolated Entra ID or Okta
-  environments, seed identities, register OIDC clients, configure MCP-managed mock
-  LLM definitions, call model discovery, run OpenAI Chat Completions and Anthropic
-  Messages as JSON or bounded SSE, exercise
+  Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic
+  workflows through authenticated management MCP: create isolated Entra ID or Okta
+  environments, seed identities, register public or confidential OIDC clients,
+  configure MCP-managed mock LLM definitions, call model discovery, run OpenAI Chat
+  Completions and Anthropic Messages as JSON or bounded SSE, exercise
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
-  request/response shapes, and clean up. Use when wiring or testing an application's
-  enterprise identity or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped
-  failures; do not claim unrecorded deployment qualification, Anthropic betas,
-  configured midstream errors, the complete Okta Classic Authn transaction machine,
-  or broad provider parity.
+  request/response shapes, qualify pinned MSAL Node or Okta Auth JS paths, and clean
+  up. Use when wiring or testing an application's enterprise identity or
+  OpenAI/Anthropic-shaped integration, or reproducing provider-shaped failures; do
+  not claim unrecorded deployment qualification, Anthropic betas, configured
+  midstream errors, the complete Okta Classic Authn transaction machine, or broad
+  provider parity.
 ---
 
 # Test with mockOS
@@ -23,15 +24,20 @@ Use synthetic identities, passwords, client secrets, and tokens only. Read
 running a repository checkout. Treat a returned URL, fixture, contract, or provider
 profile as metadata unless the status ledger names its runtime evidence.
 
-Keep evidence tiers explicit in every report:
+Keep all eight evidence levels explicit in every report:
 
-- `source` means exact-revision automated local or hosted-CI execution;
-- `deployed` additionally requires an exact mockOS deployment/version and recorded
-  acceptance; and
-- `verified-live` is reserved for sanitized, independently reviewed comparison with a
-  real Entra ID tenant or Okta organization.
+- designed (D): a reviewed target or contract exists;
+- implemented (I): executable code exists;
+- source-tested (S): named source tests pass; hosted CI remains S;
+- integration-tested (X): a named composed-runtime or actual-network boundary passes;
+- SDK/client-qualified (Q): a pinned official client passes the exact stated flow;
+- hosted-smoke (H): an exact remote serving version passes a recorded mockOS smoke;
+- verified-live (V): sanitized, reviewed evidence compares with a real provider; and
+- production-ready (P): distribution, operations, security, rollback, support, and
+  release gates for the claim are complete.
 
-A connected server or workers.dev run is not verified-live evidence. The immutable
+A local official-client run can establish X/Q without H. A connected server or
+workers.dev run is not verified-live evidence. The immutable
 [M6 workers.dev record](../../docs/evidence/m6-workers-dev-smoke.md) supplies sampled
 deployed evidence for all six bounded slices on its exact versions; it does not qualify
 an arbitrary server, every indexed case or fixture, or verified-live provider parity.
@@ -52,6 +58,10 @@ an arbitrary server, every indexed case or fixture, or verified-live provider pa
    with same-environment Graph fallback at 201. Broad Graph/Okta parity, the remaining
    Classic transitions, Entra UserInfo/client credentials/device flow, and SAML remain
    unavailable; never invent routes for them.
+4. When an official client matters, choose only a documented qualified path:
+   `@azure/msal-node` 5.4.2 confidential Entra or `@okta/okta-auth-js` 8.0.1 public
+   Okta. Both are local D/I/S/X/Q evidence with H/V/P no. Other versions and browser
+   paths require a new qualification record.
 
 ## Connect to management MCP
 
@@ -93,16 +103,25 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
 2. For an identity workflow, call `seed_identities` with explicit `users` and
    `groups`. Use the returned user ID in token tests; group members are seeded user
    names. A mock-LLM-only workflow does not need identities.
-3. For an identity workflow, call `create_application` with the exact callback URI and
-   grants required by the test. Record the returned synthetic `clientId` and
-   `clientSecret` without printing the secret.
+3. For an identity workflow, call `create_application` with the exact callback URI,
+   grants, and client type required by the test. `confidential` is the default: retain
+   its returned synthetic `clientSecret` in memory or a test secret store and expect
+   it only on creation.
+   For `public`, pass `clientType: "public"`, omit `clientSecret`, reject
+   `client_credentials`, and require the response to omit the secret. Never fabricate
+   an empty placeholder secret.
+   For SDK 1.29 discovery, require the strict tools-list input to keep defaulted fields
+   optional and expose a Draft-7 `if`/`then` public branch that forbids `clientSecret`
+   and narrows grants. Require exact public/confidential output branches, with no
+   secret property in the public branch. A missing conditional is a capability
+   mismatch even if runtime validation would later reject the input.
 4. For an identity workflow, call `get_wellknown_urls` with the explicit environment
    ID. Configure the application from its returned issuer/endpoints and record
    `scimBaseUrl` plus `graphBaseUrl` for Entra or `oktaApiBaseUrl` plus
    `oktaAuthnEndpoint` for Okta. Never construct or persist an issuer or Authn endpoint
    from memory.
-5. Verify discovery before login and require every absolute URL to use the active
-   host. Treat a missing provider-specific directory URL as a capability mismatch.
+5. Verify discovery before login and require every absolute URL to use the active host.
+   Treat a missing provider-specific directory URL as a capability mismatch.
 
 Pass `environmentId` explicitly in saved automation. Use `set_current_environment`
 only for interactive session convenience because its cursor is transport-session-local.
@@ -224,8 +243,69 @@ the implemented flow as needed:
 2. Verify an early token poll returns `authorization_pending`.
 3. Open the returned verification URL and activate with a seeded synthetic identity.
 4. Poll after the advertised interval and validate the returned tokens.
-5. Introspect an access or refresh token with the synthetic client credentials.
-6. Revoke it, then verify introspection returns `{ "active": false }`.
+5. For a confidential registration, introspect an access or refresh token with its
+   synthetic secret.
+6. Revoke it, then verify confidential introspection returns `{ "active": false }`.
+
+Public Okta clients cannot introspect. They can revoke only their own access or refresh
+tokens by identifying the public client without a secret; discovery advertises
+revocation `none`. The pinned Auth JS client uses a client-ID-only Basic compatibility
+shape that the adapter normalizes to public `none`. Do not treat that as anonymous or
+cross-client revocation.
+
+<a id="official-client-recipes"></a>
+
+## Qualify a pinned official client
+
+Prefer the repository commands when the application path matches an existing claim:
+
+```sh
+pnpm e2e:entra-msal
+pnpm e2e:entra-msal-cleanup
+pnpm e2e:okta-authjs
+pnpm e2e:okta-authjs-cleanup
+```
+
+Both provider wrappers configure a shared parent that owns an actual local Wrangler
+HTTPS process, validates its `localhost` certificate and ownership nonce, adds the
+captured leaf to process-local Node trust, bounds time/output, and cleans up the
+process group and temporary state. The wrappers use distinct provider and inspector
+ports (`8794`/`18794` for Entra and `8795`/`18795` for Okta), so both flows can run
+concurrently. Their cleanup wrappers configure one shared ready-Worker `SIGTERM`
+verifier that requires both ports to be reusable. The parent and cleanup verifier
+reject inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and strip it from children. Added
+trust is not exclusive certificate pinning.
+
+For Entra, require the exact
+[MSAL Node recipe](../../docs/quickstarts/entra-msal-node.md): host-only
+`knownAuthorities`, `ProtocolMode.OIDC`, code + S256 PKCE, forced refresh, MCP disable,
+and `invalid_grant`/`AADSTS50057`.
+
+For Okta, require the exact
+[Okta Auth JS recipe](../../docs/quickstarts/okta-auth-js-node.md):
+
+1. create `clientType: "public"` with code/refresh grants and no secret;
+2. use `getWithRedirect` with `state`, `nonce`, login hint, `offline_access`, and S256;
+3. in the exact Node harness, supply the SDK-exposed `parseFromUrl._getLocation` seam
+   plus the callback URL because the method otherwise dereferences `window`;
+4. require `parseFromUrl` code exchange and JWKS-backed RS256 ID-token verification;
+5. call `renewTokens` and require refresh rotation;
+6. call public `token.revoke` and require HTTP 200; because that status is idempotent,
+   require the following lifecycle result to revoke exactly one remaining access token
+   rather than two;
+7. apply Okta `suspend` through MCP, call `renewTokens` again, and require Auth JS
+   `OAuthError`, `invalid_grant`, and `User account is disabled.`; and
+8. assert the exact discovery, login GET/POST, code, JWKS, refresh, revoke, and failed
+   refresh sequence. Parse the exercised password, callback code, exchange
+   code/verifier, refresh, revoke-token, and successful token-response fields and
+   require `[REDACTED]`. Also reject the raw, `encodeURIComponent`, and
+   `URLSearchParams`-encoded representations of all exercised password, code, verifier,
+   and initial/refreshed token values.
+
+The `_getLocation` seam is an exact 8.0.1 Node-test boundary, not browser guidance or a
+version-range promise. Auth JS verifies the ID token in this flow; do not promote that
+to access-token signature validation, UserInfo, browser callback UX, Sign-In Widget,
+IDX, Classic Authn, device flow, hosted, live-provider, or P evidence.
 
 Do not claim the complete Okta Classic transaction machine, client-credentials
 redemption, or live-provider parity. Use the bounded primary-authentication recipe
@@ -294,9 +374,10 @@ uses refresh tokens:
 
 1. Register `refresh_token` in the application's grant types and request
    `offline_access`. Keep the returned access and refresh tokens in memory only.
-2. Redeem the initial refresh token once with the synthetic client credentials. If a
-   narrower scope is supplied, require it to be a subset of the originally granted
-   scope; otherwise omit `scope`. Assert that redemption succeeds, returns a different
+2. Redeem the initial refresh token once. Confidential clients provide their synthetic
+   secret; public clients identify the known client and omit a secret. If a narrower
+   scope is supplied, require it to be a subset of the originally granted scope;
+   otherwise omit `scope`. Assert that redemption succeeds, returns a different
    replacement refresh token, and does not widen scope.
 3. Keep the replacement for the lifecycle check. Do not replay the consumed initial
    token in this environment: replay or concurrent double redemption revokes the whole
@@ -319,7 +400,8 @@ uses refresh tokens:
    captured body.
 
 The current source preserves the original authentication time and absolute family
-expiry across rotation. Treat those as focused source behaviors, not live-provider or
+expiry across rotation. Public refresh tokens remain bearer credentials without DPoP
+or sender constraint. Treat those as focused source behaviors, not live-provider or
 unrecorded deployed evidence.
 
 ## Exercise SCIM and provider directory surfaces
@@ -579,10 +661,12 @@ cleanup.
 
 Report every case as passed, failed, or unavailable. Redact the management key,
 Authorization headers, cookies, client secrets, full tokens, and synthetic passwords.
-Request-log bodies can contain test credentials and tokens, so quote only the minimum
-safe evidence. Confirm that outbound target Bearer values remain redacted. Separate
-source results from exact deployed evidence and verified-live provider evidence in the
-report.
+Structured secret-bearing request/response fields and redirect locations are redacted,
+but non-secret fields and some non-JSON bodies can remain. For the Auth JS recipe,
+report only the exact named-field plus raw/URI/form-encoded representations the harness
+checks; do not promote them to arbitrary-encoding classification. Quote only the
+minimum safe evidence. Confirm that outbound target Bearer values remain redacted.
+Report D/I/S/X/Q/H/V/P independently.
 
 Use only the exact-revision records linked by the implementation ledger as deployed
 evidence. Do not present an older workers.dev smoke as M5/M6 qualification, promote

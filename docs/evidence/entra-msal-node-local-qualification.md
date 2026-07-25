@@ -1,7 +1,7 @@
 # Entra MSAL Node local qualification
 
 Status: Bounded D/I/S/X/Q local candidate passed; H/V/P remain unqualified
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 This record captures the local qualification of one exact client path:
 `@azure/msal-node` 5.4.2 uses a mockOS custom OIDC authority as a confidential client
@@ -9,10 +9,12 @@ for authorization code with S256 PKCE, forced silent refresh, and lifecycle-revo
 refresh. `@modelcontextprotocol/sdk` 1.29.0 manages the disposable environment over
 Streamable HTTP.
 
-The run was performed from branch `codex/entra-market-fit`, whose starting revision
-was `6f70c31a96694fecfd2cc84891bd19c75a171d30`. The tranche was still a working-tree
-candidate when this record was captured, so this is not an immutable revision,
-hosted-CI, deployment, or release record.
+The initial run was captured on branch `codex/entra-market-fit`, whose starting
+revision was `6f70c31a96694fecfd2cc84891bd19c75a171d30`. The shared-harness version was
+rerun under Node 24.18.0 from the later `codex/okta-market-fit` working-tree candidate,
+starting at committed Entra revision
+`9c713964f944c20326b8e826bb04be9bac7399c4`. This remains a local source candidate,
+not an immutable hosted-CI, deployment, or release record.
 
 ## Eight-level evidence boundary
 
@@ -34,11 +36,13 @@ smoke.
 
 ## Candidate implementation under test
 
-- `scripts/e2e-entra-msal.mjs` owns the loopback port, Wrangler child, HTTPS
-  certificate trust, timeout, cleanup, and bounded result.
-- `scripts/e2e-entra-msal-cleanup.mjs` interrupts a ready harness with `SIGTERM` and
-  independently verifies parent status, port release, Wrangler process-group exit, and
-  temporary-state removal.
+- `scripts/e2e-entra-msal.mjs` configures the Entra client, port, and temporary-state
+  inputs for `scripts/e2e-local-official-client.mjs`, the shared owner of the loopback
+  port, Wrangler child, HTTPS trust, timeout, cleanup, and bounded result.
+- `scripts/e2e-entra-msal-cleanup.mjs` configures
+  `scripts/e2e-local-official-client-cleanup.mjs`, the shared verifier that interrupts
+  a ready harness with `SIGTERM` and checks parent status, port release, Wrangler
+  process-group exit, and temporary-state removal.
 - `scripts/e2e-entra-msal-client.mjs` uses the official MCP and MSAL clients and owns
   the product assertions.
 - `apps/worker/wrangler.e2e.jsonc` supplies the existing local Durable Object
@@ -60,14 +64,15 @@ smoke.
 
 | Item | Value |
 | --- | --- |
-| Date | 2026-07-25 |
+| Date | 2026-07-26 |
 | Operating system | Darwin 25.5.0 arm64 |
-| Node.js | 26.4.0 |
+| Node.js | 24.18.0 |
 | pnpm | 10.30.2 |
 | Wrangler | Repository-pinned 4.112.0 |
 | MSAL Node | 5.4.2 |
 | MCP SDK | 1.29.0 |
 | Network | `https://localhost:8794` actual loopback socket |
+| Wrangler inspector | Explicit loopback port `18794`, distinct from Okta `18795` |
 
 Wrangler generated the local certificate. For readiness, the parent process anchored
 the captured leaf, verified its `localhost` hostname, and required the ownership nonce
@@ -79,6 +84,10 @@ origin and the same ownership nonce. TLS verification remained enabled, and the 
 file and directory were removed after the run. This proves a local HTTPS boundary
 only. It does not prove rejection of an alternate otherwise-trusted certificate,
 public PKI, custom-domain TLS, or hosted routing.
+
+The shared parent rejects an inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` before startup
+and strips that variable from child environments. The cleanup verifier enforces the
+same rule. Focused negative guards exercise both boundaries.
 
 ## Exact MSAL configuration
 
@@ -158,14 +167,16 @@ Exit status: `0` for the cleanup verifier. The interrupted parent harness exited
 Final output:
 
 ```json
-{"ok":true,"claim":"entra-msal-e2e-signal-cleanup","signal":"SIGTERM","exitCode":143,"portReleased":true,"processGroupGone":true,"temporaryStateRemoved":true}
+{"ok":true,"claim":"entra-msal-e2e-signal-cleanup","signal":"SIGTERM","exitCode":143,"portReleased":true,"inspectorPortReleased":true,"processGroupGone":true,"temporaryStateRemoved":true}
 ```
 
 The probe interrupts after the owned HTTPS Worker is ready and the temporary
 certificate/persistence directory exists. It then requires the exact signal
 acknowledgement, rebinds the reserved loopback port, checks the detached Wrangler
-process group no longer exists, and checks both the harness directory and its temporary
-parent are empty. This is focused local cleanup evidence. It does not qualify
+process group no longer exists, rebinds the separate inspector port, and checks both
+the harness directory and its temporary parent are empty. The Entra and Okta provider
+plus inspector ports are distinct; both qualifications and cleanup probes passed when
+run concurrently. This is focused local cleanup evidence. It does not qualify
 uncatchable `SIGKILL`, Windows process-tree behavior, or every interruption point while
 the MSAL child is active.
 

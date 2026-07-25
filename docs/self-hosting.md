@@ -1,7 +1,9 @@
 # Self-hosting
 
-Status: Source-build guide with F1 and partial OpenAI/Anthropic F2 local routes plus sampled M6 deployment evidence
-Last reviewed: 2026-07-25
+Status: Source-build guide with F1 and partial OpenAI/Anthropic F2 local routes,
+sampled M6 workers.dev acceptance, and bounded local official-client qualifications;
+distribution limits remain
+Last reviewed: 2026-07-26
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
 operations, and Wrangler authentication. Local repository checks do not require a
@@ -77,6 +79,27 @@ Management MCP can query/assert successfully persisted rows. See the
 deployments have no F2 acceptance; configured midstream errors, OpenAI Responses,
 Anthropic betas, state, actual-network qualification, and Cloud integration remain
 unavailable.
+
+Application registration defaults to `clientType: "confidential"` and returns a
+synthetic secret exactly once. A public registration must explicitly use
+`clientType: "public"`, omit `clientSecret`, and cannot request
+`client_credentials`; it returns no secret. Public code and refresh grants omit a
+secret, public Okta revocation is owner-bound, and introspection remains confidential.
+
+After installing dependencies, reproduce the two local official-client paths with:
+
+```sh
+pnpm e2e:entra-msal
+pnpm e2e:entra-msal-cleanup
+pnpm e2e:okta-authjs
+pnpm e2e:okta-authjs-cleanup
+```
+
+These commands own local Wrangler HTTPS processes and temporary trust/state. They
+qualify only the exact versions and flows in the
+[MSAL Node](./quickstarts/entra-msal-node.md) and
+[Okta Auth JS](./quickstarts/okta-auth-js-node.md) guides. They do not qualify the
+deployed Worker, a real provider, or production readiness.
 
 Save a local CLI profile without putting the key directly in the command line:
 
