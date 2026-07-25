@@ -234,6 +234,216 @@ export type MockLlmAnthropicProviderDocumentation = {
   };
 };
 
+export type MockosProductCapabilityId =
+  | "management.mcp"
+  | "management.self-hosted-http"
+  | "mock-mcp.data-plane"
+  | "mock-llm.openai"
+  | "mock-llm.anthropic"
+  | "code-mode";
+
+export type MockosProductCapabilitySupport = "supported" | "partial" | "unsupported";
+
+export type MockosProductCapabilityRole =
+  | "management-plane"
+  | "companion-management"
+  | "provider-data-plane"
+  | "synthetic-agent-data-plane";
+
+export type MockosProductCapabilityInterfaceKind =
+  | "mcp-streamable-http"
+  | "self-hosted-http"
+  | "openai-http"
+  | "anthropic-http"
+  | "mcp-code-mode";
+
+export type MockosProductCapabilityManagementRelationship =
+  | "primary"
+  | "companion"
+  | "mcp-only"
+  | "unavailable";
+
+export type MockosProductCapabilityEvidenceQualification =
+  | "qualified"
+  | "unqualified"
+  | "not-applicable";
+
+export type MockosProductCapabilityEvidenceCoverage =
+  | "full"
+  | "partial"
+  | "none"
+  | "not-applicable";
+
+export type MockosProductCapabilityEvidenceRevisionRelation =
+  | "current"
+  | "historical"
+  | "not-applicable";
+
+export type MockosProductCapabilityEvidenceClaim =
+  | {
+      qualification: "qualified";
+      coverage: Exclude<
+        MockosProductCapabilityEvidenceCoverage,
+        "none" | "not-applicable"
+      >;
+      revisionRelation: Exclude<
+        MockosProductCapabilityEvidenceRevisionRelation,
+        "not-applicable"
+      >;
+      scope: string;
+      proofRefs: readonly [string, ...string[]];
+      contextRefs: readonly string[];
+    }
+  | {
+      qualification: "unqualified";
+      coverage: "none";
+      revisionRelation: Exclude<
+        MockosProductCapabilityEvidenceRevisionRelation,
+        "not-applicable"
+      >;
+      scope: string;
+      proofRefs: readonly [];
+      contextRefs: readonly string[];
+    }
+  | {
+      qualification: "not-applicable";
+      coverage: "not-applicable";
+      revisionRelation: "not-applicable";
+      scope: string;
+      proofRefs: readonly [];
+      contextRefs: readonly [];
+    };
+
+export type MockosProductCapabilityEvidence = {
+  source: MockosProductCapabilityEvidenceClaim;
+  hostedCi: MockosProductCapabilityEvidenceClaim;
+  cloudPin: MockosProductCapabilityEvidenceClaim;
+  deployed: MockosProductCapabilityEvidenceClaim;
+  verifiedLive: MockosProductCapabilityEvidenceClaim;
+};
+
+export type MockosProductCapabilitySpecificationRef =
+  | "docs/reference/management-operations.v1.json#/managementMcp"
+  | "packages/openapi/openapi/mockos-management.v1.json#"
+  | "docs/reference/management-operations.v1.json#/future/mockMcpServers"
+  | "docs/reference/mock-llm-openai.v1.json#"
+  | "docs/reference/mock-llm-anthropic.v1.json#"
+  | "docs/reference/management-operations.v1.json#/future/codeMode";
+
+export type MockosProductCapabilityExecutableAuthority = {
+  kind: "contract" | "registry" | "runtime" | "feature-flag";
+  path: string;
+  export: string;
+};
+
+export type MockosProductCapability = {
+  id: MockosProductCapabilityId;
+  title: string;
+  support: MockosProductCapabilitySupport;
+  scope: string;
+  role: MockosProductCapabilityRole;
+  interface: {
+    kind: MockosProductCapabilityInterfaceKind;
+    management: MockosProductCapabilityManagementRelationship;
+  };
+  specificationRef: MockosProductCapabilitySpecificationRef;
+  provenance: {
+    executableAuthorities: readonly [
+      MockosProductCapabilityExecutableAuthority,
+      ...MockosProductCapabilityExecutableAuthority[],
+    ];
+  };
+  evidence: MockosProductCapabilityEvidence;
+  documentation: {
+    guide: string;
+    quickstart: string | null;
+    reference: string;
+    limitations: "docs/known-limitations.md";
+  };
+  limitationRefs: readonly string[];
+};
+
+export type MockosProductCapabilityIndex = {
+  schemaVersion: 1;
+  provenance: {
+    generator: {
+      path: "packages/openapi/src/index.ts";
+      export: "generateMockosProductCapabilityIndex";
+    };
+    relatedArtifacts: readonly [
+      "docs/reference/management-operations.v1.json",
+      "docs/reference/mock-llm-openai.v1.json",
+      "docs/reference/mock-llm-anthropic.v1.json",
+    ];
+  };
+  coverage: {
+    status: "partial";
+    scope: "f0-f2-agent-dependency-interface-slice";
+    rule: "absence-means-unindexed-not-unsupported";
+    includedDomains: readonly [
+      {
+        id: "management-mcp-and-self-hosted-http";
+        authorityRefs: readonly [
+          "packages/contracts/src/operations/management.ts",
+          "packages/mcp/src/index.ts",
+          "apps/worker/src/app.ts",
+        ];
+      },
+      {
+        id: "synthetic-agent-data-planes";
+        authorityRefs: readonly [
+          "packages/contracts/src/mock-mcp.ts",
+          "packages/mcp-mock/src/index.ts",
+          "packages/llm-mock/src/openai-http.ts",
+          "packages/llm-mock/src/anthropic-http.ts",
+          "packages/worker-kit/src/mock-llm-runtime.ts",
+          "packages/worker-kit/src/edge-router.ts",
+        ];
+      },
+      {
+        id: "future-code-mode-boundary";
+        authorityRefs: readonly [
+          "packages/contracts/src/features.ts",
+          "packages/codemode/src/index.ts",
+        ];
+      },
+    ];
+    unindexedDomains: readonly [
+      {
+        id: "identity-provider-data-planes";
+        reason: "provider-contract-not-yet-joined";
+        contextRefs: readonly ["docs/identity/entra.md", "docs/identity/okta.md"];
+      },
+      {
+        id: "scim-and-provisioning-data-planes";
+        reason: "provider-and-outcome-contracts-not-yet-joined";
+        contextRefs: readonly [
+          "docs/identity/scim.md",
+          "docs/quickstarts/provisioning-cycle.md",
+        ];
+      },
+      {
+        id: "private-cloud-product-surfaces";
+        reason: "private-overlay-required";
+        contextRefs: readonly ["docs/IMPLEMENTATION_STATUS.md"];
+      },
+    ];
+  };
+  supportModel: {
+    rule: "support-describes-bounded-contract-not-hosted-qualification";
+  };
+  evidenceModel: {
+    tiers: readonly ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"];
+    dimensions: {
+      qualification: readonly ["qualified", "unqualified", "not-applicable"];
+      coverage: readonly ["full", "partial", "none", "not-applicable"];
+      revisionRelation: readonly ["current", "historical", "not-applicable"];
+    };
+    rule: "tiers-and-dimensions-are-independent-no-implicit-promotion";
+  };
+  capabilities: MockosProductCapability[];
+};
+
 export type MockosManagementDocumentationCatalog = {
   schemaVersion: 1;
   generatedFrom: "packages/contracts/src/operations/management.ts";
@@ -694,6 +904,526 @@ export const generateMockosManagementDocumentationCatalog =
         },
         codeMode: { status: "unavailable", phase: "F6" },
       },
+    };
+  };
+
+const qualifiedEvidenceClaim = (
+  coverage: "full" | "partial",
+  revisionRelation: "current" | "historical",
+  scope: string,
+  proofRefs: readonly [string, ...string[]],
+  contextRefs: readonly string[] = []
+): MockosProductCapabilityEvidenceClaim => ({
+  qualification: "qualified",
+  coverage,
+  revisionRelation,
+  scope,
+  proofRefs: [...proofRefs],
+  contextRefs: [...contextRefs],
+});
+
+const unqualifiedClaim = (
+  revisionRelation: "current" | "historical",
+  scope: string,
+  contextRefs: readonly string[] = []
+): MockosProductCapabilityEvidenceClaim => ({
+  qualification: "unqualified",
+  coverage: "none",
+  revisionRelation,
+  scope,
+  proofRefs: [],
+  contextRefs: [...contextRefs],
+});
+
+const unqualifiedCurrentClaim = (scope: string): MockosProductCapabilityEvidenceClaim =>
+  unqualifiedClaim("current", scope);
+
+const qualifiedSourceClaim = (
+  qualified: boolean,
+  scope: string,
+  proofRefs: readonly [string, ...string[]]
+): MockosProductCapabilityEvidenceClaim =>
+  qualified
+    ? qualifiedEvidenceClaim("full", "current", scope, proofRefs)
+    : unqualifiedCurrentClaim(scope);
+
+const manifestUnqualifiedCurrentClaim = (
+  _qualification: "unqualified",
+  scope: string
+): MockosProductCapabilityEvidenceClaim => unqualifiedCurrentClaim(scope);
+
+const notApplicableClaim = (scope: string): MockosProductCapabilityEvidenceClaim => ({
+  qualification: "not-applicable",
+  coverage: "not-applicable",
+  revisionRelation: "not-applicable",
+  scope,
+  proofRefs: [],
+  contextRefs: [],
+});
+
+export const generateMockosProductCapabilityIndex =
+  (): MockosProductCapabilityIndex => {
+    const catalog = generateMockosManagementDocumentationCatalog();
+    const openAi = catalog.future.mockLlmApis.providerDataPlane.openAi;
+    const anthropic = catalog.future.mockLlmApis.providerDataPlane.anthropic;
+
+    return {
+      schemaVersion: 1,
+      provenance: {
+        generator: {
+          path: "packages/openapi/src/index.ts",
+          export: "generateMockosProductCapabilityIndex",
+        },
+        relatedArtifacts: [
+          "docs/reference/management-operations.v1.json",
+          "docs/reference/mock-llm-openai.v1.json",
+          "docs/reference/mock-llm-anthropic.v1.json",
+        ],
+      },
+      coverage: {
+        status: "partial",
+        scope: "f0-f2-agent-dependency-interface-slice",
+        rule: "absence-means-unindexed-not-unsupported",
+        includedDomains: [
+          {
+            id: "management-mcp-and-self-hosted-http",
+            authorityRefs: [
+              "packages/contracts/src/operations/management.ts",
+              "packages/mcp/src/index.ts",
+              "apps/worker/src/app.ts",
+            ],
+          },
+          {
+            id: "synthetic-agent-data-planes",
+            authorityRefs: [
+              "packages/contracts/src/mock-mcp.ts",
+              "packages/mcp-mock/src/index.ts",
+              "packages/llm-mock/src/openai-http.ts",
+              "packages/llm-mock/src/anthropic-http.ts",
+              "packages/worker-kit/src/mock-llm-runtime.ts",
+              "packages/worker-kit/src/edge-router.ts",
+            ],
+          },
+          {
+            id: "future-code-mode-boundary",
+            authorityRefs: [
+              "packages/contracts/src/features.ts",
+              "packages/codemode/src/index.ts",
+            ],
+          },
+        ],
+        unindexedDomains: [
+          {
+            id: "identity-provider-data-planes",
+            reason: "provider-contract-not-yet-joined",
+            contextRefs: ["docs/identity/entra.md", "docs/identity/okta.md"],
+          },
+          {
+            id: "scim-and-provisioning-data-planes",
+            reason: "provider-and-outcome-contracts-not-yet-joined",
+            contextRefs: [
+              "docs/identity/scim.md",
+              "docs/quickstarts/provisioning-cycle.md",
+            ],
+          },
+          {
+            id: "private-cloud-product-surfaces",
+            reason: "private-overlay-required",
+            contextRefs: ["docs/IMPLEMENTATION_STATUS.md"],
+          },
+        ],
+      },
+      supportModel: {
+        rule: "support-describes-bounded-contract-not-hosted-qualification",
+      },
+      evidenceModel: {
+        tiers: ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"],
+        dimensions: {
+          qualification: ["qualified", "unqualified", "not-applicable"],
+          coverage: ["full", "partial", "none", "not-applicable"],
+          revisionRelation: ["current", "historical", "not-applicable"],
+        },
+        rule: "tiers-and-dimensions-are-independent-no-implicit-promotion",
+      },
+      capabilities: [
+        {
+          id: "management.mcp",
+          title: "Management MCP",
+          support:
+            catalog.managementMcp.status === "implemented"
+              ? "supported"
+              : "unsupported",
+          scope: "current-24-tool-registry",
+          role: "management-plane",
+          interface: {
+            kind: "mcp-streamable-http",
+            management: "primary",
+          },
+          specificationRef:
+            "docs/reference/management-operations.v1.json#/managementMcp",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "registry",
+                path: "packages/contracts/src/operations/management.ts",
+                export: "mockosManagementOperations",
+              },
+              {
+                kind: "runtime",
+                path: "packages/mcp/src/index.ts",
+                export: "registerMockosTools",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              catalog.managementMcp.status === "implemented",
+              "current-24-tool-source-registry",
+              [
+                "packages/contracts/src/operations/management.test.ts",
+                "packages/mcp/src/index.test.ts",
+                "apps/worker/test/mcp.integration.test.ts",
+              ]
+            ),
+            hostedCi: qualifiedEvidenceClaim(
+              "partial",
+              "historical",
+              "historical-15-tool-m5-hosted-ci-slice",
+              ["docs/evidence/m5-workers-dev-smoke.md"]
+            ),
+            cloudPin: unqualifiedCurrentClaim("current-24-tool-cloud-pin"),
+            deployed: qualifiedEvidenceClaim(
+              "partial",
+              "historical",
+              "historical-15-tool-m5-deployed-slice",
+              ["docs/evidence/m5-workers-dev-smoke.md"]
+            ),
+            verifiedLive: notApplicableClaim("management-interface"),
+          },
+          documentation: {
+            guide: "docs/mcp.md",
+            quickstart: "docs/getting-started/mcp-first.md",
+            reference: "docs/reference/management-tools.md",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: [
+            "docs/reference/management-operations.v1.json#/managementMcp/standaloneGet",
+            "docs/reference/management-operations.v1.json#/managementMcp/scopeEnforcement",
+          ],
+        },
+        {
+          id: "management.self-hosted-http",
+          title: "Self-hosted management HTTP",
+          support:
+            catalog.selfHostedHttp.status === "implemented"
+              ? "supported"
+              : "unsupported",
+          scope: "current-five-route-companion",
+          role: "companion-management",
+          interface: {
+            kind: "self-hosted-http",
+            management: "companion",
+          },
+          specificationRef: "packages/openapi/openapi/mockos-management.v1.json#",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "registry",
+                path: "packages/contracts/src/operations/management.ts",
+                export: "mockosHttpOperations",
+              },
+              {
+                kind: "runtime",
+                path: "apps/worker/src/app.ts",
+                export: "createWorkerApp",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              catalog.selfHostedHttp.status === "implemented",
+              "current-five-route-source-contract",
+              [
+                "packages/openapi/test/drift.test.ts",
+                "apps/worker/test/oidc.integration.test.ts",
+                "apps/worker/test/directory.integration.test.ts",
+              ]
+            ),
+            hostedCi: qualifiedEvidenceClaim(
+              "full",
+              "historical",
+              "exact-five-route-m6-ancestor",
+              ["docs/evidence/m6-workers-dev-smoke.md"]
+            ),
+            cloudPin: unqualifiedCurrentClaim("current-public-revision-cloud-pin"),
+            deployed: unqualifiedClaim(
+              "historical",
+              "exact-five-route-m6-bundle-not-remotely-exercised",
+              ["docs/evidence/m6-workers-dev-smoke.md"]
+            ),
+            verifiedLive: notApplicableClaim("management-interface"),
+          },
+          documentation: {
+            guide: "docs/reference/self-hosted-http.md",
+            quickstart: "docs/quickstarts/curl.md",
+            reference: "packages/openapi/openapi/mockos-management.v1.json",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: ["docs/reference/self-hosted-http.md#deliberate-limits"],
+        },
+        {
+          id: "mock-mcp.data-plane",
+          title: "Environment-hosted mock MCP",
+          support:
+            catalog.future.mockMcpServers.status === "source-qualified"
+              ? "supported"
+              : "partial",
+          scope: "bounded-mcp-2025-11-25-subset",
+          role: "synthetic-agent-data-plane",
+          interface: {
+            kind: "mcp-streamable-http",
+            management: "mcp-only",
+          },
+          specificationRef:
+            "docs/reference/management-operations.v1.json#/future/mockMcpServers",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "contract",
+                path: "packages/contracts/src/mock-mcp.ts",
+                export: "MOCK_MCP_PROTOCOL_VERSION",
+              },
+              {
+                kind: "runtime",
+                path: "packages/mcp-mock/src/index.ts",
+                export: "createMockMcpFetchHandler",
+              },
+              {
+                kind: "runtime",
+                path: "packages/worker-kit/src/edge-router.ts",
+                export: "routeEnvironmentRequest",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              catalog.future.mockMcpServers.status === "source-qualified",
+              "bounded-f1-current-source",
+              [
+                "packages/mcp-mock/src/sdk-conformance.test.ts",
+                "packages/mcp-mock/src/repository-integration.test.ts",
+                "apps/worker/test/mock-mcp.integration.test.ts",
+              ]
+            ),
+            hostedCi: unqualifiedCurrentClaim("f1-current-source"),
+            cloudPin: unqualifiedCurrentClaim("f1-current-public-revision"),
+            deployed: unqualifiedCurrentClaim("f1-current-source"),
+            verifiedLive: notApplicableClaim("synthetic-mcp-data-plane"),
+          },
+          documentation: {
+            guide: "docs/mock-mcp.md",
+            quickstart: "docs/mock-mcp.md",
+            reference: "docs/reference/management-tools.md",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: ["docs/mock-mcp.md#current-limitations"],
+        },
+        {
+          id: "mock-llm.openai",
+          title: "Mock OpenAI data plane",
+          support: openAi.status === "source-qualified" ? "supported" : "partial",
+          scope: openAi.compatibility,
+          role: "provider-data-plane",
+          interface: {
+            kind: "openai-http",
+            management: "mcp-only",
+          },
+          specificationRef: "docs/reference/mock-llm-openai.v1.json#",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "contract",
+                path: "packages/llm-mock/src/openai-http.ts",
+                export: "mockLlmOpenAiProviderManifest",
+              },
+              {
+                kind: "runtime",
+                path: "packages/llm-mock/src/openai-http.ts",
+                export: "createMockLlmOpenAiFetchHandler",
+              },
+              {
+                kind: "runtime",
+                path: "packages/worker-kit/src/mock-llm-runtime.ts",
+                export: "EnvironmentMockLlmOpenAiRuntime",
+              },
+              {
+                kind: "runtime",
+                path: "packages/worker-kit/src/edge-router.ts",
+                export: "routeEnvironmentRequest",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              openAi.status === "source-qualified" &&
+                openAi.evidence.packageTests === "qualified" &&
+                openAi.evidence.localWorkerOfficialOpenAiSdk === "qualified",
+              "bounded-openai-current-source",
+              [
+                "packages/llm-mock/src/openai-http.test.ts",
+                "packages/llm-mock/src/sdk-conformance.test.ts",
+                "apps/worker/test/mock-llm.integration.test.ts",
+              ]
+            ),
+            hostedCi: unqualifiedCurrentClaim("f2-openai-current-source"),
+            cloudPin: manifestUnqualifiedCurrentClaim(
+              openAi.evidence.cloudPin,
+              "f2-openai-current-public-revision"
+            ),
+            deployed: manifestUnqualifiedCurrentClaim(
+              openAi.evidence.hostedDeployment,
+              "f2-openai-current-source"
+            ),
+            verifiedLive: manifestUnqualifiedCurrentClaim(
+              openAi.evidence.liveProviderParity,
+              "bounded-openai-provider-parity"
+            ),
+          },
+          documentation: {
+            guide: "docs/mock-llm.md",
+            quickstart: "docs/quickstarts/openai-sdk.md",
+            reference: "docs/reference/mock-llm-openai.v1.json",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: [
+            "docs/reference/mock-llm-openai.v1.json#/request/streaming",
+            "docs/reference/mock-llm-openai.v1.json#/request/multimodal",
+          ],
+        },
+        {
+          id: "mock-llm.anthropic",
+          title: "Mock Anthropic data plane",
+          support: anthropic.status === "source-qualified" ? "supported" : "partial",
+          scope: anthropic.compatibility,
+          role: "provider-data-plane",
+          interface: {
+            kind: "anthropic-http",
+            management: "mcp-only",
+          },
+          specificationRef: "docs/reference/mock-llm-anthropic.v1.json#",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "contract",
+                path: "packages/llm-mock/src/anthropic-http.ts",
+                export: "mockLlmAnthropicProviderManifest",
+              },
+              {
+                kind: "runtime",
+                path: "packages/llm-mock/src/anthropic-http.ts",
+                export: "createMockLlmAnthropicFetchHandler",
+              },
+              {
+                kind: "runtime",
+                path: "packages/worker-kit/src/mock-llm-runtime.ts",
+                export: "EnvironmentMockLlmAnthropicRuntime",
+              },
+              {
+                kind: "runtime",
+                path: "packages/worker-kit/src/edge-router.ts",
+                export: "routeEnvironmentRequest",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              anthropic.status === "source-qualified" &&
+                anthropic.evidence.packageTests === "qualified" &&
+                anthropic.evidence.localWorkerOfficialAnthropicSdk === "qualified",
+              "bounded-anthropic-current-source",
+              [
+                "packages/llm-mock/src/anthropic-http.test.ts",
+                "packages/llm-mock/src/anthropic-security.test.ts",
+                "apps/worker/test/mock-llm-anthropic.integration.test.ts",
+              ]
+            ),
+            hostedCi: unqualifiedCurrentClaim("f2-anthropic-current-source"),
+            cloudPin: manifestUnqualifiedCurrentClaim(
+              anthropic.evidence.cloudPin,
+              "f2-anthropic-current-public-revision"
+            ),
+            deployed: manifestUnqualifiedCurrentClaim(
+              anthropic.evidence.hostedDeployment,
+              "f2-anthropic-current-source"
+            ),
+            verifiedLive: manifestUnqualifiedCurrentClaim(
+              anthropic.evidence.liveProviderParity,
+              "bounded-anthropic-provider-parity"
+            ),
+          },
+          documentation: {
+            guide: "docs/mock-llm.md",
+            quickstart: "docs/quickstarts/anthropic-sdk.md",
+            reference: "docs/reference/mock-llm-anthropic.v1.json",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: [
+            "docs/reference/mock-llm-anthropic.v1.json#/request/streaming",
+            "docs/reference/mock-llm-anthropic.v1.json#/request/multimodal",
+            "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures",
+          ],
+        },
+        {
+          id: "code-mode",
+          title: "MCP Code Mode",
+          support:
+            catalog.future.codeMode.status === "unavailable"
+              ? "unsupported"
+              : "partial",
+          scope: "disabled-fail-closed-boundary",
+          role: "management-plane",
+          interface: {
+            kind: "mcp-code-mode",
+            management: "unavailable",
+          },
+          specificationRef:
+            "docs/reference/management-operations.v1.json#/future/codeMode",
+          provenance: {
+            executableAuthorities: [
+              {
+                kind: "feature-flag",
+                path: "packages/contracts/src/features.ts",
+                export: "DEFAULT_F_SERIES_FEATURE_FLAGS",
+              },
+              {
+                kind: "runtime",
+                path: "packages/codemode/src/index.ts",
+                export: "requireMockosCodeModeEnabled",
+              },
+            ],
+          },
+          evidence: {
+            source: qualifiedSourceClaim(
+              catalog.future.codeMode.status === "unavailable",
+              "disabled-fail-closed-boundary",
+              ["packages/codemode/test/disabled.test.ts"]
+            ),
+            hostedCi: unqualifiedCurrentClaim("disabled-boundary-hosted-ci"),
+            cloudPin: unqualifiedCurrentClaim("disabled-boundary-cloud-pin"),
+            deployed: unqualifiedCurrentClaim("disabled-boundary-deployment"),
+            verifiedLive: notApplicableClaim("management-interface"),
+          },
+          documentation: {
+            guide: "packages/codemode/README.md",
+            quickstart: null,
+            reference: "docs/f-series/f0-foundation.md",
+            limitations: "docs/known-limitations.md",
+          },
+          limitationRefs: [
+            "docs/reference/management-operations.v1.json#/future/codeMode/status",
+          ],
+        },
+      ],
     };
   };
 

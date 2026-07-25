@@ -10,6 +10,10 @@ This reference is generated from
 Change the canonical schemas or metadata, run `pnpm f0:generate`, and commit the
 result. The [machine-readable catalog](./management-operations.v1.json) contains
 the same metadata and JSON Schemas.
+The generated [product capability index](./product-capabilities.v1.json) joins
+each interface included in its explicitly partial F0-F2 slice to executable
+authorities, an exact specification, documentation, anchored limitations, and
+independent source/hosted-CI/Cloud-pin/deployed/verified-live evidence claims.
 
 The current management MCP server exposes **24 tools**.
 Exactly **5** of those operations also have an

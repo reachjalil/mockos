@@ -6,6 +6,7 @@ import {
   generateMockosHttpOperationManifest,
   generateMockosManagementDocumentationCatalog,
   generateMockosManagementOpenApi,
+  generateMockosProductCapabilityIndex,
   type MockosManagementDocumentationCatalog,
   type MockosManagementDocumentationTool,
 } from "../packages/openapi/src/index";
@@ -78,6 +79,34 @@ const generatedMockLlmOpenAiProviderJson = (): string =>
 const generatedMockLlmAnthropicProviderJson = (): string =>
   generatedMockLlmProviderJson(generateMockLlmAnthropicProviderDocumentation());
 
+const compactShortStringArrays = (contents: string): string =>
+  contents.replace(
+    /^(\s*)"([^"\n]+)": \[\n((?:[ \t]+"(?:[^"\\]|\\.)*"(?:,)?\n)+)[ \t]*\]/gmu,
+    (expanded, indentation: string, key: string, body: string) => {
+      const values = JSON.parse(`[${body}]`) as string[];
+      const compactValues = values.map((value) => JSON.stringify(value)).join(", ");
+      const compact = `${indentation}${JSON.stringify(key)}: [${compactValues}]`;
+      return compact.length <= 80 ? compact : expanded;
+    }
+  );
+
+const generatedProductCapabilityIndexJson = (): string => {
+  const index = generateMockosProductCapabilityIndex();
+  const contents = stableJson(index);
+  const expandedTiers = [
+    '    "tiers": [',
+    ...index.evidenceModel.tiers.map(
+      (tier, position) =>
+        `      ${JSON.stringify(tier)}${position === index.evidenceModel.tiers.length - 1 ? "" : ","}`
+    ),
+    "    ]",
+  ].join("\n");
+  if (!contents.includes(expandedTiers)) {
+    throw new Error("The generated product capability evidence-tier shape changed.");
+  }
+  return compactShortStringArrays(contents);
+};
+
 const generatedClientManifest = (): string => {
   const manifest = generateMockosHttpOperationManifest();
   const lines = [
@@ -137,6 +166,10 @@ const renderManagementTools = (
     "Change the canonical schemas or metadata, run `pnpm f0:generate`, and commit the",
     "result. The [machine-readable catalog](./management-operations.v1.json) contains",
     "the same metadata and JSON Schemas.",
+    "The generated [product capability index](./product-capabilities.v1.json) joins",
+    "each interface included in its explicitly partial F0-F2 slice to executable",
+    "authorities, an exact specification, documentation, anchored limitations, and",
+    "independent source/hosted-CI/Cloud-pin/deployed/verified-live evidence claims.",
     "",
     `The current management MCP server exposes **${catalog.managementMcp.toolCount} tools**.`,
     `Exactly **${catalog.selfHostedHttp.routeCount}** of those operations also have an`,
@@ -408,6 +441,9 @@ const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string 
     `  reference for all ${catalog.managementMcp.toolCount} current MCP tools.`,
     "- [Machine operation catalog](docs/reference/management-operations.v1.json):",
     "  generated schemas and capability metadata.",
+    "- [Machine product capability index](docs/reference/product-capabilities.v1.json):",
+    "  generated non-exhaustive F0-F2 support slice, executable provenance, exact",
+    "  specifications, anchored limitations, and independent evidence dimensions.",
     "- [Mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json):",
     "  generated route, auth, request-limit, planning, and evidence contract.",
     "- [Mock Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json):",
@@ -580,6 +616,10 @@ const documentationCatalogPath = resolve(
   process.cwd(),
   "docs/reference/management-operations.v1.json"
 );
+const productCapabilityIndexPath = resolve(
+  process.cwd(),
+  "docs/reference/product-capabilities.v1.json"
+);
 const mockLlmOpenAiProviderPath = resolve(
   process.cwd(),
   "docs/reference/mock-llm-openai.v1.json"
@@ -612,6 +652,10 @@ const artifacts: Artifact[] = [
   {
     path: documentationCatalogPath,
     contents: stableJson(documentationCatalog),
+  },
+  {
+    path: productCapabilityIndexPath,
+    contents: generatedProductCapabilityIndexJson(),
   },
   {
     path: mockLlmOpenAiProviderPath,

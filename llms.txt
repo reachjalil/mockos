@@ -24,6 +24,9 @@
   reference for all 24 current MCP tools.
 - [Machine operation catalog](docs/reference/management-operations.v1.json):
   generated schemas and capability metadata.
+- [Machine product capability index](docs/reference/product-capabilities.v1.json):
+  generated non-exhaustive F0-F2 support slice, executable provenance, exact
+  specifications, anchored limitations, and independent evidence dimensions.
 - [Mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json):
   generated route, auth, request-limit, planning, and evidence contract.
 - [Mock Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json):
