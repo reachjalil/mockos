@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import {
   type ApplicationListPage,
   type ApplicationRegistration,
+  applicationRegistrationSchema,
   type AssertionResult,
   type AssertionSpec,
   applicationListPageSchema,
@@ -162,17 +163,21 @@ const validateUserState = (user: UserRecord | undefined) => {
 
 const applicationRegistration = (
   application: Awaited<ReturnType<Engine["applications"]["create"]>>
-): ApplicationRegistration => ({
-  id: application.id,
-  name: application.name,
-  clientId: application.clientId,
-  clientSecret: application.clientSecret,
-  redirectUris: [...application.redirectUris],
-  grantTypes: [...application.grantTypes],
-  appRoles: [...application.appRoles],
-  groupClaimsMode: application.groupClaimsMode,
-  createdAt: application.createdAt,
-});
+): ApplicationRegistration =>
+  applicationRegistrationSchema.parse({
+    id: application.id,
+    name: application.name,
+    clientId: application.clientId,
+    clientType: application.clientType,
+    ...(application.clientSecret !== undefined
+      ? { clientSecret: application.clientSecret }
+      : {}),
+    redirectUris: [...application.redirectUris],
+    grantTypes: [...application.grantTypes],
+    appRoles: [...application.appRoles],
+    groupClaimsMode: application.groupClaimsMode,
+    createdAt: application.createdAt,
+  });
 
 const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
   const validateAuthorizationRequest = (input: EntraAuthorizationRequest) => {

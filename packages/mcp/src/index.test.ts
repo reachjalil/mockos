@@ -111,11 +111,29 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   ): Promise<ApplicationRegistration> {
     this.requireEnvironment(environmentId);
     this.calls.push({ environmentId, operation: "create-application" });
+    if (input.clientType === "public") {
+      return {
+        id: "application_1",
+        name: input.name,
+        clientId: input.clientId ?? "client_test",
+        clientType: "public",
+        redirectUris: input.redirectUris,
+        grantTypes: input.grantTypes ?? ["authorization_code", "refresh_token"],
+        appRoles: input.appRoles ?? [],
+        groupClaimsMode: input.groupClaimsMode ?? "none",
+        createdAt: CREATED_AT,
+      };
+    }
     return {
-      ...input,
       id: "application_1",
+      name: input.name,
       clientId: input.clientId ?? "client_test",
+      clientType: "confidential",
       clientSecret: input.clientSecret ?? "secret_test_123",
+      redirectUris: input.redirectUris,
+      grantTypes: input.grantTypes ?? ["authorization_code", "refresh_token"],
+      appRoles: input.appRoles ?? [],
+      groupClaimsMode: input.groupClaimsMode ?? "none",
       createdAt: CREATED_AT,
     };
   }
@@ -299,6 +317,20 @@ type Harness = {
   server: McpServer;
 };
 
+type JsonSchema = {
+  type?: string;
+  const?: unknown;
+  default?: unknown;
+  enum?: unknown[];
+  required?: string[];
+  properties?: Record<string, JsonSchema | boolean>;
+  items?: JsonSchema;
+  allOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
+  not?: JsonSchema;
+  additionalProperties?: boolean;
+};
+
 const openHarnesses: Harness[] = [];
 
 const createHarness = async (): Promise<Harness> => {
@@ -332,6 +364,127 @@ afterEach(async () => {
 });
 
 describe("registerMockosTools", () => {
+  it("advertises conditional application inputs and exact registration outputs", async () => {
+    const { client } = await createHarness();
+    const listed = await client.listTools();
+    const tool = listed.tools.find(({ name }) => name === "create_application");
+    expect(tool).toBeDefined();
+
+    const inputSchema = tool?.inputSchema as JsonSchema;
+    expect(inputSchema).toMatchObject({
+      type: "object",
+      required: ["name", "redirectUris"],
+      additionalProperties: false,
+      properties: {
+        clientType: {
+          type: "string",
+          enum: ["confidential", "public"],
+          default: "confidential",
+        },
+        grantTypes: {
+          type: "array",
+          default: ["authorization_code", "refresh_token"],
+        },
+        appRoles: { type: "array", default: [] },
+        groupClaimsMode: { type: "string", default: "none" },
+        clientSecret: { type: "string" },
+      },
+    });
+    expect(inputSchema.required).not.toContain("clientType");
+    expect(inputSchema.required).not.toContain("grantTypes");
+    expect(inputSchema.required).not.toContain("appRoles");
+    expect(inputSchema.required).not.toContain("groupClaimsMode");
+
+    const publicCondition = inputSchema.allOf?.[0];
+    expect(publicCondition).toMatchObject({
+      if: {
+        properties: { clientType: { const: "public" } },
+        required: ["clientType"],
+      },
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the JSON Schema conditional keyword under test.
+      then: {
+        not: { required: ["clientSecret"] },
+        properties: {
+          grantTypes: {
+            items: {
+              enum: [
+                "authorization_code",
+                "refresh_token",
+                "urn:ietf:params:oauth:grant-type:device_code",
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    const outputSchema = tool?.outputSchema as JsonSchema;
+    const registrationSchema = outputSchema.properties?.data as JsonSchema;
+    expect(registrationSchema.oneOf).toHaveLength(2);
+    const confidentialRegistration = registrationSchema.oneOf?.find(
+      (branch) =>
+        (branch.properties?.clientType as JsonSchema | undefined)?.const ===
+        "confidential"
+    );
+    const publicRegistration = registrationSchema.oneOf?.find(
+      (branch) =>
+        (branch.properties?.clientType as JsonSchema | undefined)?.const === "public"
+    );
+    expect(confidentialRegistration).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+    });
+    expect(confidentialRegistration?.required).toEqual(
+      expect.arrayContaining([
+        "clientType",
+        "clientSecret",
+        "grantTypes",
+        "appRoles",
+        "groupClaimsMode",
+      ])
+    );
+    expect(publicRegistration).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+    });
+    expect(publicRegistration?.required).toEqual(
+      expect.arrayContaining([
+        "clientType",
+        "grantTypes",
+        "appRoles",
+        "groupClaimsMode",
+      ])
+    );
+    expect(publicRegistration?.properties).not.toHaveProperty("clientSecret");
+  });
+
+  it("keeps an omitted client type backward-compatible as confidential", async () => {
+    const { client } = await createHarness();
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "Legacy default",
+      provider: "okta",
+    });
+
+    const application = await callData<ApplicationRegistration>(
+      client,
+      "create_application",
+      {
+        name: "Legacy confidential app",
+        redirectUris: ["https://target.test/legacy-callback"],
+      }
+    );
+    expect(application.clientType).toBe("confidential");
+    if (application.clientType !== "confidential") {
+      throw new Error("Omitted clientType must resolve to confidential.");
+    }
+    expect(application).toMatchObject({
+      clientSecret: "secret_test_123",
+      grantTypes: ["authorization_code", "refresh_token"],
+      appRoles: [],
+      groupClaimsMode: "none",
+    });
+  });
+
   it("registers and drives the complete management surface", async () => {
     const { client, dependencies } = await createHarness();
     const listed = await client.listTools();
@@ -403,8 +556,51 @@ describe("registerMockosTools", () => {
     );
     expect(application).toMatchObject({
       clientId: "client_test",
+      clientType: "confidential",
       grantTypes: ["authorization_code", "refresh_token"],
     });
+    if (application.clientType !== "confidential") {
+      throw new Error("Legacy application must be confidential.");
+    }
+    expect(application.clientSecret).toBe("secret_test_123");
+
+    const publicApplication = await callData<ApplicationRegistration>(
+      client,
+      "create_application",
+      {
+        name: "Public PKCE app",
+        clientType: "public",
+        redirectUris: ["https://target.test/public-callback"],
+      }
+    );
+    expect(publicApplication).toMatchObject({
+      clientId: "client_test",
+      clientType: "public",
+      grantTypes: ["authorization_code", "refresh_token"],
+    });
+    expect(publicApplication).not.toHaveProperty("clientSecret");
+    const rejectedPublicSecret = "must-not-be accepted!";
+    const invalidPublicApplication = await client.callTool({
+      name: "create_application",
+      arguments: {
+        name: "Invalid public app",
+        clientType: "public",
+        clientSecret: rejectedPublicSecret,
+        redirectUris: ["https://target.test/invalid-callback"],
+      },
+    });
+    expect(invalidPublicApplication.isError).toBe(true);
+    expect(JSON.stringify(invalidPublicApplication)).not.toContain(
+      rejectedPublicSecret
+    );
+    expect(JSON.stringify(invalidPublicApplication)).not.toContain(
+      encodeURIComponent(rejectedPublicSecret)
+    );
+    expect(JSON.stringify(invalidPublicApplication)).not.toContain(
+      new URLSearchParams({ value: rejectedPublicSecret })
+        .toString()
+        .slice("value=".length)
+    );
 
     const provisioning = await callData<ProvisioningRun>(
       client,
@@ -490,6 +686,7 @@ describe("registerMockosTools", () => {
     expect(dependencies.calls.map(({ operation }) => operation)).toEqual([
       "configure",
       "seed",
+      "create-application",
       "create-application",
       "run-provisioning",
       "mint:expired",

@@ -1,7 +1,7 @@
 # Hosting modes
 
-Status: Bounded M6 path-mode sample deployed; wildcard/subdomain mode remains open
-Last reviewed: 2026-07-22
+Status: Bounded M6 path-mode sample deployed; MSAL/Auth JS path authorities qualified only over local HTTPS; wildcard/subdomain mode remains open
+Last reviewed: 2026-07-26
 
 ## Path mode
 
@@ -38,7 +38,9 @@ provider profile, so the same path exposes Entra or Okta PATCH and lifecycle sem
 rather than a third provider.
 
 Protocol endpoints are intentionally reachable test surfaces once their unguessable
-environment URL is known. OIDC/OAuth uses registered synthetic clients; SCIM and Graph
+environment URL is known. OIDC/OAuth uses registered synthetic clients. Confidential
+clients receive a creation-only synthetic secret; public clients receive none, cannot
+use `client_credentials`, and rely on PKCE plus bearer refresh credentials. SCIM and Graph
 accept a non-empty synthetic Bearer value, while the Okta directory API accepts a
 non-empty synthetic SSWS value. Those directory checks validate scheme and presence,
 not a real provider token. Never send the MCP/control Access Key, real identities, or
@@ -49,6 +51,13 @@ hosts. Configure explicit authorities and never infer broad SDK compatibility fr
 curl or single-client success. The authenticated MCP, OIDC, scenario, log, assertion,
 and cleanup checks recorded for both live origins are in the M3 and latest
 [M6 workers.dev smoke evidence](./evidence/m6-workers-dev-smoke.md).
+
+Two pinned clients separately pass path-mode authorities over an owned local Wrangler
+HTTPS socket: `@azure/msal-node` 5.4.2 as an Entra confidential client and
+`@okta/okta-auth-js` 8.0.1 as an Okta public client. These are local D/I/S/X/Q records,
+not H for either workers.dev origin. See the
+[MSAL Node](./evidence/entra-msal-node-local-qualification.md) and
+[Okta Auth JS](./evidence/okta-auth-js-local-qualification.md) evidence.
 
 Path mode does not imply broad provider API coverage. Microsoft Graph is read-only,
 the M6 Classic Authn slice stops after primary state retrieval/cancellation, and both

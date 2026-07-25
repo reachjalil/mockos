@@ -159,7 +159,11 @@ const basicCredentials = (request: Request) => {
   try {
     const decoded = atob(authorization.slice(6));
     const separator = decoded.indexOf(":");
-    if (separator < 0) throw new Error("Missing Basic credential separator.");
+    if (separator < 0) {
+      return {
+        clientId: decodeURIComponent(decoded),
+      };
+    }
     return {
       clientId: decodeURIComponent(decoded.slice(0, separator)),
       clientSecret: decodeURIComponent(decoded.slice(separator + 1)),

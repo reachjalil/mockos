@@ -1,19 +1,28 @@
 # mockOS testing skill
 
-Status: Accepted M5 workflow plus bounded M6 guidance with sampled deployed evidence
-Last reviewed: 2026-07-22
+Status: Accepted M5 workflow plus bounded M6 guidance and MSAL/Okta Auth JS local official-client recipes
+Last reviewed: 2026-07-26
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
 teaches an agent to inventory an application's identity configuration, capability-
 negotiate the authenticated MCP server, create an isolated Entra ID or Okta
 environment, seed synthetic identities, register a client, and wire request-derived
-provider metadata.
+provider metadata. It distinguishes confidential registrations with a creation-only
+secret from public registrations with no secret.
 
 The workflow covers the accepted M5 slice plus bounded M6 recipes:
 
 - authorization code with required S256 PKCE for Entra ID or Okta;
+- bounded local official-client recipes for `@azure/msal-node` 5.4.2 as a confidential
+  Entra client and `@okta/okta-auth-js` 8.0.1 as a public Okta client, both using MCP
+  for setup, observation, lifecycle, and cleanup over owned Wrangler HTTPS;
+- SDK 1.29 tools-list verification that the Draft-7 public/confidential input
+  conditional and exact result branches match runtime validation;
 - rotating refresh grants with scope narrowing, replay cautions, and provider-correct
   lifecycle revocation failures;
+- public Okta access-token revocation that is owner-bound and discovery-advertised as
+  `none`, with a cross-client negative regression and actual-client state-change
+  postcondition, while introspection remains confidential-client-only;
 - Okta device authorization, activation, introspection, and revocation within the
   implemented authorization-server boundary;
 - SCIM discovery and versioned synthetic User/Group CRUD/PATCH with weak ETags;
@@ -42,15 +51,31 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   overlapping ordered-sequence assertions before cleanup.
 
 The skill treats capability discovery as connected-server evidence, not proof that
-local source is deployed. Its evidence vocabulary is strict: source means exact-
-revision local/hosted-CI execution; deployed additionally requires an exact mockOS
-deployment/version and recorded acceptance; verified-live is reserved for sanitized,
-reviewed evidence from a real provider. A provisioning call returns a queued run; the
+local source is deployed. Its evidence vocabulary has eight independent levels:
+designed (D), implemented (I), source-tested (S), integration-tested (X),
+SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
+(P). Hosted CI remains S; H requires an exact remote serving version and recorded
+smoke; V requires sanitized reviewed real-provider comparison. The two official-client
+recipes are D/I/S/X/Q yes and H/V/P no. A provisioning call returns a queued run; the
 skill polls bounded outbound evidence and checks target state before reporting success.
 It never places target credentials in command arguments, never reuses a platform `mk_`
 Access Key or the exact active non-prefixed self-host Access Key as a mock SCIM
 credential, and requires target Bearer redaction in captured evidence. A key-rotation
 collision with a saved target must fail before outbound execution.
+
+For application registration, the skill never fabricates an empty secret. It retains a
+confidential client's returned secret only in memory or a test secret store and expects
+it exactly once. For a public client it requires `clientType: "public"`, omits
+`clientSecret`, rejects `client_credentials`, and requires the response to omit the
+secret. It treats public refresh tokens as bearer credentials rather than as proof of
+client authentication.
+
+For the Auth JS log claim, it parses exact exercised fields as `[REDACTED]` and checks
+raw, `encodeURIComponent`, and URL-form-encoded credential/token representations. The
+skill does not promote that bounded proof to arbitrary-encoding classification. The
+shared official-client parent and cleanup verifier also reject inherited
+`NODE_TLS_REJECT_UNAUTHORIZED=0`, use distinct provider/inspector ports, and require
+both ports to be released.
 
 The [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) is the immutable
 deployed reference for the sampled six-slice acceptance. It does not turn an arbitrary
@@ -65,8 +90,8 @@ session is terminated. Every identity, password, application secret, directory
 Bearer/SSWS value, target credential, and provider token used as test data must be
 synthetic.
 
-The rest of the Okta Classic Authn transaction machine, broad Graph/Okta API parity,
-SAML, unrecorded deployment qualification, and npm publication remain outside the
-workflow. Use only immutable CI/deployment records linked by the implementation
-ledger, and never present mockOS source or deployment evidence as verified-live
-provider parity.
+Browser callback UX, other MSAL/Auth JS versions, the rest of the Okta Classic Authn
+transaction machine, broad Graph/Okta API parity, SAML, unrecorded deployment
+qualification, and npm publication remain outside the workflow. Use only immutable
+CI/deployment records linked by the implementation ledger, and never present mockOS
+source or deployment evidence as verified-live provider parity.

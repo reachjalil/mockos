@@ -1,7 +1,7 @@
 # Okta behavior
 
-Status: Accepted bounded M3 implementation plus sampled deployed M6 Classic Authn; live-Okta parity is not claimed
-Last reviewed: 2026-07-22
+Status: Accepted bounded M3 plus sampled deployed M6 Classic Authn; bounded Okta Auth JS public-client local X/Q passed; live-Okta parity is not claimed
+Last reviewed: 2026-07-26
 
 The Okta profile parameterizes the shared identity engine and has a dedicated HTTP
 adapter for a bounded custom-authorization-server surface. In workers.dev path mode an
@@ -14,6 +14,33 @@ https://<worker-origin>/e/<environment-id>/oauth2/default
 Only the `default` authorization-server ID is accepted. A different ID returns an
 Okta-shaped OAuth error. A future custom domain can provide an organization-style host;
 workers.dev path mode cannot satisfy SDKs that insist on a bare Okta organization URL.
+
+## Application registrations
+
+The current source candidate distinguishes two OAuth client types:
+
+| Client type | Secret and grants | Token endpoint | Introspection | Revocation |
+| --- | --- | --- | --- | --- |
+| `confidential` | Default. Returns a synthetic secret exactly once and stores only its hash. | `client_secret_basic` or `client_secret_post` | Secret required | Secret required |
+| `public` | Returns and stores no secret. Supplying one or selecting `client_credentials` is rejected. | `none`; code redemption still requires S256 PKCE and refresh is bearer-token based | Not allowed | `none`, but the owning public client ID is still required |
+
+This is an application-authentication contract, not a statement that a public client is
+trusted. A public client cannot keep a secret. Its redirect URI, authorization code,
+PKCE verifier, refresh token, and client ID remain the security inputs for the bounded
+flow.
+
+The official MCP SDK 1.29 `tools/list` schema exposes the same contract with a strict
+object, optional advertised defaults, a Draft-7 public `if`/`then` that forbids a
+secret and narrows grants, and exact public/confidential output branches. Runtime
+validation and machine discovery therefore agree.
+
+Public revocation is deliberately owner-bound. The service hashes the supplied token
+and updates only rows whose stored `client_id` matches the caller, so identifying one
+public client cannot revoke another application's token family. Unknown and
+already-revoked tokens remain idempotent success. Public introspection is not exposed;
+discovery advertises only confidential methods for introspection.
+A core negative regression preserves another application's active access token and
+rotated refresh family after an unrelated public client attempts revocation.
 
 ## OIDC and OAuth surface
 
@@ -28,12 +55,21 @@ workers.dev path mode cannot satisfy SDKs that insist on a bare Okta organizatio
 | `POST /oauth2/default/v1/introspect` | Active/inactive access- and refresh-token state after client authentication |
 | `POST /oauth2/default/v1/revoke` | Access- or refresh-token revocation; unknown tokens are idempotent |
 
-Client authentication accepts `client_secret_basic` and `client_secret_post` on the
-token-management endpoints that require a secret. Authorization-code redemption emits
-RS256 ID and access tokens plus a refresh token when `offline_access` is requested and
-the application registration permits the `refresh_token` grant.
+Token discovery advertises `client_secret_basic`, `client_secret_post`, and `none`.
+Confidential clients authenticate with a secret. Public code and refresh redemption
+omit a secret, and a spurious secret fails client authentication. Authorization-code
+redemption emits RS256 ID and access tokens plus a refresh token when
+`offline_access` is requested and the application registration permits the
+`refresh_token` grant.
 Okta-specific claims, request IDs, OAuth errors, and the implemented token lifecycles
 are covered by core, adapter, and Worker tests.
+
+Introspection discovery advertises only `client_secret_basic` and
+`client_secret_post`; the implementation rejects secretless introspection. Revocation
+discovery additionally advertises `none`. The official Auth JS 8.0.1 client uses a
+client-ID-only Basic compatibility request for its public revocation. The HTTP adapter
+normalizes that to no secret; the core still validates the registration is public and
+filters the revocation by its owning client ID.
 
 Refresh redemption authenticates the client, rejects scope escalation, rotates the
 token atomically within its family, and preserves original authentication time and
@@ -46,6 +82,41 @@ The device flow models `authorization_pending`, `slow_down`, successful activati
 `access_denied`, expiry, invalid clients, and one-time device-code use. The Worker
 integration test exercises pending and successful activation; the remaining states are
 covered at the core or HTTP-adapter boundary.
+
+## Okta Auth JS public-client qualification
+
+The current local candidate pins `@okta/okta-auth-js` 8.0.1. Through a real owned
+Wrangler HTTPS socket, Auth JS:
+
+1. calls `getWithRedirect` with S256 PKCE, `state`, `nonce`, login hint, and
+   `offline_access`;
+2. receives the synthetic hosted-login callback;
+3. calls `parseFromUrl`, exchanges the code, fetches JWKS, verifies the RS256 ID token,
+   and exposes the expected issuer, audience, subject, username, email, and nonce;
+4. calls `renewTokens` and receives a rotated refresh token;
+5. calls public `token.revoke` for the refreshed access token and receives HTTP 200;
+   the following lifecycle result revokes exactly one remaining access token, proving
+   the SDK call changed state despite the endpoint's idempotent success; and
+6. receives `invalid_grant` with `User account is disabled.` when a later refresh
+   follows MCP `suspend`.
+
+Because the exact test runs in Node without a browser global, the harness supplies the
+SDK-exposed `parseFromUrl._getLocation` seam and passes the callback URL explicitly.
+This qualifies that exact 8.0.1 Node harness, not a browser callback flow or another
+version. MCP is the management path for setup, request assertion, lifecycle, and
+cleanup.
+
+The exact flow is D/I/S/X/Q yes and H/V/P no. Read the
+[quickstart](../quickstarts/okta-auth-js-node.md) and
+[local evidence](../evidence/okta-auth-js-local-qualification.md). It does not promote
+the 22 documented OIDC fixtures, earlier workers.dev samples, or a source-CI job into
+official-client H, V, or P evidence.
+
+Its durable-evidence assertion parses the exercised password, callback code,
+code/verifier exchange, refresh, revocation-token, and successful token-response fields
+as `[REDACTED]`. It also rejects the raw, `encodeURIComponent`, and URL-form-encoded
+representations of every exercised password/code/verifier/token value. This is exact
+named-field and representation evidence, not arbitrary-encoding classification.
 
 ## Classic primary authentication
 
@@ -146,6 +217,10 @@ Okta OAuth, refresh, device, and lifecycle behavior remains qualified by local a
 hosted tests rather than that deployed sample. None is a live Okta-provider comparison
 or broad SDK compatibility claim.
 
+The separate [Okta Auth JS local record](../evidence/okta-auth-js-local-qualification.md)
+qualifies one public-client code/PKCE/JWKS/refresh/revoke/suspend path through Q. It
+does not establish H for any deployed Worker, V against a real Okta organization, or P.
+
 The separate [M6 workers.dev smoke](../evidence/m6-workers-dev-smoke.md) samples
 invalid-credential privacy, `MFA_REQUIRED`, state retrieval, `PASSWORD_EXPIRED`,
 `LOCKED_OUT`, `SUCCESS`, same-origin/cross-origin CORS, and exact body/header redaction
@@ -156,6 +231,10 @@ revocation, or race assertion remotely and is not verified-live Okta evidence.
 
 - `client_credentials` grant redemption is not mounted. M3 refresh redemption is
   accepted in local/hosted tests, but the deployed acceptance did not sample it.
+- Public clients are limited to the bounded code, refresh, and owner-bound revocation
+  contract above. They cannot configure a secret, use `client_credentials`, or call
+  introspection. Refresh tokens remain bearer credentials without DPoP or another
+  sender constraint.
 - Discovery and `get_wellknown_urls` return a UserInfo URL, but `/v1/userinfo` is not
   implemented yet.
 - Classic `/api/v1/authn` is limited to primary authentication, state retrieval, and
@@ -169,7 +248,9 @@ revocation, or race assertion remotely and is not verified-live Okta evidence.
 - `/api/v1` uses Okta API-shaped errors and request IDs for the tested cases, including
   deterministic rate limiting; exact catalog parity is not claimed.
 - Exact error descriptions, cookies, hosted-login HTML, uncommon parameters, key
-  rollover, and organization-host SDK behavior can differ from Okta.
+  rollover, browser storage/callback behavior, Sign-In Widget, IDX, and
+  organization-host SDK behavior can differ from Okta. The Auth JS record qualifies
+  only 8.0.1 over local path-mode HTTPS with in-memory managers.
 - M5 outbound provisioning now has a deterministic Okta planner and delivery source
   candidate. Worker/full local gates are green, but the process e2e samples an
   Entra-shaped cycle; Okta deployed and live-provider comparison remain pending.

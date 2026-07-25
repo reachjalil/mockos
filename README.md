@@ -19,7 +19,9 @@
 > edges, signing-key rotation, token skew/broken tokens, and 200/201 group overage are
 > green. This is sampled deployed mock evidence, not corpus-wide or verified-live
 > parity. The guarded GitHub promotion workflows remain unqualified. This is not yet a
-> stable npm release or a production-SLA service. See the
+> stable npm release or a production-SLA service. Separate local official-client
+> candidates qualify `@azure/msal-node` 5.4.2 and `@okta/okta-auth-js` 8.0.1 through
+> D/I/S/X/Q only; neither has H/V/P evidence. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
 
 mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
@@ -41,6 +43,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - An Okta OIDC profile covering discovery, hosted authorization code + S256 PKCE,
   refresh exchange, token introspection and revocation, and RFC 8628 device
   authorization in local tests
+- Explicit confidential and public OAuth application registrations. Public clients
+  have no stored or returned secret, cannot use `client_credentials`, can redeem code
+  and refresh grants without a secret, and can revoke only their own tokens;
+  introspection remains confidential-client-only
 - Entra and Okta refresh-token rotation with scope narrowing, replay-family
   invalidation, and lifecycle-driven access/refresh revocation
 - An accepted SCIM 2.0 Users/Groups surface at `/scim/v2`, bounded
@@ -78,6 +84,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
   claims, and JWKS signature verification in focused local suites
 - An accepted authenticated Agents SDK MCP server whose M5 registry adds
   `run_provisioning_cycle` as tool 15
+- Local actual-network official-client qualifications for MSAL Node 5.4.2 as an Entra
+  confidential client and Okta Auth JS 8.0.1 as an Okta public client. Both use MCP
+  for setup, observation, lifecycle, and cleanup and traverse an owned local Wrangler
+  HTTPS process; each is D/I/S/X/Q evidence only
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -110,18 +120,15 @@ npm publication, or live-provider parity. M6 has a separate
 for all six bounded slices. It does not promote the generated case index or fixture
 corpora to corpus-wide deployed or verified-live parity.
 
-## Evidence tiers
+## Evidence levels
 
-- **Source** means an exact revision has linked automated local and/or hosted-CI
-  evidence. Hosted CI is still source evidence.
-- **Deployed** means an exact source revision and exact mockOS deployment/version have
-  a recorded smoke or acceptance run.
-- **Verified-live** is reserved for sanitized, independently reviewed comparison with
-  a real Entra ID tenant or Okta organization. No current fixture or milestone has
-  `verified-live` status.
-
-Source, deployed, and verified-live are independent claims; evidence at one tier never
-silently promotes another.
+mockOS records designed (D), implemented (I), source-tested (S),
+integration-tested (X), SDK/client-qualified (Q), hosted-smoke (H), verified-live (V),
+and production-ready (P) independently. Local official-client execution can establish
+X/Q without H. Hosted CI remains S; H requires an exact remote serving version and
+recorded smoke. V requires sanitized, reviewed comparison with a real provider. No
+current fixture or milestone is V or P. See the
+[documentation index](./docs/README.md) for the exact definitions.
 
 ## Local verification
 
@@ -133,8 +140,12 @@ pnpm check
 ```
 
 The concrete [local curl walkthrough](./docs/quickstarts/curl.md) uses the implemented
-control and protocol routes. Read [self-hosting](./docs/self-hosting.md) before trying
-Wrangler and [known limitations](./docs/known-limitations.md) before choosing an SDK.
+control and protocol routes. The
+[Entra MSAL Node](./docs/quickstarts/entra-msal-node.md) and
+[Okta Auth JS](./docs/quickstarts/okta-auth-js-node.md) guides reproduce the two
+bounded local official-client paths. Read [self-hosting](./docs/self-hosting.md) before
+trying Wrangler and [known limitations](./docs/known-limitations.md) before choosing
+an SDK.
 The sanitized [M6 workers.dev smoke evidence](./docs/evidence/m6-workers-dev-smoke.md)
 records the latest exact accepted candidate, version IDs, exercised flow, and cleanup result for
 [staging](https://mockos-staging.workspaceagent.workers.dev) and

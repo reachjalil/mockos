@@ -88,44 +88,175 @@ export const identitySeedSchema = z
   .strict();
 export type IdentitySeed = z.infer<typeof identitySeedSchema>;
 
-export const createApplicationInputSchema = z
-  .object({
-    name: z.string().trim().min(1).max(120),
-    clientId: z.string().min(3).max(256).optional(),
-    clientSecret: z.string().min(8).max(1024).optional(),
-    redirectUris: z.array(z.url()).min(1).max(50),
-    grantTypes: z
-      .array(
-        z.enum([
-          "authorization_code",
-          "refresh_token",
-          "client_credentials",
-          "urn:ietf:params:oauth:grant-type:device_code",
-        ])
-      )
-      .min(1)
-      .default(["authorization_code", "refresh_token"]),
-    appRoles: z.array(z.string().min(1).max(128)).max(100).default([]),
-    groupClaimsMode: z.enum(["none", "security", "all"]).default("none"),
-  })
-  .strict();
-export type CreateApplicationInput = z.infer<typeof createApplicationInputSchema>;
+export const oauthClientTypeSchema = z.enum(["confidential", "public"]);
+export type OAuthClientType = z.infer<typeof oauthClientTypeSchema>;
 
-export const applicationRegistrationSchema = createApplicationInputSchema
-  .omit({ clientId: true, clientSecret: true })
-  .extend({
-    id: z.string().min(1),
-    clientId: z.string().min(3),
+const oauthGrantTypeSchema = z.enum([
+  "authorization_code",
+  "refresh_token",
+  "client_credentials",
+  "urn:ietf:params:oauth:grant-type:device_code",
+]);
+const publicOAuthGrantTypeSchema = z.enum([
+  "authorization_code",
+  "refresh_token",
+  "urn:ietf:params:oauth:grant-type:device_code",
+]);
+const defaultApplicationGrantTypes = ["authorization_code", "refresh_token"] as const;
+const applicationNameSchema = z.string().trim().min(1).max(120);
+const applicationRedirectUrisSchema = z.array(z.url()).min(1).max(50);
+const applicationAppRolesSchema = z.array(z.string().min(1).max(128)).max(100);
+const applicationGroupClaimsModeSchema = z.enum(["none", "security", "all"]);
+const applicationInputShape = {
+  name: applicationNameSchema,
+  clientId: z.string().min(3).max(256).optional(),
+  clientType: oauthClientTypeSchema.default("confidential"),
+  clientSecret: z.string().min(8).max(1024).optional(),
+  redirectUris: applicationRedirectUrisSchema,
+  grantTypes: z
+    .array(oauthGrantTypeSchema)
+    .min(1)
+    .default([...defaultApplicationGrantTypes]),
+  appRoles: applicationAppRolesSchema.default([]),
+  groupClaimsMode: applicationGroupClaimsModeSchema.default("none"),
+} as const;
+const applicationInputObjectSchema = z.object(applicationInputShape).strict();
+type RawCreateApplicationInput = z.input<typeof applicationInputObjectSchema>;
+type ApplicationInputCommon = Omit<
+  RawCreateApplicationInput,
+  "clientType" | "clientSecret" | "grantTypes"
+>;
+type PublicGrantType = z.infer<typeof publicOAuthGrantTypeSchema>;
+type OAuthGrantType = z.infer<typeof oauthGrantTypeSchema>;
+type GroupClaimsMode = z.infer<typeof applicationGroupClaimsModeSchema>;
+
+export type CreateApplicationInput =
+  | (ApplicationInputCommon & {
+      clientType: "public";
+      grantTypes?: PublicGrantType[];
+    })
+  | (ApplicationInputCommon & {
+      clientType?: "confidential";
+      clientSecret?: string;
+      grantTypes?: OAuthGrantType[];
+    });
+
+type NormalizedApplicationInputCommon = Omit<
+  ApplicationInputCommon,
+  "appRoles" | "groupClaimsMode"
+> & {
+  appRoles: string[];
+  groupClaimsMode: GroupClaimsMode;
+};
+type NormalizedCreateApplicationInput =
+  | (NormalizedApplicationInputCommon & {
+      clientType: "public";
+      grantTypes: PublicGrantType[];
+    })
+  | (NormalizedApplicationInputCommon & {
+      clientType: "confidential";
+      clientSecret?: string;
+      grantTypes: OAuthGrantType[];
+    });
+
+const validateApplicationAuthentication = (
+  input: RawCreateApplicationInput,
+  context: z.RefinementCtx
+) => {
+  if (input.clientType !== "public") return;
+  if (input.clientSecret !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["clientSecret"],
+      message: "Public OAuth clients must not configure a client secret.",
+    });
+  }
+  if (input.grantTypes?.includes("client_credentials")) {
+    context.addIssue({
+      code: "custom",
+      path: ["grantTypes"],
+      message: "Public OAuth clients cannot use client_credentials.",
+    });
+  }
+};
+
+const applicationInputConditionalJsonSchema = {
+  allOf: [
+    {
+      if: {
+        properties: { clientType: { const: "public" } },
+        required: ["clientType"],
+      },
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the JSON Schema conditional keyword.
+      then: {
+        not: { required: ["clientSecret"] },
+        properties: {
+          grantTypes: {
+            items: {
+              enum: [...publicOAuthGrantTypeSchema.options],
+            },
+          },
+        },
+      },
+    },
+  ],
+};
+
+export const createApplicationInputSchema = applicationInputObjectSchema
+  .superRefine(validateApplicationAuthentication)
+  .meta(applicationInputConditionalJsonSchema) as z.ZodType<
+  NormalizedCreateApplicationInput,
+  CreateApplicationInput
+>;
+
+const applicationRegistrationCommonShape = {
+  name: applicationNameSchema,
+  id: z.string().min(1),
+  clientId: z.string().min(3),
+  redirectUris: applicationRedirectUrisSchema,
+  appRoles: applicationAppRolesSchema,
+  groupClaimsMode: applicationGroupClaimsModeSchema,
+  createdAt: z.iso.datetime(),
+} as const;
+const confidentialApplicationRegistrationSchema = z
+  .object({
+    ...applicationRegistrationCommonShape,
+    clientType: z.literal("confidential"),
     clientSecret: z.string().min(8),
-    createdAt: z.iso.datetime(),
+    grantTypes: z.array(oauthGrantTypeSchema).min(1),
   })
   .strict();
+const publicApplicationRegistrationSchema = z
+  .object({
+    ...applicationRegistrationCommonShape,
+    clientType: z.literal("public"),
+    grantTypes: z.array(publicOAuthGrantTypeSchema).min(1),
+  })
+  .strict();
+
+export const applicationRegistrationSchema = z.discriminatedUnion("clientType", [
+  confidentialApplicationRegistrationSchema,
+  publicApplicationRegistrationSchema,
+]);
 export type ApplicationRegistration = z.infer<typeof applicationRegistrationSchema>;
 
 /** Persisted application metadata. Client secrets are creation-only. */
-export const applicationSummarySchema = applicationRegistrationSchema
-  .omit({ clientSecret: true })
-  .strict();
+export const applicationSummarySchema = z.discriminatedUnion("clientType", [
+  z
+    .object({
+      ...applicationRegistrationCommonShape,
+      clientType: z.literal("confidential"),
+      grantTypes: z.array(oauthGrantTypeSchema).min(1),
+    })
+    .strict(),
+  z
+    .object({
+      ...applicationRegistrationCommonShape,
+      clientType: z.literal("public"),
+      grantTypes: z.array(publicOAuthGrantTypeSchema).min(1),
+    })
+    .strict(),
+]);
 export type ApplicationSummary = z.infer<typeof applicationSummarySchema>;
 
 export const semanticErrorCodeSchema = z.enum([
@@ -487,14 +618,23 @@ export const seedIdentitiesResultSchema = z
   .strict();
 export type SeedIdentitiesResult = z.infer<typeof seedIdentitiesResultSchema>;
 
-export const createApplicationToolInputSchema = z
+const createApplicationToolInputObjectSchema = z
   .object({
     environmentId: environmentIdSchema.optional(),
-    ...createApplicationInputSchema.shape,
+    ...applicationInputShape,
   })
   .strict();
-export type CreateApplicationToolInput = z.infer<
-  typeof createApplicationToolInputSchema
+export type CreateApplicationToolInput = CreateApplicationInput & {
+  environmentId?: string;
+};
+type NormalizedCreateApplicationToolInput = NormalizedCreateApplicationInput & {
+  environmentId?: string;
+};
+export const createApplicationToolInputSchema = createApplicationToolInputObjectSchema
+  .superRefine(validateApplicationAuthentication)
+  .meta(applicationInputConditionalJsonSchema) as z.ZodType<
+  NormalizedCreateApplicationToolInput,
+  CreateApplicationToolInput
 >;
 
 export const brokenTokenVariantSchema = z.enum([

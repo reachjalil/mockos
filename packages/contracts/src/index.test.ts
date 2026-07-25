@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
+  type ApplicationRegistration,
   applicationListPageSchema,
   applicationRegistrationSchema,
   applicationSummarySchema,
@@ -7,6 +8,9 @@ import {
   assertRequestsToolInputSchema,
   brokenTokenVariantSchema,
   configureEnvironmentToolInputSchema,
+  type CreateApplicationInput,
+  type CreateApplicationToolInput,
+  createApplicationToolInputSchema,
   environmentConfigSchema,
   getRequestLogToolInputSchema,
   identitySeedSchema,
@@ -28,6 +32,42 @@ import {
 } from "./index";
 
 describe("wire contracts", () => {
+  it("keeps application client variants statically exact", () => {
+    type PublicInput = Extract<CreateApplicationInput, { clientType: "public" }>;
+    type ConfidentialInput = Extract<
+      CreateApplicationInput,
+      { clientType?: "confidential" }
+    >;
+    type PublicToolInput = Extract<
+      CreateApplicationToolInput,
+      { clientType: "public" }
+    >;
+    type PublicRegistration = Extract<
+      ApplicationRegistration,
+      { clientType: "public" }
+    >;
+    type ConfidentialRegistration = Extract<
+      ApplicationRegistration,
+      { clientType: "confidential" }
+    >;
+
+    expectTypeOf<PublicInput>().not.toHaveProperty("clientSecret");
+    expectTypeOf<PublicToolInput>().not.toHaveProperty("clientSecret");
+    expectTypeOf<ConfidentialInput>()
+      .toHaveProperty("clientSecret")
+      .toEqualTypeOf<string | undefined>();
+    expectTypeOf<PublicRegistration>().not.toHaveProperty("clientSecret");
+    expectTypeOf<ConfidentialRegistration>()
+      .toHaveProperty("clientSecret")
+      .toEqualTypeOf<string>();
+    expectTypeOf<PublicRegistration>()
+      .toHaveProperty("appRoles")
+      .toEqualTypeOf<string[]>();
+    expectTypeOf<PublicRegistration>()
+      .toHaveProperty("groupClaimsMode")
+      .toEqualTypeOf<"none" | "security" | "all">();
+  });
+
   it("accepts the two locked provider identifiers", () => {
     expect(providerIdSchema.options).toEqual(["entra", "okta"]);
   });
@@ -106,6 +146,7 @@ describe("wire contracts", () => {
       id: "app_12345678",
       name: "Console client",
       clientId: "client_123",
+      clientType: "confidential" as const,
       redirectUris: ["https://client.example/callback"],
       grantTypes: ["authorization_code" as const],
       appRoles: [],
@@ -125,6 +166,59 @@ describe("wire contracts", () => {
         clientSecret: "display-once-secret",
       })
     ).toMatchObject({ clientSecret: "display-once-secret" });
+    const publicRegistration = applicationRegistrationSchema.parse({
+      ...summary,
+      clientType: "public",
+    });
+    expect(publicRegistration).not.toHaveProperty("clientSecret");
+    expect(() =>
+      applicationRegistrationSchema.parse({
+        ...publicRegistration,
+        clientSecret: "must-not-exist",
+      })
+    ).toThrow();
+    expect(() =>
+      createApplicationToolInputSchema.parse({
+        name: "Invalid public service client",
+        clientType: "public",
+        redirectUris: ["https://client.example/callback"],
+        grantTypes: ["client_credentials"],
+      })
+    ).toThrow();
+    expect(() =>
+      createApplicationToolInputSchema.parse({
+        name: "Invalid public secret client",
+        clientType: "public",
+        clientSecret: "must-not-exist",
+        redirectUris: ["https://client.example/callback"],
+      })
+    ).toThrow();
+    expect(
+      createApplicationToolInputSchema.parse({
+        name: "Legacy confidential client",
+        redirectUris: ["https://client.example/callback"],
+      })
+    ).toEqual({
+      name: "Legacy confidential client",
+      clientType: "confidential",
+      redirectUris: ["https://client.example/callback"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      appRoles: [],
+      groupClaimsMode: "none",
+    });
+    expect(() =>
+      applicationSummarySchema.parse({
+        ...summary,
+        clientType: "public",
+        grantTypes: ["client_credentials"],
+      })
+    ).toThrow();
+    const { clientType: _clientType, ...missingClientType } = summary;
+    expect(() => applicationSummarySchema.parse(missingClientType)).toThrow();
+    const { appRoles: _appRoles, ...missingAppRoles } = summary;
+    expect(() => applicationSummarySchema.parse(missingAppRoles)).toThrow();
+    const { groupClaimsMode: _groupClaimsMode, ...missingGroupClaimsMode } = summary;
+    expect(() => applicationSummarySchema.parse(missingGroupClaimsMode)).toThrow();
     expect(() =>
       applicationListPageSchema.parse({
         applications: Array.from(

@@ -1,7 +1,7 @@
 # Threat model
 
-Status: M3/M5 controls accepted; bounded M6 deployed sample retained; OAuth evidence redaction has local MSAL X/Q and Worker source proof
-Last reviewed: 2026-07-25
+Status: M3/M5 controls accepted; bounded M6 deployed sample retained; OAuth evidence redaction has local MSAL and Okta Auth JS X/Q plus Worker source proof
+Last reviewed: 2026-07-26
 
 ## Assets and trust boundaries
 
@@ -24,8 +24,9 @@ presented as a production identity control. Environment URLs and synthetic direc
 credentials should be treated as test artifacts, not security boundaries.
 
 Primary threats are environment-ID guessing, cross-environment SQL access, OAuth
-redirect abuse, code replay, refresh-token theft, signing-key confusion, stored XSS in
-hosted pages or logs, refresh-family replay races, lifecycle/token-state drift,
+redirect abuse, code replay, public-client impersonation, cross-client revocation,
+refresh-token theft, signing-key confusion, stored XSS in hosted pages or logs,
+refresh-family replay races, lifecycle/token-state drift,
 cross-environment directory access, authentication-state user enumeration, Authn
 state/session capability theft or replay, parser or body resource exhaustion, secret
 leakage through form/JSON bodies or redirect locations in durable logs, unbounded
@@ -45,14 +46,19 @@ outbound provisioning targets.
   to exactly one environment Durable Object and its SQLite state.
 - Redirect URIs are compared exactly. Authorization codes are short-lived, one-time,
   and S256-PKCE-bound where configured.
-- Application secrets, refresh tokens, and tracked OAuth access tokens are stored as
-  hashes. Signing keys remain environment-local. The active and pre-published successor
-  private JWKs stay inside the signing service; rotation scrubs the previous active
-  private JWK transactionally and bounds the ring to four rows. A second rotation is
-  blocked for the exact 26-hour rollback/verification-overlap window qualified for
-  built-in Worker/MCP issuance with a fixed one-hour lifetime and bounded skew. Trusted
-  public-core test seams can create longer or overridden temporal claims and are outside
-  that guarantee.
+- Confidential application secrets, refresh tokens, and tracked OAuth access tokens
+  are stored as hashes. Public registrations store no secret or secret hash, reject a
+  supplied secret and `client_credentials`, and return no secret. Signing keys remain
+  environment-local. The active and pre-published successor private JWKs stay inside
+  the signing service; rotation scrubs the previous active private JWK transactionally
+  and bounds the ring to four rows. A second rotation is blocked for the exact 26-hour
+  rollback/verification-overlap window qualified for built-in Worker/MCP issuance with
+  a fixed one-hour lifetime and bounded skew. Trusted public-core test seams can create
+  longer or overridden temporal claims and are outside that guarantee.
+- SDK 1.29 `tools/list` exposes the application distinction as a strict object with
+  optional advertised defaults, a Draft-7 public `if`/`then` that forbids
+  `clientSecret` and narrows grants, and exact output branches. A regression compares
+  that discovered machine contract with runtime behavior.
 - Classic Authn verifies the password before returning account state and stores only
   hashes of bearer capabilities. Valid state reads slide expiry to five minutes from
   the read; one-time session capabilities retain a fixed five-minute issuance expiry.
@@ -79,6 +85,16 @@ outbound provisioning targets.
 - Refresh grants authenticate the client, forbid scope escalation, consume and replace
   the token atomically, preserve absolute family expiry, and revoke the family plus
   associated tracked access tokens on replay or concurrent double redemption.
+- Secretless token authentication succeeds only for a known public registration when
+  no secret is supplied; a spurious secret fails. Introspection always requires a
+  confidential client's secret. Public revocation requires the owning client ID and
+  changes only access-token rows or refresh families stored for that ID. The Okta HTTP
+  adapter accepts the pinned Auth JS client-ID-only Basic compatibility shape as
+  public `none`; it does not turn revocation into an anonymous cross-client mutation.
+  A core negative regression preserves another application's active access token and
+  rotated refresh family. In the SDK run, lifecycle revokes exactly one remaining
+  access token after SDK revocation, proving state changed despite RFC 7009's
+  idempotent 200 response.
 - Provider-valid disable, suspend, deprovision, and delete transitions revoke effective
   access/refresh credentials in the same transaction as the state change. User deletion
   also removes Group membership and increments affected Group versions atomically.
@@ -99,19 +115,23 @@ outbound provisioning targets.
   endpoints are derived from that context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
-- The local MSAL acceptance harness keeps TLS verification enabled. For readiness, the
-  parent anchors the captured Wrangler leaf, validates its `localhost` hostname, and
-  requires the owned child's nonce. It writes the certificate to a temporary
-  mode-`0600` CA file and passes that file to the client through
-  `NODE_EXTRA_CA_CERTS`; this augments standard Node roots rather than exclusively
-  pinning the certificate. The client independently requires an HTTPS `localhost`
-  origin and the same nonce. Cleanup deletes the file, and the harness neither installs
-  a system CA nor uses `NODE_TLS_REJECT_UNAUTHORIZED=0`. No alternate-certificate
-  rejection is qualified.
-- The local signal-cleanup probe interrupts a ready harness with `SIGTERM` and requires
-  parent exit `143`, a reusable loopback port, an absent Wrangler process group, and
-  removed temporary state. It does not establish uncatchable `SIGKILL`, Windows
-  process-tree, or every active-client interruption boundary.
+- The MSAL and Okta Auth JS wrappers configure one shared local official-client
+  acceptance harness, which keeps TLS verification enabled. For readiness, the parent
+  anchors the captured Wrangler leaf, validates its `localhost` hostname, and requires
+  the owned child's nonce. It writes the certificate to a temporary mode-`0600` CA
+  file and passes that file to the client through `NODE_EXTRA_CA_CERTS`; this augments
+  standard Node roots rather than exclusively pinning the certificate. Each client
+  independently requires an HTTPS `localhost` origin and the same nonce. Cleanup
+  deletes the file. The parent and cleanup harnesses reject an inherited
+  `NODE_TLS_REJECT_UNAUTHORIZED=0`, strip that variable from child environments, and
+  have focused negative guards. They never install a system CA. No
+  alternate-certificate rejection is qualified.
+- Each provider wrapper configures the shared signal-cleanup verifier. It interrupts a
+  ready harness with `SIGTERM` and requires parent exit `143`, a reusable loopback
+  provider port and Wrangler inspector port, an absent Wrangler process group, and
+  removed temporary state. Explicit distinct inspector ports allow the Entra and Okta
+  qualifications to run concurrently. This does not establish uncatchable `SIGKILL`,
+  Windows process-tree, or every active-client interruption boundary.
 
 The [M3 workers.dev smoke](../evidence/m3-workers-dev-smoke.md) exercises a bounded
 authenticated MCP, environment isolation, OIDC/JWKS, refresh/lifecycle, directory,
@@ -134,6 +154,17 @@ the harness plus focused lifecycle Worker test prove that its password, client s
 authorization code, PKCE verifier, issued tokens, and redirect code are absent from
 durable evidence. This is local S/X/Q evidence, not H, a penetration test, V, or P.
 
+The [Okta Auth JS local record](../evidence/okta-auth-js-local-qualification.md)
+separately exercises a real local HTTPS socket with pinned
+`@okta/okta-auth-js` 8.0.1 and the official MCP SDK. Public creation returns no secret;
+the exact code/JWKS/refresh/revoke/suspended-refresh sequence and functional revocation
+postcondition pass; and owner isolation has a core negative regression. The harness
+requires `[REDACTED]` in each exercised named field and rejects raw, URI-encoded, and
+URL-form-encoded representations of its password, code, verifier, and
+initial/refreshed tokens. This is exact representation evidence, not arbitrary
+encoding classification. It is local S/X/Q evidence, not H, a penetration test, V, or
+P.
+
 Those records establish deployed mock acceptance only when an exact revision is bound
 to an exact mockOS deployment/version and recorded run. Verified-live evidence is a
 separate tier reserved for sanitized, independently reviewed comparison with a real
@@ -154,6 +185,11 @@ policy is based on names and media types and cannot classify every credential em
 in arbitrary content. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
+
+Public-client refresh tokens are bearer credentials. The local Auth JS result does not
+provide sender constraint, DPoP, browser-storage hardening, cross-process transaction
+isolation, or distributed replay protection. Production applications must not infer
+those controls from secretless application registration or owner-bound revocation.
 
 Active and successor private signing JWKs are stored in per-environment SQLite without
 application-level encryption. Use only synthetic environments and apply the deployment

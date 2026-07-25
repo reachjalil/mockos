@@ -1,14 +1,15 @@
 # Known limitations
 
-Status: Accepted M3/M5 and sampled M6 boundaries retained; bounded MSAL Node local X/Q and source-only M7 documented with remaining limits
-Last reviewed: 2026-07-25
+Status: Accepted M3/M5 and sampled M6 boundaries retained; bounded MSAL Node and Okta Auth JS local X/Q plus source-only M7 documented with remaining limits
+Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
 SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
 (P) are separate levels. Hosted CI is source execution; H requires an exact remote
 serving version and recorded smoke; V requires sanitized, reviewed real-provider
-comparison. The bounded MSAL Node slice is D/I/S/X/Q yes and H/V/P no. The bounded M6
-slice has sampled H evidence, but no current fixture is V or P.
+comparison. The bounded MSAL Node and Okta Auth JS slices are each D/I/S/X/Q yes and
+H/V/P no. The bounded M6 slice has sampled H evidence, but no current fixture is V or
+P.
 
 - The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
   eight M6 token/key/overage cases marked `implemented` that execute through an
@@ -30,6 +31,28 @@ slice has sampled H evidence, but no current fixture is V or P.
   qualify `@azure/msal-browser`, public-client helpers, device or client-credential
   grants, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real Entra
   tenant, or P.
+- The only official Okta identity-client qualification is
+  `@okta/okta-auth-js` 8.0.1 for one public application, custom authorization server,
+  authorization code with S256 PKCE, Node `parseFromUrl` using the exact
+  SDK-exposed `_getLocation` seam, JWKS-backed ID-token verification, refresh rotation,
+  owner-bound public access-token revocation, and refresh rejection after `suspend`.
+  It passes through local Wrangler HTTPS and uses
+  `@modelcontextprotocol/sdk` 1.29.0 for management. This is local X/Q evidence, not
+  workers.dev, hosted Cloud, custom-domain H, or real-organization V. It does not
+  qualify browser callback UX, Sign-In Widget, IDX, other Auth JS versions, UserInfo,
+  device flow, Classic Authn, Sessions, Factors, access-token signature validation,
+  distributed transaction storage, or P.
+- Public OAuth registration is explicit, not a general anonymous-client mode. Public
+  clients store and receive no secret and cannot request `client_credentials`.
+  SDK 1.29 `tools/list` exposes the same conditional input and exact result branches;
+  omitted `clientType` remains confidential.
+  Code/refresh redemption requires the known public client with no spurious secret.
+  Introspection stays confidential-client-only. Revocation accepts `none` and the
+  Auth JS client-ID-only Basic compatibility shape, but updates only tokens owned by
+  that public client. A core negative regression protects another application's active
+  access token and rotated family, while the actual-client lifecycle count proves SDK
+  revocation changed state rather than merely returning idempotent 200. Refresh tokens
+  remain bearer credentials without DPoP or another sender constraint.
 - The bounded SCIM parser/PATCH/core service, HTTP adapter, and Worker mount are
   accepted for M3. All 113 SCIM fixtures execute green against the HTTP composition
   locally and in hosted CI, with focused Worker integration tested separately. The
@@ -77,18 +100,25 @@ slice has sampled H evidence, but no current fixture is V or P.
   tests remain source evidence, and neither tier is a general log-security audit.
 - Structured provider request-log capture now redacts secret-bearing form and JSON
   keys across routes, sensitive request/response header families, and secret query or
-  fragment fields in redirect `Location` values before persistence. The MSAL
-  actual-network flow and focused lifecycle Worker test prove absence of its password,
-  client secret, authorization code, PKCE verifier, and issued token values while
-  retaining the safe request sequence. This is not a general content-classification or
-  log-security audit: non-secret structured protocol fields and non-JSON response bodies
-  may still be retained. Malformed form/JSON, primitive JSON request, and
+  fragment fields in redirect `Location` values before persistence. The MSAL and Okta
+  Auth JS actual-network flows plus focused Worker coverage protect each named
+  exercised password, authorization code, PKCE verifier, and issued token field; the
+  confidential MSAL flow additionally checks its client secret. The Auth JS flow
+  parses its named fields as `[REDACTED]` and rejects raw, `encodeURIComponent`, and
+  URL-form-encoded representations of every exercised value. Safe request sequences
+  remain assertable. This is not arbitrary-encoding classification or a general
+  log-security audit: non-secret structured protocol fields and non-JSON response
+  bodies may still be retained. Malformed form/JSON, primitive JSON request, and
   unsupported-media request bodies are replaced rather than stored, but production
   credentials and personal data remain prohibited.
-- The MSAL harness has focused normal-completion and ready-Worker `SIGTERM` cleanup
-  evidence: the signal probe observes exit `143`, port release, Wrangler process-group
-  exit, and temporary-state removal. It does not qualify uncatchable `SIGKILL`, Windows
-  process-tree behavior, abrupt machine loss, or every interruption point while the
+- The MSAL and Auth JS wrappers share one local official-client parent and one cleanup
+  verifier. Each has focused normal-completion and ready-Worker `SIGTERM` cleanup
+  evidence: its signal probe observes exit `143`, provider and inspector port release,
+  Wrangler process-group exit, and temporary-state removal. Distinct explicit
+  inspector ports let both qualifications and cleanup probes pass concurrently. The
+  parent and cleanup verifier reject inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and
+  strip it from children. This does not qualify uncatchable `SIGKILL`, Windows
+  process-tree behavior, abrupt machine loss, or every interruption point while either
   client is active.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
@@ -101,7 +131,8 @@ slice has sampled H evidence, but no current fixture is V or P.
 - Refresh tokens rotate only within this deterministic mock. Scope escalation and
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
-  combination are not claimed.
+  combination are not claimed. Public-client refresh tokens are bearer credentials;
+  the Auth JS qualification does not add browser-storage or exfiltration resistance.
 - The M6 signing-key implementation keeps active and pre-published successor private
   JWKs in the environment's SQLite state; application-level encryption at rest is not
   implemented. Rotation scrubs the previous active private JWK in the same transaction
@@ -144,13 +175,14 @@ slice has sampled H evidence, but no current fixture is V or P.
 - The additive M7 management-read substrate is source-only. Application and scenario
   pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
   exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,
-  public HTTP route, or CLI command was added. Application creation still returns its
-  plaintext client secret exactly once; later application pages are a distinct strict
-  summary shape that contains neither the secret nor its stored hash. There is no
-  secret recovery endpoint, and an ambiguous failed create response must not be retried
-  automatically. Hosted CI, exact-version deployment, private control-plane ownership
-  enforcement, no-store response handling, and console one-time-display behavior remain
-  pending evidence rather than inherited claims.
+  public HTTP route, or CLI command was added. Confidential application creation
+  returns its plaintext client secret exactly once; public creation returns none.
+  Later application pages are a distinct strict summary shape that contains neither a
+  secret nor its stored hash. There is no secret recovery endpoint, and an ambiguous
+  failed confidential create response must not be retried automatically. Hosted CI,
+  exact-version deployment, private control-plane ownership enforcement, no-store
+  response handling, and console one-time-display behavior remain pending evidence
+  rather than inherited claims.
 - M5 outbound provisioning is manually accepted for the exact tested source pair.
   Public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`, CI run
   `29957994237`, the six active Worker versions, both terminal-success Workflow runs,
@@ -195,10 +227,11 @@ slice has sampled H evidence, but no current fixture is V or P.
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
-- workers.dev cannot provide wildcard subdomains. The MSAL Node local qualification
-  proves an explicit request-derived path authority only against an HTTPS loopback
-  Wrangler listener; no workers.dev or Cloud client smoke has run. SDKs that require
-  an Okta-style bare organization host may not work before custom-domain cutover.
+- workers.dev cannot provide wildcard subdomains. The MSAL Node and Okta Auth JS local
+  qualifications prove explicit request-derived path authorities only against an HTTPS
+  loopback Wrangler listener; no workers.dev or Cloud official-client smoke has run.
+  SDKs that require an Okta-style bare organization host may not work before
+  custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
 - The staging and production workers.dev targets most recently passed the sampled M6

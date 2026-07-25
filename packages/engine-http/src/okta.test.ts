@@ -402,6 +402,26 @@ describe("Okta HTTP adapter", () => {
       token: "access-token",
       tokenTypeHint: "access_token",
     });
+
+    const publicRevocation = await app.request(
+      "https://do.internal/oauth2/default/v1/revoke",
+      withIssuer({
+        method: "POST",
+        headers: {
+          authorization: `Basic ${btoa("0oaPublicClient")}`,
+        },
+        body: new URLSearchParams({
+          token: "public-refresh-token",
+          token_type_hint: "refresh_token",
+        }),
+      })
+    );
+    expect(publicRevocation.status).toBe(200);
+    expect(engine.revoke).toHaveBeenLastCalledWith({
+      clientId: "0oaPublicClient",
+      token: "public-refresh-token",
+      tokenTypeHint: "refresh_token",
+    });
   });
 
   it("uses the engine callback for provider-shaped OAuth errors", async () => {

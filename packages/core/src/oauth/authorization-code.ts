@@ -205,8 +205,10 @@ export class AuthorizationCodeService {
       );
     }
     if (
-      input.clientSecret === undefined ||
-      !(await this.#applications.verifyClientSecret(input.clientId, input.clientSecret))
+      !(await this.#applications.verifyClientAuthentication(
+        input.clientId,
+        input.clientSecret
+      ))
     ) {
       throw new OAuthError("BAD_CLIENT_SECRET", "Client authentication failed.");
     }

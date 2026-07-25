@@ -64,6 +64,14 @@ describe("management Durable Object reads", () => {
         appRoles: ["Reader"],
         groupClaimsMode: "security",
       });
+      expect(firstCreated.clientType).toBe("confidential");
+      expect(secondCreated.clientType).toBe("confidential");
+      if (
+        firstCreated.clientType !== "confidential" ||
+        secondCreated.clientType !== "confidential"
+      ) {
+        throw new Error("Legacy application creation must default to confidential.");
+      }
       expect(firstCreated.clientSecret).toBe("display-once-secret-a");
       expect(secondCreated.clientSecret).toBe("display-once-secret-b");
 

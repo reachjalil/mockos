@@ -5,6 +5,7 @@ import {
   applicationSummarySchema,
   type ManagementListQuery,
   managementListQuerySchema,
+  type OAuthClientType,
 } from "@mockos/contracts";
 import { type Clock, type Rng, uuidFromRng } from "../determinism";
 import { hashSecret, randomId, verifySecret } from "../security";
@@ -27,6 +28,7 @@ export interface ApplicationRecord {
   readonly id: string;
   readonly name: string;
   readonly clientId: string;
+  readonly clientType: OAuthClientType;
   readonly redirectUris: readonly string[];
   readonly grantTypes: readonly OAuthGrantType[];
   readonly appRoles: readonly string[];
@@ -40,6 +42,7 @@ export interface CreateApplicationInput {
   readonly name: string;
   readonly clientId?: string;
   readonly clientSecret?: string;
+  readonly clientType?: OAuthClientType;
   readonly redirectUris: readonly string[];
   readonly grantTypes?: readonly OAuthGrantType[];
   readonly appRoles?: readonly string[];
@@ -47,8 +50,8 @@ export interface CreateApplicationInput {
 }
 
 export interface CreatedApplication extends ApplicationRecord {
-  /** Returned once. Only its SHA-256 hash is stored. */
-  readonly clientSecret: string;
+  /** Returned once for confidential clients. Only its SHA-256 hash is stored. */
+  readonly clientSecret?: string;
 }
 
 type ApplicationRow = SqlRow & {
@@ -72,6 +75,7 @@ const toApplication = (row: ApplicationRow): ApplicationRecord => ({
   id: row.id,
   name: row.name,
   clientId: row.client_id,
+  clientType: row.secret_hash === null ? "public" : "confidential",
   redirectUris: parseJson<string[]>(row.redirect_uris, []),
   grantTypes: parseJson<OAuthGrantType[]>(row.grant_types, []),
   appRoles: parseJson<string[]>(row.app_roles, []),
@@ -86,6 +90,7 @@ const toApplicationSummary = (row: ApplicationRow): ApplicationSummary => {
     id: application.id,
     name: application.name,
     clientId: application.clientId,
+    clientType: application.clientType,
     redirectUris: [...application.redirectUris],
     grantTypes: [...application.grantTypes],
     appRoles: [...application.appRoles],
@@ -117,12 +122,24 @@ export class ApplicationRepository {
     if (!name) throw new Error("Application name is required.");
     const id = input.id ?? idFromUuid("app", uuidFromRng(this.#rng));
     const clientId = input.clientId ?? uuidFromRng(this.#rng);
-    const clientSecret = input.clientSecret ?? randomId("mos", this.#rng);
-    if (clientSecret.length < 8) throw new Error("Client secret is too short.");
+    const clientType = input.clientType ?? "confidential";
+    if (clientType === "public" && input.clientSecret !== undefined) {
+      throw new Error("Public OAuth clients must not configure a client secret.");
+    }
+    const clientSecret =
+      clientType === "confidential"
+        ? (input.clientSecret ?? randomId("mos", this.#rng))
+        : undefined;
+    if (clientSecret !== undefined && clientSecret.length < 8) {
+      throw new Error("Client secret is too short.");
+    }
     const redirectUris = validateRedirectUris(input.redirectUris);
     const grantTypes = [
       ...new Set(input.grantTypes ?? ["authorization_code", "refresh_token"]),
     ];
+    if (clientType === "public" && grantTypes.includes("client_credentials")) {
+      throw new Error("Public OAuth clients cannot use client_credentials.");
+    }
     const now = this.#clock.now().toISOString();
     this.#store.run(
       `INSERT INTO applications (
@@ -132,7 +149,7 @@ export class ApplicationRepository {
       id,
       name,
       clientId,
-      await hashSecret(clientSecret),
+      clientSecret === undefined ? null : await hashSecret(clientSecret),
       JSON.stringify(redirectUris),
       JSON.stringify(grantTypes),
       JSON.stringify([...new Set(input.appRoles ?? [])]),
@@ -141,7 +158,10 @@ export class ApplicationRepository {
       now
     );
     const created = this.requireByClientId(clientId);
-    return { ...created, clientSecret };
+    return {
+      ...created,
+      ...(clientSecret !== undefined ? { clientSecret } : {}),
+    };
   }
 
   findById(id: string): ApplicationRecord | undefined {
@@ -224,6 +244,21 @@ export class ApplicationRepository {
       row &&
         typeof row.secret_hash === "string" &&
         (await verifySecret(clientSecret, row.secret_hash))
+    );
+  }
+
+  async verifyClientAuthentication(
+    clientId: string,
+    clientSecret: string | undefined
+  ): Promise<boolean> {
+    const row = this.#store.get<ApplicationRow>(
+      `${selectApplications} WHERE client_id = ?`,
+      clientId
+    );
+    if (!row) return false;
+    if (row.secret_hash === null) return clientSecret === undefined;
+    return (
+      clientSecret !== undefined && (await verifySecret(clientSecret, row.secret_hash))
     );
   }
 }

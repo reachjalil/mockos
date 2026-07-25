@@ -1,7 +1,7 @@
 # Test Entra authorization code with MSAL Node
 
 Status: Bounded `@azure/msal-node` 5.4.2 local actual-network and official-client qualification; no hosted, live-provider, or production-readiness claim
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 Use this guide to qualify one exact application path: a confidential MSAL Node client
 uses a deterministic mockOS Entra tenant, authorization code with S256 PKCE, and the
@@ -46,11 +46,16 @@ pnpm e2e:entra-msal
 pnpm e2e:entra-msal-cleanup
 ```
 
-The parent process starts the Worker with HTTPS:
+The Entra wrapper configures the same shared local official-client parent and cleanup
+verifier used by the Okta Auth JS qualification. The parent starts the Worker with
+HTTPS:
 
 ```text
 wrangler dev --local --ip 127.0.0.1 --port 8794 --local-protocol https
 ```
+
+The wrapper also assigns explicit loopback inspector port `18794`, distinct from the
+Okta wrapper's `18795`, so both qualifications can run concurrently.
 
 For readiness, the parent anchors the captured Wrangler leaf certificate, validates
 its `localhost` hostname, and requires the ownership nonce from the exact child it
@@ -61,6 +66,10 @@ independently requires an HTTPS `localhost` origin and the same ownership nonce.
 verification remains enabled, and the temporary file is deleted at cleanup. This does
 not prove that an alternate otherwise-trusted certificate would be rejected, and it is
 not a deployment certificate or production trust configuration.
+
+The shared parent and cleanup verifier reject an inherited
+`NODE_TLS_REJECT_UNAUTHORIZED=0` and strip it from child environments; focused
+negative guards protect both rules.
 
 A successful run ends with one JSON object similar to:
 
@@ -82,11 +91,12 @@ A successful run ends with one JSON object similar to:
 This output is local X/Q evidence. A future hosted CI run would remain source
 qualification; H requires a separate exact-version remote smoke.
 
-The cleanup command starts the same parent/Worker boundary on a free loopback port,
+The cleanup wrapper configures the shared verifier to start the same parent/Worker
+boundary on a free loopback port,
 waits until the owned HTTPS Worker and temporary trust material are ready, and sends
 `SIGTERM` to the parent. It succeeds only when the parent reports signal exit code
-`143`, the port can be rebound, the detached Wrangler process group no longer exists,
-and the temporary state directory is gone.
+`143`, the provider and inspector ports can be rebound, the detached Wrangler process
+group no longer exists, and the temporary state directory is gone.
 
 ## Keep management on MCP
 
@@ -103,8 +113,9 @@ uses the management Access Key only on that transport. It discovers the registry
 7. `delete_environment`.
 
 The Access Key must never be forwarded to the Entra authority, hosted sign-in form, or
-token endpoint. `create_application` returns the synthetic client secret once; keep it
-in process memory or a test secret store and do not write it to source or logs.
+token endpoint. This guide creates a confidential application, so
+`create_application` returns its synthetic client secret once; keep it in process
+memory or a test secret store and do not write it to source or logs.
 
 ## Configure the custom authority exactly
 

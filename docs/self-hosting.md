@@ -1,7 +1,7 @@
 # Self-hosting
 
-Status: Source-build guide with sampled M6 workers.dev acceptance; distribution limits remain
-Last reviewed: 2026-07-22
+Status: Source-build guide with sampled M6 workers.dev acceptance and bounded local official-client qualifications; distribution limits remain
+Last reviewed: 2026-07-26
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
 operations, and Wrangler authentication. Local repository checks do not require a
@@ -48,6 +48,27 @@ deployed evidence; M5 has a separate source-paired hosted acceptance record. The
 [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) samples the six bounded M6
 slices, including Classic Authn states/privacy/CORS/redaction, on exact staging and
 production versions; it is not corpus-wide or verified-live evidence.
+
+Application registration defaults to `clientType: "confidential"` and returns a
+synthetic secret exactly once. A public registration must explicitly use
+`clientType: "public"`, omit `clientSecret`, and cannot request
+`client_credentials`; it returns no secret. Public code and refresh grants omit a
+secret, public Okta revocation is owner-bound, and introspection remains confidential.
+
+After installing dependencies, reproduce the two local official-client paths with:
+
+```sh
+pnpm e2e:entra-msal
+pnpm e2e:entra-msal-cleanup
+pnpm e2e:okta-authjs
+pnpm e2e:okta-authjs-cleanup
+```
+
+These commands own local Wrangler HTTPS processes and temporary trust/state. They
+qualify only the exact versions and flows in the
+[MSAL Node](./quickstarts/entra-msal-node.md) and
+[Okta Auth JS](./quickstarts/okta-auth-js-node.md) guides. They do not qualify the
+deployed Worker, a real provider, or production readiness.
 
 Save a local CLI profile without putting the key directly in the command line:
 
