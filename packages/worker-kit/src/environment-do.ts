@@ -18,7 +18,6 @@ import {
   type ManagementListQuery,
   type MintedToken,
   type MintTokenRequest,
-  type MockLlmPlan,
   type MockLlmServerSummary,
   type MockLlmServerView,
   type MockMcpServerSummary,
@@ -90,6 +89,8 @@ import type {
   MockLlmAnthropicRuntimeResult,
   MockLlmOpenAiCatalog,
   MockLlmOpenAiRuntimeResult,
+  MockLlmProviderObservationFinish,
+  MockLlmProviderObservationStart,
 } from "@mockos/llm-mock";
 import { createMockMcpFetchHandler, type MockMcpObservation } from "@mockos/mcp-mock";
 import {
@@ -100,6 +101,7 @@ import { DoSqlStore } from "./do-sql-store";
 import {
   EnvironmentMockLlmAnthropicRuntime,
   EnvironmentMockLlmOpenAiRuntime,
+  type EnvironmentMockLlmPlanSelection,
 } from "./mock-llm-runtime";
 import { assertProvisioningPreparedOutputBounds } from "./provisioning-bounds";
 import { performProvisioningHttpOperation } from "./provisioning-http";
@@ -1100,7 +1102,7 @@ export class EnvironmentDurableObject extends DurableObject {
     slug: string,
     credential: string,
     request: unknown
-  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmPlan>> {
+  ): Promise<MockLlmOpenAiRuntimeResult<EnvironmentMockLlmPlanSelection>> {
     if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
     const result = await this.#mockLlmOpenAi.planChatCompletion(
       slug,
@@ -1129,13 +1131,65 @@ export class EnvironmentDurableObject extends DurableObject {
     slug: string,
     credential: string,
     request: unknown
-  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmPlan>> {
+  ): Promise<MockLlmAnthropicRuntimeResult<EnvironmentMockLlmPlanSelection>> {
     if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
     const result = await this.#mockLlmAnthropic.planMessage(slug, credential, request);
     const currentConfig = this.#readConfig();
     if (!currentConfig) return { ok: false, code: "server_not_found" };
     if (result.ok) await this.#touch(currentConfig);
     return result;
+  }
+
+  async reserveMockLlmObservation(
+    serverRevision: number,
+    requestPath: string,
+    observation: MockLlmProviderObservationStart
+  ): Promise<void> {
+    const engine = await this.#engine();
+    engine.reserveLlmObservation({
+      id: observation.observationId,
+      timestamp: new Date().toISOString(),
+      source: "inbound",
+      provider: observation.dialect,
+      protocol: "http",
+      method: observation.method,
+      path: requestPath,
+      requestHeaders: {},
+      requestBody: null,
+      responseHeaders: {},
+      responseBody: null,
+      correlationId: observation.observationId,
+      llmDialect: observation.dialect,
+      llmOperation: observation.operation,
+      llmServerSlug: observation.slug,
+      llmServerRevision: serverRevision,
+      llmModel: observation.model,
+      llmStream: observation.stream,
+      llmTurnIndex: observation.turnIndex,
+      llmOutcome: "pending",
+      ...(observation.responseId === undefined
+        ? {}
+        : { llmResponseId: observation.responseId }),
+      ...(observation.response
+        ? {
+            llmInputTokens: observation.response.inputTokens,
+            llmOutputTokens: observation.response.outputTokens,
+            llmStopReason: observation.response.stopReason,
+            llmToolNames: [...observation.response.toolNames],
+          }
+        : { llmErrorKind: observation.errorKind }),
+    });
+  }
+
+  async finalizeMockLlmObservation(
+    observation: MockLlmProviderObservationFinish
+  ): Promise<void> {
+    const engine = await this.#engine();
+    engine.finalizeLlmObservation(observation.observationId, {
+      llmOutcome: observation.outcome,
+      responseStatus: observation.responseStatus,
+      durationMs: observation.durationMilliseconds,
+    });
   }
 
   async deleteMockLlmServer(slug: string, expectedRevision: number): Promise<boolean> {

@@ -14,6 +14,11 @@ import {
   mockLlmAnthropicProviderManifest,
   parseMockLlmAnthropicMessageRequest,
 } from "./anthropic-http";
+import type {
+  MockLlmProviderObservationFinish,
+  MockLlmProviderObservationHook,
+  MockLlmProviderObservationStart,
+} from "./observation";
 import { errorPlan, TEST_MODEL, textPlan, toolPlan } from "./test-support";
 
 const VALID_CREDENTIAL = "synthetic-anthropic-provider-key";
@@ -88,6 +93,24 @@ const handler = (
 
 const responseJson = async (response: Response) =>
   (await response.json()) as Record<string, unknown>;
+
+const observationHarness = () => {
+  const starts: MockLlmProviderObservationStart[] = [];
+  const finishes: MockLlmProviderObservationFinish[] = [];
+  const pending: Promise<void>[] = [];
+  const hook: MockLlmProviderObservationHook = {
+    reserve: vi.fn(async (event) => {
+      starts.push(event);
+    }),
+    finish: vi.fn(async (event) => {
+      finishes.push(event);
+    }),
+    waitUntil: vi.fn((promise) => {
+      pending.push(promise);
+    }),
+  };
+  return { finishes, hook, pending, starts };
+};
 
 const anthropicEvents = (wire: string) =>
   wire
@@ -329,6 +352,49 @@ describe("bounded Anthropic Messages parsing", () => {
 });
 
 describe("mock Anthropic HTTP adapter", () => {
+  it("emits metadata-only response observations for planned Messages POSTs", async () => {
+    const observed = observationHarness();
+    const response = await handler(runtime(), {
+      observation: observed.hook,
+    })(jsonRequest(messageBody()), {
+      slug: "demo",
+      providerPath: "/v1/messages",
+    });
+    await Promise.all(observed.pending);
+
+    expect(response.status).toBe(200);
+    expect(observed.starts).toEqual([
+      {
+        observationId: FIXED_IDENTITY.requestId,
+        responseId: FIXED_IDENTITY.responseId,
+        dialect: "anthropic",
+        operation: "messages.create",
+        slug: "demo",
+        method: "POST",
+        path: "/v1/messages",
+        model: TEST_MODEL,
+        stream: false,
+        turnIndex: 1,
+        response: {
+          inputTokens: 11,
+          outputTokens: 5,
+          stopReason: "end_turn",
+          toolNames: [],
+        },
+      },
+    ]);
+    expect(observed.starts[0]).not.toHaveProperty("responseStatus");
+    expect(observed.starts[0]).not.toHaveProperty("durationMilliseconds");
+    expect(observed.finishes[0]).toMatchObject({
+      observationId: FIXED_IDENTITY.requestId,
+      outcome: "completed",
+      responseStatus: 200,
+    });
+    expect(JSON.stringify(observed.starts)).not.toContain(VALID_CREDENTIAL);
+    expect(JSON.stringify(observed.starts)).not.toContain("Hello");
+    expect(JSON.stringify(observed.starts)).not.toContain("llmp_");
+  });
+
   it("works through the official SDK for models and non-streaming Messages", async () => {
     const providerRuntime = runtime();
     const fetchAdapter = handler(providerRuntime);
@@ -577,10 +643,12 @@ describe("mock Anthropic HTTP adapter", () => {
   });
 
   it("maps configured provider errors while overriding transport identity", async () => {
+    const observed = observationHarness();
     const fetch = handler(
       runtime({
         planMessage: vi.fn(async () => success(errorPlan("rate_limit"))),
-      })
+      }),
+      { observation: observed.hook }
     );
     const response = await fetch(jsonRequest(messageBody()), {
       slug: "demo",
@@ -613,6 +681,32 @@ describe("mock Anthropic HTTP adapter", () => {
     expect(await responseJson(streamingRequestError)).toMatchObject({
       error: { type: "rate_limit_error" },
     });
+    await Promise.all(observed.pending);
+    expect(observed.starts).toHaveLength(2);
+    expect(observed.starts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ errorKind: "rate_limit", stream: false }),
+        expect.objectContaining({ errorKind: "rate_limit", stream: true }),
+      ])
+    );
+    for (const start of observed.starts) {
+      expect(start).not.toHaveProperty("responseId");
+      expect(start).not.toHaveProperty("responseStatus");
+      expect(start).not.toHaveProperty("durationMilliseconds");
+    }
+    expect(observed.finishes).toHaveLength(2);
+    expect(observed.finishes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          outcome: "completed",
+          responseStatus: 429,
+        }),
+        expect.objectContaining({
+          outcome: "completed",
+          responseStatus: 429,
+        }),
+      ])
+    );
   });
 
   it("rejects malformed, cross-provider, and platform authentication before dispatch", async () => {
@@ -992,12 +1086,15 @@ describe("mock Anthropic HTTP adapter", () => {
   it("keeps a stream deadline failure on the generic pre-header error side", async () => {
     const basePlan = textPlan();
     if (basePlan.kind !== "response") throw new Error("Expected response plan.");
+    const observed = observationHarness();
     const response = await handler(runtime(), {
       now: vi.fn().mockReturnValueOnce(1_000).mockReturnValue(6_000),
+      observation: observed.hook,
     })(jsonRequest(messageBody({ stream: true })), {
       slug: "demo",
       providerPath: "/v1/messages",
     });
+    await Promise.all(observed.pending);
 
     expect(basePlan.cadence.maximumDurationMilliseconds).toBe(5_000);
     expect(response.status).toBe(500);
@@ -1010,6 +1107,14 @@ describe("mock Anthropic HTTP adapter", () => {
       },
       request_id: FIXED_IDENTITY.requestId,
     });
+    expect(observed.finishes).toEqual([
+      {
+        observationId: FIXED_IDENTITY.requestId,
+        outcome: "deadline_exceeded",
+        responseStatus: 500,
+        durationMilliseconds: expect.any(Number),
+      },
+    ]);
   });
 
   it("handles aborted and already-aborted initial delay locally", async () => {

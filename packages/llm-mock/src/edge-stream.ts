@@ -33,11 +33,32 @@ export type PrepareEdgeSseStreamOptions = {
   readonly now?: () => number;
 };
 
+export type EdgeSseStreamTerminalOutcome =
+  | "completed"
+  | "cancelled"
+  | "deadline_exceeded"
+  | "failed";
+
+export type EdgeSseStreamTerminalResult = {
+  readonly outcome: EdgeSseStreamTerminalOutcome;
+  readonly frameCount: number;
+  readonly byteLength: number;
+  readonly durationMilliseconds: number;
+};
+
 export type PreparedEdgeSseStream = {
   readonly byteLength: number;
   readonly frameCount: number;
-  readonly startedAtMilliseconds: number;
-  readonly deadlineAtMilliseconds: number;
+  /**
+   * Undefined until waitForInitialDelay() starts the absolute stream clock.
+   */
+  readonly startedAtMilliseconds: number | undefined;
+  readonly deadlineAtMilliseconds: number | undefined;
+  /**
+   * Resolves exactly once for initial-delay failures, normal close, request
+   * abort, reader cancellation, deadline, or an unknown stream failure.
+   */
+  readonly terminal: Promise<EdgeSseStreamTerminalResult>;
   /**
    * Must be awaited before response headers are returned. The wait observes
    * both request cancellation and the stream's absolute wall deadline.
@@ -155,7 +176,13 @@ const waitUntil = (
     };
     const onAbort = () => settle(() => reject(abortReason()));
     const wake = () => {
-      const wakeMilliseconds = now();
+      let wakeMilliseconds: number;
+      try {
+        wakeMilliseconds = now();
+      } catch (reason) {
+        settle(() => reject(reason));
+        return;
+      }
       if (wakeMilliseconds >= deadlineMilliseconds) {
         settle(() => reject(new EdgeSseStreamDeadlineError()));
         return;
@@ -305,37 +332,97 @@ export const prepareEdgeSseStream = (
       "The edge SSE stream clock must be a function."
     );
   }
-  const startedAtMilliseconds = now();
-  if (!Number.isFinite(startedAtMilliseconds)) {
-    throw new EdgeSseStreamPreflightError(
-      "The edge SSE stream clock returned a non-finite value."
-    );
-  }
-  const deadlineAtMilliseconds = startedAtMilliseconds + maximumDurationMilliseconds;
-  const initialDelayEndsAtMilliseconds =
-    startedAtMilliseconds + initialDelayMilliseconds;
-  if (
-    !Number.isSafeInteger(deadlineAtMilliseconds) ||
-    !Number.isSafeInteger(initialDelayEndsAtMilliseconds)
-  ) {
-    throw new EdgeSseStreamPreflightError(
-      "The edge SSE stream schedule exceeds the supported clock range."
-    );
-  }
-
+  let startedAtMilliseconds: number | undefined;
+  let deadlineAtMilliseconds: number | undefined;
+  let initialDelayEndsAtMilliseconds: number | undefined;
   let initialDelayPromise: Promise<void> | undefined;
   let initialDelayComplete = false;
   let streamCreated = false;
+  let emittedFrameCount = 0;
+  let emittedByteLength = 0;
+  let terminalResult: EdgeSseStreamTerminalResult | undefined;
+  let resolveTerminal: ((result: EdgeSseStreamTerminalResult) => void) | undefined;
+  const terminal = new Promise<EdgeSseStreamTerminalResult>((resolve) => {
+    resolveTerminal = resolve;
+  });
+
+  const clock = (): number => {
+    const value = now();
+    if (!Number.isFinite(value)) {
+      throw new EdgeSseStreamPreflightError(
+        "The edge SSE stream clock returned a non-finite value."
+      );
+    }
+    return value;
+  };
+
+  const terminalOutcome = (reason: unknown): EdgeSseStreamTerminalOutcome => {
+    if (
+      signal.aborted ||
+      (reason instanceof DOMException && reason.name === "AbortError")
+    ) {
+      return "cancelled";
+    }
+    if (reason instanceof EdgeSseStreamDeadlineError) {
+      return "deadline_exceeded";
+    }
+    return "failed";
+  };
+
+  const settleTerminal = (
+    outcome: EdgeSseStreamTerminalOutcome
+  ): EdgeSseStreamTerminalResult => {
+    if (terminalResult) return terminalResult;
+    let durationMilliseconds = 0;
+    if (startedAtMilliseconds !== undefined) {
+      try {
+        durationMilliseconds = Math.max(0, Math.floor(clock() - startedAtMilliseconds));
+      } catch {
+        // A broken injected clock is itself the failure; retain bounded metadata.
+      }
+    }
+    terminalResult = Object.freeze({
+      outcome,
+      frameCount: emittedFrameCount,
+      byteLength: emittedByteLength,
+      durationMilliseconds,
+    });
+    resolveTerminal?.(terminalResult);
+    resolveTerminal = undefined;
+    return terminalResult;
+  };
+
+  const startClock = (): void => {
+    if (startedAtMilliseconds !== undefined) return;
+    const started = clock();
+    const deadline = started + maximumDurationMilliseconds;
+    const initialDelayEnd = started + initialDelayMilliseconds;
+    if (!Number.isSafeInteger(deadline) || !Number.isSafeInteger(initialDelayEnd)) {
+      throw new EdgeSseStreamPreflightError(
+        "The edge SSE stream schedule exceeds the supported clock range."
+      );
+    }
+    startedAtMilliseconds = started;
+    deadlineAtMilliseconds = deadline;
+    initialDelayEndsAtMilliseconds = initialDelayEnd;
+  };
 
   const waitForInitialDelay = (): Promise<void> => {
-    initialDelayPromise ??= waitUntil(
-      initialDelayEndsAtMilliseconds,
-      deadlineAtMilliseconds,
-      signal,
-      now
-    ).then(() => {
-      initialDelayComplete = true;
-    });
+    initialDelayPromise ??= (async () => {
+      try {
+        startClock();
+        await waitUntil(
+          initialDelayEndsAtMilliseconds as number,
+          deadlineAtMilliseconds as number,
+          signal,
+          clock
+        );
+        initialDelayComplete = true;
+      } catch (reason) {
+        settleTerminal(terminalOutcome(reason));
+        throw reason;
+      }
+    })();
     return initialDelayPromise;
   };
 
@@ -350,8 +437,21 @@ export const prepareEdgeSseStream = (
         "A prepared edge SSE stream can create only one body."
       );
     }
-    if (signal.aborted) throw abortReason();
-    if (now() >= deadlineAtMilliseconds) throw new EdgeSseStreamDeadlineError();
+    if (signal.aborted) {
+      const reason = abortReason();
+      settleTerminal("cancelled");
+      throw reason;
+    }
+    try {
+      if (clock() >= (deadlineAtMilliseconds as number)) {
+        const reason = new EdgeSseStreamDeadlineError();
+        settleTerminal("deadline_exceeded");
+        throw reason;
+      }
+    } catch (reason) {
+      settleTerminal(terminalOutcome(reason));
+      throw reason;
+    }
     streamCreated = true;
 
     let frameIndex = 0;
@@ -373,7 +473,12 @@ export const prepareEdgeSseStream = (
       if (terminal) return;
       terminal = true;
       cleanup(reason);
-      streamController?.error(reason);
+      settleTerminal(terminalOutcome(reason));
+      try {
+        streamController?.error(reason);
+      } catch {
+        // The consumer may already have detached after cancellation.
+      }
     };
     const onRequestAbort = () => fail(abortReason());
 
@@ -388,54 +493,64 @@ export const prepareEdgeSseStream = (
             onRequestAbort();
             return;
           }
-          const remainingMilliseconds = deadlineAtMilliseconds - now();
-          if (remainingMilliseconds <= 0) {
-            fail(new EdgeSseStreamDeadlineError());
-            return;
+          try {
+            const remainingMilliseconds = (deadlineAtMilliseconds as number) - clock();
+            if (remainingMilliseconds <= 0) {
+              fail(new EdgeSseStreamDeadlineError());
+              return;
+            }
+            deadlineTimeout = setTimeout(
+              () => fail(new EdgeSseStreamDeadlineError()),
+              remainingMilliseconds
+            );
+          } catch (reason) {
+            fail(reason);
           }
-          deadlineTimeout = setTimeout(
-            () => fail(new EdgeSseStreamDeadlineError()),
-            remainingMilliseconds
-          );
         },
         async pull(controller) {
           if (terminal) return;
-          const frame = encodedFrames[frameIndex];
-          if (!frame) {
-            terminal = true;
-            cleanup(new DOMException("The edge SSE stream completed.", "AbortError"));
-            controller.close();
-            return;
-          }
-
-          if (frame.cadence === "payload" && lastPayloadAtMilliseconds !== undefined) {
-            try {
-              await waitUntil(
-                lastPayloadAtMilliseconds + chunkDelayMilliseconds,
-                deadlineAtMilliseconds,
-                lifecycle.signal,
-                now
-              );
-            } catch (reason) {
-              fail(reason);
+          try {
+            const frame = encodedFrames[frameIndex];
+            if (!frame) {
+              terminal = true;
+              cleanup(new DOMException("The edge SSE stream completed.", "AbortError"));
+              controller.close();
+              settleTerminal("completed");
               return;
             }
-            if (terminal) return;
-          }
 
-          if (now() >= deadlineAtMilliseconds) {
-            fail(new EdgeSseStreamDeadlineError());
-            return;
-          }
-          controller.enqueue(frame.data);
-          frameIndex += 1;
-          if (frame.cadence === "payload") {
-            lastPayloadAtMilliseconds = now();
-          }
-          if (frameIndex === encodedFrames.length) {
-            terminal = true;
-            cleanup(new DOMException("The edge SSE stream completed.", "AbortError"));
-            controller.close();
+            if (
+              frame.cadence === "payload" &&
+              lastPayloadAtMilliseconds !== undefined
+            ) {
+              await waitUntil(
+                lastPayloadAtMilliseconds + chunkDelayMilliseconds,
+                deadlineAtMilliseconds as number,
+                lifecycle.signal,
+                clock
+              );
+              if (terminal) return;
+            }
+
+            if (clock() >= (deadlineAtMilliseconds as number)) {
+              fail(new EdgeSseStreamDeadlineError());
+              return;
+            }
+            controller.enqueue(frame.data);
+            frameIndex += 1;
+            emittedFrameCount += 1;
+            emittedByteLength += frame.data.byteLength;
+            if (frame.cadence === "payload") {
+              lastPayloadAtMilliseconds = clock();
+            }
+            if (frameIndex === encodedFrames.length) {
+              terminal = true;
+              cleanup(new DOMException("The edge SSE stream completed.", "AbortError"));
+              controller.close();
+              settleTerminal("completed");
+            }
+          } catch (reason) {
+            fail(reason);
           }
         },
         cancel(reason) {
@@ -445,6 +560,7 @@ export const prepareEdgeSseStream = (
             reason ??
               new DOMException("The edge SSE stream was cancelled.", "AbortError")
           );
+          settleTerminal("cancelled");
         },
       },
       { highWaterMark: 0 }
@@ -454,8 +570,13 @@ export const prepareEdgeSseStream = (
   return Object.freeze({
     byteLength,
     frameCount: encodedFrames.length,
-    startedAtMilliseconds,
-    deadlineAtMilliseconds,
+    get startedAtMilliseconds() {
+      return startedAtMilliseconds;
+    },
+    get deadlineAtMilliseconds() {
+      return deadlineAtMilliseconds;
+    },
+    terminal,
     waitForInitialDelay,
     createReadableStream,
   });

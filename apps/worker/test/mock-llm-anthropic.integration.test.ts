@@ -43,6 +43,48 @@ const callData = async <Value>(
   return structured?.data as Value;
 };
 
+type LlmRequestLogEntry = {
+  readonly id: string;
+  readonly provider: string;
+  readonly protocol: string;
+  readonly method: string;
+  readonly path: string;
+  readonly requestHeaders: Record<string, string>;
+  readonly requestBody: string | null;
+  readonly responseStatus: number;
+  readonly responseHeaders: Record<string, string>;
+  readonly responseBody: string | null;
+  readonly durationMs: number;
+  readonly llmDialect: string;
+  readonly llmOperation: string;
+  readonly llmServerSlug: string;
+  readonly llmServerRevision: number;
+  readonly llmModel: string;
+  readonly llmStream: boolean;
+  readonly llmTurnIndex: number;
+  readonly llmOutcome: string;
+  readonly llmResponseId?: string;
+  readonly llmInputTokens?: number;
+  readonly llmOutputTokens?: number;
+  readonly llmStopReason?: string;
+  readonly llmToolNames?: string[];
+  readonly llmErrorKind?: string;
+};
+
+const eventuallyRequestLog = async (
+  client: Client,
+  query: Record<string, unknown>,
+  accepted: (entries: readonly LlmRequestLogEntry[]) => boolean
+): Promise<{ entries: LlmRequestLogEntry[] }> => {
+  let latest: { entries: LlmRequestLogEntry[] } = { entries: [] };
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    latest = await callData(client, "get_request_log", query);
+    if (accepted(latest.entries)) return latest;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for LLM observations: ${JSON.stringify(latest)}`);
+};
+
 const serverDefinition = (apiKey: string, text = "Hello from the Anthropic mock.") => ({
   version: 1,
   slug: "agent-tests",
@@ -542,19 +584,131 @@ describe("public mock Anthropic Worker route", () => {
         ).data
       ).toHaveLength(4);
 
-      const requestLog = await callData<{ entries: unknown[] }>(
+      const requestLog = await eventuallyRequestLog(
         management,
-        "get_request_log",
         {
           environmentId,
+          llmDialect: "anthropic",
+          llmOperation: "messages.create",
           limit: 100,
-        }
+        },
+        (entries) =>
+          entries.some(
+            (entry) =>
+              entry.llmResponseId === firstMessage.id &&
+              entry.llmOutcome === "completed"
+          ) &&
+          entries.some(
+            (entry) =>
+              entry.llmResponseId === textStart.message.id &&
+              entry.llmOutcome === "completed"
+          )
       );
       const serializedLog = JSON.stringify(requestLog);
-      expect(requestLog.entries).toEqual([]);
+      expect(
+        requestLog.entries.filter((entry) => entry.llmResponseId === firstMessage.id)
+      ).toEqual([
+        expect.objectContaining({
+          id: firstMessage._request_id,
+          provider: "anthropic",
+          protocol: "http",
+          method: "POST",
+          path: `/e/${environmentId}/llm-mock/agent-tests/anthropic/v1/messages`,
+          requestHeaders: {},
+          requestBody: null,
+          responseStatus: 200,
+          responseHeaders: {},
+          responseBody: null,
+          durationMs: expect.any(Number),
+          llmDialect: "anthropic",
+          llmOperation: "messages.create",
+          llmServerSlug: "agent-tests",
+          llmServerRevision: created.revision,
+          llmModel: "mock-text-1",
+          llmStream: false,
+          llmTurnIndex: 0,
+          llmOutcome: "completed",
+          llmResponseId: firstMessage.id,
+          llmInputTokens: 11,
+          llmOutputTokens: 5,
+          llmStopReason: "end_turn",
+          llmToolNames: [],
+        }),
+      ]);
+      expect(requestLog.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            llmErrorKind: "rate_limit",
+            llmModel: "mock-rate-limit-1",
+            llmOutcome: "completed",
+            llmStream: false,
+            responseStatus: 429,
+          }),
+          expect.objectContaining({
+            llmModel: "mock-tool-1",
+            llmStopReason: "tool_use",
+            llmToolNames: ["get_weather"],
+          }),
+          expect.objectContaining({
+            llmModel: "mock-text-1",
+            llmOutcome: "completed",
+            llmResponseId: textStart.message.id,
+            llmStream: true,
+            responseStatus: 200,
+          }),
+        ])
+      );
+      expect(
+        requestLog.entries.find(
+          (entry) =>
+            entry.llmErrorKind === "rate_limit" &&
+            entry.llmModel === "mock-rate-limit-1"
+        )
+      ).not.toHaveProperty("llmResponseId");
+      expect(
+        requestLog.entries.every(
+          (entry) =>
+            Object.keys(entry.requestHeaders).length === 0 &&
+            entry.requestBody === null &&
+            Object.keys(entry.responseHeaders).length === 0 &&
+            entry.responseBody === null &&
+            entry.llmServerRevision === created.revision
+        )
+      ).toBe(true);
+      const exactObservation = await callData<{
+        matched: number;
+        pass: boolean;
+      }>(management, "assert_requests", {
+        environmentId,
+        llmDialect: "anthropic",
+        llmOperation: "messages.create",
+        llmResponseId: firstMessage.id,
+        llmOutcome: "completed",
+        status: 200,
+        count: { exactly: 1 },
+      });
+      expect(exactObservation).toMatchObject({ matched: 1, pass: true });
+      const configuredErrorObservation = await callData<{
+        matched: number;
+        pass: boolean;
+      }>(management, "assert_requests", {
+        environmentId,
+        llmDialect: "anthropic",
+        llmErrorKind: "rate_limit",
+        llmStream: true,
+        llmOutcome: "completed",
+        status: 429,
+        count: { exactly: 1 },
+      });
+      expect(configuredErrorObservation).toMatchObject({
+        matched: 1,
+        pass: true,
+      });
       expect(serializedLog).not.toContain(ANTHROPIC_MOCK_CREDENTIAL);
       expect(serializedLog).not.toContain(ROTATED_ANTHROPIC_MOCK_CREDENTIAL);
       expect(serializedLog).not.toContain("apiKeySha256");
+      expect(serializedLog).not.toContain("Hello from the Anthropic mock.");
+      expect(serializedLog).not.toContain("Berlin");
 
       const beforeDelete = await callData<{ revision: number }>(
         management,

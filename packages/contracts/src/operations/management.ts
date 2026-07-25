@@ -320,7 +320,7 @@ export const mockosManagementOperations = {
     operationId: "get_request_log",
     title: "Get request log",
     description:
-      "Returns a filtered page of inbound, outbound, or control traffic for an environment.",
+      "Returns a filtered page of inbound, outbound, or control traffic, including structured mock-LLM lifecycle observations without prompts, credentials, headers, or bodies.",
     requiredScopes: ["env:ro"],
     effect: "read",
     retry: "safe",
@@ -336,7 +336,7 @@ export const mockosManagementOperations = {
     operationId: "assert_requests",
     title: "Assert captured requests",
     description:
-      "Evaluates a deterministic assertion against captured environment traffic.",
+      "Evaluates deterministic count or ordered-sequence assertions against captured environment traffic and structured mock-LLM metadata.",
     requiredScopes: ["env:ro"],
     effect: "read",
     retry: "safe",

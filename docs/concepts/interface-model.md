@@ -15,7 +15,7 @@ surface are supporting interfaces, not separate sources of product behavior.
 | Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
-| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI and Anthropic JSON/SSE Chat Completions/Messages/model subsets source-qualified locally; configured midstream errors, Responses, Anthropic betas, state, observations, and deployment unavailable or unqualified |
+| Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI and Anthropic JSON/SSE Chat Completions/Messages/model subsets plus metadata-only observation/assertion source-qualified locally; configured midstream errors, Responses, Anthropic betas, state, audit-grade observation delivery, and deployment unavailable or unqualified |
 | Provider-shaped endpoints | Act as the synthetic Entra ID or Okta dependency used by the application under test | Implemented for the bounded surfaces in the [provider docs](../README.md#provider-behavior) |
 | CLI | Provide a non-interactive operator experience over management MCP | Source-qualified and unpublished |
 | Hosted console | Make common account, environment, application, scenario, and request evidence visible | Operated-service interface; not required by the public runtime |
@@ -56,7 +56,8 @@ JSON or named-event SSE `/v1/messages`. The tools existed before those routes, s
 alone is not provider capability evidence; use authenticated OpenAI `GET /models` or
 Anthropic `GET /v1/models` as the non-mutating probe. Use
 [MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for revision
-compare-and-swap, write-only provider keys, schema-v7 persistence, provider requests,
+compare-and-swap, write-only provider keys, schema-v8 persistence, provider requests,
+metadata-only observation/query/assertion through the existing management MCP tools,
 and unsupported behavior.
 
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.

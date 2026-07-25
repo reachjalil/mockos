@@ -474,12 +474,19 @@ export const createWorkerApp = () => {
       );
       return context.json(body, body.status as ContentfulStatusCode);
     }
-    const response = await routeEnvironmentRequest(context.req.raw, context.env, {
-      hostingMode,
-      pathPrefix: context.env.PATH_PREFIX,
-      baseDomain: context.env.BASE_DOMAIN,
-      entraHost: context.env.ENTRA_HOST,
-    });
+    const response = await routeEnvironmentRequest(
+      context.req.raw,
+      context.env,
+      {
+        hostingMode,
+        pathPrefix: context.env.PATH_PREFIX,
+        baseDomain: context.env.BASE_DOMAIN,
+        entraHost: context.env.ENTRA_HOST,
+      },
+      {
+        waitUntil: (promise) => context.executionCtx.waitUntil(promise),
+      }
+    );
     return response ?? context.notFound();
   });
 

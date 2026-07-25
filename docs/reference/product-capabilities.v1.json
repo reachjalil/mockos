@@ -284,6 +284,8 @@
             "packages/llm-mock/src/openai-http.test.ts",
             "packages/llm-mock/src/edge-stream.test.ts",
             "packages/llm-mock/src/sdk-conformance.test.ts",
+            "packages/core/src/scenario-log.test.ts",
+            "packages/worker-kit/src/edge-router.test.ts",
             "apps/worker/test/mock-llm.integration.test.ts"
           ],
           "qualification": "qualified",
@@ -306,7 +308,8 @@
       },
       "limitationRefs": [
         "docs/reference/mock-llm-openai.v1.json#/response/streaming/configuredMidstreamErrors",
-        "docs/reference/mock-llm-openai.v1.json#/request/multimodal"
+        "docs/reference/mock-llm-openai.v1.json#/request/multimodal",
+        "docs/mock-llm.md#observation-evidence-boundary"
       ],
       "provenance": {
         "executableAuthorities": [
@@ -314,6 +317,11 @@
             "export": "mockLlmOpenAiProviderManifest",
             "kind": "contract",
             "path": "packages/llm-mock/src/openai-http.ts"
+          },
+          {
+            "export": "requestLogEntrySchema",
+            "kind": "contract",
+            "path": "packages/contracts/src/index.ts"
           },
           {
             "export": "createMockLlmOpenAiFetchHandler",
@@ -334,6 +342,11 @@
             "export": "routeEnvironmentRequest",
             "kind": "runtime",
             "path": "packages/worker-kit/src/edge-router.ts"
+          },
+          {
+            "export": "RequestLogService",
+            "kind": "runtime",
+            "path": "packages/core/src/log/request-log.ts"
           }
         ]
       },
@@ -383,6 +396,8 @@
             "packages/llm-mock/src/anthropic-security.test.ts",
             "packages/llm-mock/src/edge-stream.test.ts",
             "packages/llm-mock/src/sdk-conformance.test.ts",
+            "packages/core/src/scenario-log.test.ts",
+            "packages/worker-kit/src/edge-router.test.ts",
             "apps/worker/test/mock-llm-anthropic.integration.test.ts"
           ],
           "qualification": "qualified",
@@ -406,7 +421,8 @@
       "limitationRefs": [
         "docs/reference/mock-llm-anthropic.v1.json#/response/streaming/configuredMidstreamErrors",
         "docs/reference/mock-llm-anthropic.v1.json#/request/multimodal",
-        "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures"
+        "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures",
+        "docs/mock-llm.md#observation-evidence-boundary"
       ],
       "provenance": {
         "executableAuthorities": [
@@ -414,6 +430,11 @@
             "export": "mockLlmAnthropicProviderManifest",
             "kind": "contract",
             "path": "packages/llm-mock/src/anthropic-http.ts"
+          },
+          {
+            "export": "requestLogEntrySchema",
+            "kind": "contract",
+            "path": "packages/contracts/src/index.ts"
           },
           {
             "export": "createMockLlmAnthropicFetchHandler",
@@ -434,6 +455,11 @@
             "export": "routeEnvironmentRequest",
             "kind": "runtime",
             "path": "packages/worker-kit/src/edge-router.ts"
+          },
+          {
+            "export": "RequestLogService",
+            "kind": "runtime",
+            "path": "packages/core/src/log/request-log.ts"
           }
         ]
       },

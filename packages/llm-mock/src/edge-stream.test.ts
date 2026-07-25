@@ -163,7 +163,25 @@ describe("prepareEdgeSseStream", () => {
       done: true,
       value: undefined,
     });
+    await expect(prepared.terminal).resolves.toMatchObject({
+      outcome: "completed",
+      frameCount: 1,
+      byteLength: encoder.encode("data: ready\n\n").byteLength,
+    });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("preflights without starting the absolute clock", async () => {
+    const now = vi.fn(() => 10_000);
+    const prepared = prepareEdgeSseStream(
+      options([immediate("data: ready\n\n")], { now })
+    );
+
+    expect(now).not.toHaveBeenCalled();
+    expect(prepared.startedAtMilliseconds).toBeUndefined();
+    await prepared.waitForInitialDelay();
+    expect(prepared.startedAtMilliseconds).toBe(10_000);
+    expect(prepared.deadlineAtMilliseconds).toBe(11_000);
   });
 
   it("aborts and cleans the pre-header initial-delay gate", async () => {
@@ -187,6 +205,11 @@ describe("prepareEdgeSseStream", () => {
 
     await expect(ready).rejects.toMatchObject({ name: "AbortError" });
     await expect(ready).rejects.not.toBe(reason);
+    await expect(prepared.terminal).resolves.toMatchObject({
+      outcome: "cancelled",
+      frameCount: 0,
+      byteLength: 0,
+    });
     expect(removeListener).toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
     expect(() => prepared.createReadableStream()).toThrow(/waitForInitialDelay/);
@@ -266,6 +289,11 @@ describe("prepareEdgeSseStream", () => {
     });
     await vi.advanceTimersByTimeAsync(60);
     await expect(reader.read()).rejects.toBeInstanceOf(EdgeSseStreamDeadlineError);
+    await expect(prepared.terminal).resolves.toMatchObject({
+      outcome: "deadline_exceeded",
+      frameCount: 1,
+      byteLength: encoder.encode("data: start\n\n").byteLength,
+    });
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -293,6 +321,11 @@ describe("prepareEdgeSseStream", () => {
     await expect(pendingRead).rejects.not.toBe(reason);
     expect(addListener).toHaveBeenCalled();
     expect(removeListener).toHaveBeenCalled();
+    await expect(prepared.terminal).resolves.toMatchObject({
+      outcome: "cancelled",
+      frameCount: 1,
+      byteLength: encoder.encode("data: start\n\n").byteLength,
+    });
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -318,6 +351,11 @@ describe("prepareEdgeSseStream", () => {
       done: true,
       value: undefined,
     });
+    await expect(prepared.terminal).resolves.toMatchObject({
+      outcome: "cancelled",
+      frameCount: 1,
+      byteLength: encoder.encode("data: one\n\n").byteLength,
+    });
     expect(removeListener).toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -336,5 +374,27 @@ describe("prepareEdgeSseStream", () => {
       output.push(decoder.decode(result.value));
     }
     expect(output).toEqual(frames.map((frame) => frame.data));
+  });
+
+  it("settles an unknown initial-delay clock failure exactly once", async () => {
+    const clockFailure = new Error("clock unavailable");
+    const prepared = prepareEdgeSseStream(
+      options([immediate("data: never\n\n")], {
+        now: () => {
+          throw clockFailure;
+        },
+      })
+    );
+
+    await expect(prepared.waitForInitialDelay()).rejects.toBe(clockFailure);
+    const first = await prepared.terminal;
+    const second = await prepared.terminal;
+    expect(first).toBe(second);
+    expect(first).toEqual({
+      outcome: "failed",
+      frameCount: 0,
+      byteLength: 0,
+      durationMilliseconds: 0,
+    });
   });
 });

@@ -1,6 +1,12 @@
 import { type MockLlmPlan, parseMockLlmPlan } from "@mockos/contracts/mock-llm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  MOCK_LLM_OBSERVATION_RESERVATION_BUDGET_MILLISECONDS,
+  type MockLlmProviderObservationFinish,
+  type MockLlmProviderObservationHook,
+  type MockLlmProviderObservationStart,
+} from "./observation";
+import {
   createMockLlmOpenAiFetchHandler,
   MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES,
   MOCK_LLM_OPENAI_MAX_REQUEST_DEPTH,
@@ -84,6 +90,27 @@ const handler = (
 
 const responseJson = async (response: Response) =>
   (await response.json()) as Record<string, unknown>;
+
+const observationHarness = (
+  overrides: Partial<MockLlmProviderObservationHook> = {}
+) => {
+  const starts: MockLlmProviderObservationStart[] = [];
+  const finishes: MockLlmProviderObservationFinish[] = [];
+  const pending: Promise<void>[] = [];
+  const hook: MockLlmProviderObservationHook = {
+    reserve: vi.fn(async (event) => {
+      starts.push(event);
+    }),
+    finish: vi.fn(async (event) => {
+      finishes.push(event);
+    }),
+    waitUntil: vi.fn((promise) => {
+      pending.push(promise);
+    }),
+    ...overrides,
+  };
+  return { finishes, hook, pending, starts };
+};
 
 describe("mock OpenAI provider manifest", () => {
   it("freezes the exact source operation table", () => {
@@ -327,6 +354,200 @@ describe("bounded OpenAI Chat Completions parsing", () => {
 });
 
 describe("mock OpenAI HTTP adapter", () => {
+  it("observes only planned POST responses and reserves before provider delay", async () => {
+    const order: string[] = [];
+    const observed = observationHarness({
+      reserve: vi.fn(async (event) => {
+        order.push("reserve");
+        observed.starts.push(event);
+      }),
+      finish: vi.fn(async (event) => {
+        order.push("finish");
+        observed.finishes.push(event);
+      }),
+    });
+    const response = await handler(runtime(), {
+      observation: observed.hook,
+      durationNow: vi.fn().mockReturnValueOnce(1_000).mockReturnValue(1_042),
+      delay: vi.fn(async () => {
+        order.push("delay");
+      }),
+    })(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    await Promise.all(observed.pending);
+
+    expect(response.status).toBe(200);
+    expect(order).toEqual(["reserve", "delay", "finish"]);
+    expect(observed.starts).toEqual([
+      {
+        observationId: FIXED_IDENTITY.requestId,
+        responseId: FIXED_IDENTITY.responseId,
+        dialect: "openai",
+        operation: "chat.completions.create",
+        slug: "demo",
+        method: "POST",
+        path: "/chat/completions",
+        model: TEST_MODEL,
+        stream: false,
+        turnIndex: 1,
+        response: {
+          inputTokens: 11,
+          outputTokens: 5,
+          stopReason: "end_turn",
+          toolNames: [],
+        },
+      },
+    ]);
+    expect(observed.starts[0]).not.toHaveProperty("responseStatus");
+    expect(observed.starts[0]).not.toHaveProperty("durationMilliseconds");
+    expect(observed.finishes).toEqual([
+      {
+        observationId: FIXED_IDENTITY.requestId,
+        outcome: "completed",
+        responseStatus: 200,
+        durationMilliseconds: 42,
+      },
+    ]);
+
+    await handler(runtime(), { observation: observed.hook })(
+      jsonRequest({ messages: [] }),
+      { slug: "demo", providerPath: "/chat/completions" }
+    );
+    expect(observed.starts).toHaveLength(1);
+  });
+
+  it("observes configured errors and keeps reserve and finish failures fail-open", async () => {
+    const configuredError = observationHarness();
+    const errorResponse = await handler(
+      runtime({
+        planChatCompletion: vi.fn(async () => success(errorPlan())),
+      }),
+      { observation: configuredError.hook }
+    )(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    await Promise.all(configuredError.pending);
+
+    expect(errorResponse.status).toBe(429);
+    expect(configuredError.starts[0]).toMatchObject({ errorKind: "rate_limit" });
+    expect(configuredError.starts[0]).not.toHaveProperty("responseId");
+    expect(configuredError.starts[0]).not.toHaveProperty("responseStatus");
+    expect(configuredError.starts[0]).not.toHaveProperty("durationMilliseconds");
+    expect(configuredError.finishes[0]).toMatchObject({
+      outcome: "completed",
+      responseStatus: 429,
+    });
+
+    const reserveFailure = observationHarness({
+      reserve: vi.fn(async () => {
+        throw new Error("storage unavailable");
+      }),
+    });
+    const reserveFailOpen = await handler(runtime(), {
+      observation: reserveFailure.hook,
+    })(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    expect(reserveFailOpen.status).toBe(200);
+    expect(reserveFailure.hook.finish).not.toHaveBeenCalled();
+    expect(reserveFailure.hook.waitUntil).not.toHaveBeenCalled();
+
+    const finishFailure = observationHarness({
+      finish: vi.fn(async () => {
+        throw new Error("storage unavailable");
+      }),
+    });
+    const finishFailOpen = await handler(runtime(), {
+      observation: finishFailure.hook,
+    })(jsonRequest(chatBody()), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    await Promise.all(finishFailure.pending);
+    expect(finishFailOpen.status).toBe(200);
+  });
+
+  it("delivers within the reservation budget when storage stalls permanently", async () => {
+    vi.useFakeTimers();
+    try {
+      let releaseReservation: (() => void) | undefined;
+      let markReservationStarted: (() => void) | undefined;
+      const reservationStarted = new Promise<void>((resolve) => {
+        markReservationStarted = resolve;
+      });
+      const reserve = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseReservation = resolve;
+            markReservationStarted?.();
+          })
+      );
+      const finish = vi.fn();
+      const delay = vi.fn(async () => {});
+      const responsePromise = handler(runtime(), {
+        delay,
+        observation: { reserve, finish },
+      })(jsonRequest(chatBody()), {
+        slug: "demo",
+        providerPath: "/chat/completions",
+      });
+      await reservationStarted;
+      let delivered = false;
+      void responsePromise.then(() => {
+        delivered = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(
+        MOCK_LLM_OBSERVATION_RESERVATION_BUDGET_MILLISECONDS - 1
+      );
+      expect(delivered).toBe(false);
+      expect(delay).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(200);
+      expect(delay).toHaveBeenCalledTimes(1);
+      expect(finish).not.toHaveBeenCalled();
+      releaseReservation?.();
+      await Promise.resolve();
+      expect(finish).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("finishes an accepted stream as cancelled without rewriting its 200", async () => {
+    const observed = observationHarness();
+    const response = await handler(runtime(), {
+      observation: observed.hook,
+    })(jsonRequest(chatBody({ stream: true })), {
+      slug: "demo",
+      providerPath: "/chat/completions",
+    });
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Expected a streaming response body.");
+    await reader.read();
+    await reader.cancel("consumer stopped");
+    await Promise.all(observed.pending);
+
+    expect(response.status).toBe(200);
+    expect(observed.starts[0]).toMatchObject({ stream: true });
+    expect(observed.starts[0]).not.toHaveProperty("responseStatus");
+    expect(observed.starts[0]).not.toHaveProperty("durationMilliseconds");
+    expect(observed.finishes).toEqual([
+      {
+        observationId: FIXED_IDENTITY.requestId,
+        outcome: "cancelled",
+        responseStatus: 200,
+        durationMilliseconds: expect.any(Number),
+      },
+    ]);
+  });
+
   it("lists and retrieves models with provider-shaped fresh identity", async () => {
     const providerRuntime = runtime();
     const fetch = handler(providerRuntime);

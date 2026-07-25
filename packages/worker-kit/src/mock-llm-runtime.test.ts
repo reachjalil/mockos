@@ -237,11 +237,14 @@ describe("environment mock OpenAI runtime", () => {
     expect(result).toMatchObject({
       ok: true,
       value: {
-        kind: "response",
-        createdAtEpochSeconds: 1_800_000_000,
-        turnIndex: 1,
-        seed: "mock-llm:agent-tests:openai:v1",
-        segments: [{ type: "text", text: "Hello from current definition." }],
+        serverRevision: 1,
+        plan: {
+          kind: "response",
+          createdAtEpochSeconds: 1_800_000_000,
+          turnIndex: 1,
+          seed: "mock-llm:agent-tests:openai:v1",
+          segments: [{ type: "text", text: "Hello from current definition." }],
+        },
       },
     });
     expect(JSON.stringify(result)).not.toContain(OPENAI_KEY);
@@ -272,7 +275,10 @@ describe("environment mock OpenAI runtime", () => {
     expect(result).toMatchObject({
       ok: true,
       value: {
-        segments: [{ type: "text", text: "New response." }],
+        serverRevision: 2,
+        plan: {
+          segments: [{ type: "text", text: "New response." }],
+        },
       },
     });
     expect(definitions.get).toHaveBeenCalledTimes(4);
@@ -421,11 +427,14 @@ describe("environment mock Anthropic runtime", () => {
     expect(result).toMatchObject({
       ok: true,
       value: {
-        kind: "response",
-        createdAtEpochSeconds: 1_800_000_000,
-        turnIndex: 1,
-        seed: "mock-llm:agent-tests:anthropic:v1",
-        segments: [{ type: "text", text: "Hello from current definition." }],
+        serverRevision: 1,
+        plan: {
+          kind: "response",
+          createdAtEpochSeconds: 1_800_000_000,
+          turnIndex: 1,
+          seed: "mock-llm:agent-tests:anthropic:v1",
+          segments: [{ type: "text", text: "Hello from current definition." }],
+        },
       },
     });
     expect(JSON.stringify(result)).not.toContain(ANTHROPIC_KEY);
@@ -490,7 +499,10 @@ describe("environment mock Anthropic runtime", () => {
     ).resolves.toMatchObject({
       ok: true,
       value: {
-        segments: [{ type: "text", text: "New response." }],
+        serverRevision: 2,
+        plan: {
+          segments: [{ type: "text", text: "New response." }],
+        },
       },
     });
     expect(definitions.get).toHaveBeenCalledTimes(4);

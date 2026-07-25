@@ -1,6 +1,6 @@
 # Known limitations
 
-Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI/Anthropic F2, and locally qualified F0/F1
+Status: Accepted M3/M5, sampled M6, source-only M7, partial OpenAI/Anthropic F2 with bounded metadata observation, and locally qualified F0/F1
 Last reviewed: 2026-07-25
 
 Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
@@ -138,7 +138,7 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   blueprints, and OIDC-federated CI access remain future work.
 - The partial F2 source has an MCP-only configuration plane and separate bounded
   OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
-  strict definitions, schema-v7 persistence, mandatory changed-write revision CAS,
+  strict definitions, schema-v8 persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
   Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
   Completions and Anthropic Messages as JSON or bounded SSE. OpenAI
@@ -173,14 +173,42 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   `message_stop`, with neither `[DONE]` nor mock-emitted `ping`. Clients should still
   tolerate upstream Anthropic `ping`. Configured errors stay provider JSON before
   `200`, even when streaming is requested; configured midstream errors are not
-  supported. The Anthropic parser accepts only bounded
+  supported.
+- F2 observation is bounded metadata evidence, not provider traffic capture or an
+  audit trail. Only successfully parsed/planned Chat Completions and Messages POSTs
+  that also pass response serialization/SSE preflight reserve one request-log row.
+  Model reads, route/method/auth/version/content/JSON/request/model-selection/planning
+  failures, and response-preflight failures create no LLM row. Reservation waiting is
+  capped at 50 milliseconds. Reservation and terminal finalization are fail-open: a
+  valid provider response can have no row, and a row can remain `pending` if
+  finalization storage fails or a non-cancellable reservation commits after the
+  adapter's wait budget. A prospective durable-metadata collision with the presented
+  Mock Credential or platform key skips the whole observation. Terminal persistence
+  overlays the same append sequence as `completed`, `cancelled`,
+  `deadline_exceeded`, or `failed`; a delivered configured provider error is
+  `completed` and distinguished by `llmErrorKind` plus status; it has no
+  `llmResponseId`, and `llmStream` records request intent rather than JSON/SSE delivery
+  form. Actual status and monotonic elapsed duration exist only in that terminal child.
+  Until then, the legacy non-null base
+  columns expose compatibility sentinels `responseStatus: 102` and `durationMs: 0`,
+  not planned or delivered response evidence.
+- LLM entries deliberately store empty request/response headers and null bodies.
+  Prompts, outputs, credentials, tool inputs, `planId`, and `requestHash` are excluded.
+  Internal edge-stream frame and byte counts are tested for lifecycle accounting but
+  are not persisted, returned, queryable, or assertable. Query/count/sequence LLM
+  matchers are exact; `llmToolNames` includes order and duplicates. Direct
+  HTTP-adapter/edge-router tests prove `cancelled` persistence, because the mounted
+  Worker-pool service binding does not propagate stream reader cancellation through
+  that binding. Mounted Worker/MCP observation assertions cover completed and
+  configured-error rows, not cancellation persistence.
+- The Anthropic parser accepts only bounded
   `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
   betas/broad parameters, and deliberately does not enforce turn alternation
   or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
-  conversation/evaluator state, reset, retry deduplication, LLM-specific
-  observation/assertion support, Wrangler-network qualification, hosted CI for this
-  tranche, private Cloud pinning, deployment, and verified-live comparison remain
-  unavailable or unqualified. Safe `configured` markers remain non-writable, and
+  conversation/evaluator state, reset, retry deduplication, Wrangler-network
+  qualification, hosted CI for this tranche, private Cloud pinning, deployment,
+  production readiness, and verified-live comparison remain unavailable or
+  unqualified. Safe `configured` markers remain non-writable, and
   every changed full-definition put must resupply or rotate each enabled strict key
   from caller-owned storage. The complete active platform key is rejected from
   definition keys/string values and provider authentication/body reflection. Use the

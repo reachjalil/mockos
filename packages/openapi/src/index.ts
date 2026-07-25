@@ -1,4 +1,9 @@
-import { mockosMcpToolNames, problemSchema } from "@mockos/contracts";
+import {
+  mockosMcpToolNames,
+  problemSchema,
+  REQUEST_LOG_LLM_PENDING_DURATION_MS,
+  REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+} from "@mockos/contracts";
 import {
   type MockosHttpOperation,
   mockosHttpOperationIds,
@@ -550,7 +555,7 @@ export type MockosManagementDocumentationCatalog = {
           "get_mock_llm_server",
           "delete_mock_llm_server",
         ];
-        persistence: "environment-schema-v7";
+        persistence: "environment-schema-v8";
         strictCredentials: "write-only-provider-scoped";
         putContract: {
           expectedRevision: "required-null-create-or-positive-replace";
@@ -570,8 +575,8 @@ export type MockosManagementDocumentationCatalog = {
           platformAccessKey: "reject-substring-in-definition-keys-and-string-values";
         };
         schemaCompatibility: {
-          upgrade: "v6-to-v7";
-          rollback: "v6-refuses-v7";
+          upgrade: "v7-to-v8";
+          rollback: "v7-refuses-v8";
         };
       };
       guide: "docs/mock-llm.md";
@@ -586,7 +591,69 @@ export type MockosManagementDocumentationCatalog = {
         anthropic: MockLlmAnthropicProviderDocumentation;
         responsesApi: "unavailable";
         conversationState: "unavailable";
-        observationsAndAssertions: "unavailable";
+        observationsAndAssertions: {
+          status: "bounded-metadata-only-source-qualified";
+          managementTools: readonly ["get_request_log", "assert_requests"];
+          scope: "successfully-parsed-and-planned-posts-after-response-preflight";
+          dialects: readonly ["openai", "anthropic"];
+          operations: readonly ["chat.completions.create", "messages.create"];
+          lifecycle: {
+            reservation: "pending-before-provider-delay-and-response-headers";
+            reservationBudgetMilliseconds: 50;
+            finalization: "append-once-terminal-overlay-one-logical-row";
+            terminalOutcomes: readonly [
+              "completed",
+              "cancelled",
+              "deadline_exceeded",
+              "failed",
+            ];
+            replay: "exact-idempotent-conflicting-rejected-trimmed-no-op";
+            failurePolicy: "fail-open-best-effort-no-provider-response-change";
+          };
+          metadata: {
+            queryAndAssertionMatch: "exact";
+            sequence: "greedy-earliest-non-overlapping-append-order";
+            serverRevision: "exact-rechecked-plan-selection-revision";
+            resultShape: "response-plan-metadata-or-configured-error-kind";
+            responseId: "preallocated-response-plan-only-omitted-for-configured-errors";
+            stream: "accepted-request-stream-intent-configured-errors-may-return-json";
+            durationClock: "monotonic-elapsed-integer-milliseconds";
+            persistedTerminal: readonly ["outcome", "responseStatus", "durationMs"];
+            pendingCompatibilitySentinel: {
+              responseStatus: 102;
+              durationMs: 0;
+              meaning: "legacy-non-null-columns-not-delivery-metadata";
+            };
+            streamFrameAndByteCounts: "internal-test-only-not-persisted-or-queryable";
+          };
+          privacy: {
+            requestHeaders: "empty";
+            requestBody: "null";
+            responseHeaders: "empty";
+            responseBody: "null";
+            collisionPolicy: "skip-entire-observation-when-any-prospective-metadata-contains-request-credential";
+            excluded: readonly [
+              "prompts",
+              "outputs",
+              "credentials",
+              "headers",
+              "tool-inputs",
+              "planId",
+              "requestHash",
+            ];
+          };
+          evidence: {
+            designed: "qualified";
+            implemented: "qualified";
+            sourceTested: "qualified";
+            integrationTested: "qualified-mounted-worker";
+            sdkClientQualified: "provider-behavior-only-observation-management-via-mounted-mcp";
+            actualNetwork: "unqualified";
+            hostedSmoke: "unqualified";
+            verifiedLive: "unqualified";
+            productionReady: "unqualified";
+          };
+        };
       };
       deployedAcceptance: "unqualified";
     };
@@ -972,7 +1039,7 @@ export const generateMockosManagementDocumentationCatalog =
               "get_mock_llm_server",
               "delete_mock_llm_server",
             ],
-            persistence: "environment-schema-v7",
+            persistence: "environment-schema-v8",
             strictCredentials: "write-only-provider-scoped",
             putContract: {
               expectedRevision: "required-null-create-or-positive-replace",
@@ -993,8 +1060,8 @@ export const generateMockosManagementDocumentationCatalog =
                 "reject-substring-in-definition-keys-and-string-values",
             },
             schemaCompatibility: {
-              upgrade: "v6-to-v7",
-              rollback: "v6-refuses-v7",
+              upgrade: "v7-to-v8",
+              rollback: "v7-refuses-v8",
             },
           },
           guide: "docs/mock-llm.md",
@@ -1009,7 +1076,74 @@ export const generateMockosManagementDocumentationCatalog =
             anthropic: generateMockLlmAnthropicProviderDocumentation(),
             responsesApi: "unavailable",
             conversationState: "unavailable",
-            observationsAndAssertions: "unavailable",
+            observationsAndAssertions: {
+              status: "bounded-metadata-only-source-qualified",
+              managementTools: ["get_request_log", "assert_requests"],
+              scope: "successfully-parsed-and-planned-posts-after-response-preflight",
+              dialects: ["openai", "anthropic"],
+              operations: ["chat.completions.create", "messages.create"],
+              lifecycle: {
+                reservation: "pending-before-provider-delay-and-response-headers",
+                reservationBudgetMilliseconds: 50,
+                finalization: "append-once-terminal-overlay-one-logical-row",
+                terminalOutcomes: [
+                  "completed",
+                  "cancelled",
+                  "deadline_exceeded",
+                  "failed",
+                ],
+                replay: "exact-idempotent-conflicting-rejected-trimmed-no-op",
+                failurePolicy: "fail-open-best-effort-no-provider-response-change",
+              },
+              metadata: {
+                queryAndAssertionMatch: "exact",
+                sequence: "greedy-earliest-non-overlapping-append-order",
+                serverRevision: "exact-rechecked-plan-selection-revision",
+                resultShape: "response-plan-metadata-or-configured-error-kind",
+                responseId:
+                  "preallocated-response-plan-only-omitted-for-configured-errors",
+                stream:
+                  "accepted-request-stream-intent-configured-errors-may-return-json",
+                durationClock: "monotonic-elapsed-integer-milliseconds",
+                persistedTerminal: ["outcome", "responseStatus", "durationMs"],
+                pendingCompatibilitySentinel: {
+                  responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+                  durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+                  meaning: "legacy-non-null-columns-not-delivery-metadata",
+                },
+                streamFrameAndByteCounts:
+                  "internal-test-only-not-persisted-or-queryable",
+              },
+              privacy: {
+                requestHeaders: "empty",
+                requestBody: "null",
+                responseHeaders: "empty",
+                responseBody: "null",
+                collisionPolicy:
+                  "skip-entire-observation-when-any-prospective-metadata-contains-request-credential",
+                excluded: [
+                  "prompts",
+                  "outputs",
+                  "credentials",
+                  "headers",
+                  "tool-inputs",
+                  "planId",
+                  "requestHash",
+                ],
+              },
+              evidence: {
+                designed: "qualified",
+                implemented: "qualified",
+                sourceTested: "qualified",
+                integrationTested: "qualified-mounted-worker",
+                sdkClientQualified:
+                  "provider-behavior-only-observation-management-via-mounted-mcp",
+                actualNetwork: "unqualified",
+                hostedSmoke: "unqualified",
+                verifiedLive: "unqualified",
+                productionReady: "unqualified",
+              },
+            },
           },
           deployedAcceptance: "unqualified",
         },
@@ -1358,6 +1492,11 @@ export const generateMockosProductCapabilityIndex =
                 export: "mockLlmOpenAiProviderManifest",
               },
               {
+                kind: "contract",
+                path: "packages/contracts/src/index.ts",
+                export: "requestLogEntrySchema",
+              },
+              {
                 kind: "runtime",
                 path: "packages/llm-mock/src/openai-http.ts",
                 export: "createMockLlmOpenAiFetchHandler",
@@ -1377,6 +1516,11 @@ export const generateMockosProductCapabilityIndex =
                 path: "packages/worker-kit/src/edge-router.ts",
                 export: "routeEnvironmentRequest",
               },
+              {
+                kind: "runtime",
+                path: "packages/core/src/log/request-log.ts",
+                export: "RequestLogService",
+              },
             ],
           },
           evidence: {
@@ -1389,6 +1533,8 @@ export const generateMockosProductCapabilityIndex =
                 "packages/llm-mock/src/openai-http.test.ts",
                 "packages/llm-mock/src/edge-stream.test.ts",
                 "packages/llm-mock/src/sdk-conformance.test.ts",
+                "packages/core/src/scenario-log.test.ts",
+                "packages/worker-kit/src/edge-router.test.ts",
                 "apps/worker/test/mock-llm.integration.test.ts",
               ]
             ),
@@ -1415,6 +1561,7 @@ export const generateMockosProductCapabilityIndex =
           limitationRefs: [
             "docs/reference/mock-llm-openai.v1.json#/response/streaming/configuredMidstreamErrors",
             "docs/reference/mock-llm-openai.v1.json#/request/multimodal",
+            "docs/mock-llm.md#observation-evidence-boundary",
           ],
         },
         {
@@ -1436,6 +1583,11 @@ export const generateMockosProductCapabilityIndex =
                 export: "mockLlmAnthropicProviderManifest",
               },
               {
+                kind: "contract",
+                path: "packages/contracts/src/index.ts",
+                export: "requestLogEntrySchema",
+              },
+              {
                 kind: "runtime",
                 path: "packages/llm-mock/src/anthropic-http.ts",
                 export: "createMockLlmAnthropicFetchHandler",
@@ -1455,6 +1607,11 @@ export const generateMockosProductCapabilityIndex =
                 path: "packages/worker-kit/src/edge-router.ts",
                 export: "routeEnvironmentRequest",
               },
+              {
+                kind: "runtime",
+                path: "packages/core/src/log/request-log.ts",
+                export: "RequestLogService",
+              },
             ],
           },
           evidence: {
@@ -1468,6 +1625,8 @@ export const generateMockosProductCapabilityIndex =
                 "packages/llm-mock/src/anthropic-security.test.ts",
                 "packages/llm-mock/src/edge-stream.test.ts",
                 "packages/llm-mock/src/sdk-conformance.test.ts",
+                "packages/core/src/scenario-log.test.ts",
+                "packages/worker-kit/src/edge-router.test.ts",
                 "apps/worker/test/mock-llm-anthropic.integration.test.ts",
               ]
             ),
@@ -1495,6 +1654,7 @@ export const generateMockosProductCapabilityIndex =
             "docs/reference/mock-llm-anthropic.v1.json#/response/streaming/configuredMidstreamErrors",
             "docs/reference/mock-llm-anthropic.v1.json#/request/multimodal",
             "docs/reference/mock-llm-anthropic.v1.json#/request/betaFeatures",
+            "docs/mock-llm.md#observation-evidence-boundary",
           ],
         },
         {

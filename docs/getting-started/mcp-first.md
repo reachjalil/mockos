@@ -142,11 +142,13 @@ It also does not configure the F2 definition/provider workflow. Use the
 path, or [MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for exact revision,
 credential, request, persistence, and cleanup contracts. That partial F2 workflow
 enables bounded model discovery plus OpenAI and Anthropic JSON/SSE
-Chat Completions/Messages. It does not enable:
+Chat Completions/Messages and metadata-only provider-call query/assertion through the
+existing request-log MCP tools. It does not enable:
 
 - broad Anthropic provider/beta APIs, configured midstream errors, or
   the OpenAI Responses API;
-- LLM conversation state, reset, observations, or assertions;
+- LLM conversation state, reset, prompt/output capture, or audit-guaranteed
+  observation delivery;
 - Cloud pinning, hosted deployment, or live-provider parity;
 - user-script execution or Worker Loader (F3);
 - enforced `env:ro` or `env:rw` key scopes (F4);

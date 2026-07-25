@@ -1,5 +1,4 @@
 import type { JsonValue } from "@mockos/contracts/behavior";
-import type { MockLlmPlan } from "@mockos/contracts/mock-llm";
 import {
   createMockLlmAnthropicFetchHandler,
   createMockLlmOpenAiFetchHandler,
@@ -7,6 +6,9 @@ import {
   type MockLlmAnthropicRuntimeResult,
   type MockLlmOpenAiCatalog,
   type MockLlmOpenAiRuntimeResult,
+  type MockLlmProviderObservationFinish,
+  type MockLlmProviderObservationHook,
+  type MockLlmProviderObservationStart,
 } from "@mockos/llm-mock";
 import type { EnvironmentDurableObject } from "./environment-do";
 import {
@@ -15,6 +17,7 @@ import {
   type HostResolverConfig,
   resolveEnvironmentRequest,
 } from "./host-resolver";
+import type { EnvironmentMockLlmPlanSelection } from "./mock-llm-runtime";
 
 export type EnvironmentRoutingBindings = {
   API_KEY?: string;
@@ -28,9 +31,21 @@ export type ProtocolRequestHooks = {
     request: Request;
     resolution: ReturnType<typeof resolveEnvironmentRequest>;
   }) => Promise<Response | undefined> | Response | undefined;
+  waitUntil?: (promise: Promise<void>) => void;
 };
 
-type MockLlmOpenAiEnvironmentRpc = {
+type MockLlmEnvironmentObservationRpc = {
+  reserveMockLlmObservation(
+    serverRevision: number,
+    requestPath: string,
+    observation: MockLlmProviderObservationStart
+  ): Promise<void>;
+  finalizeMockLlmObservation(
+    observation: MockLlmProviderObservationFinish
+  ): Promise<void>;
+};
+
+type MockLlmOpenAiEnvironmentRpc = MockLlmEnvironmentObservationRpc & {
   getMockLlmOpenAiCatalog(
     slug: string,
     credential: string
@@ -39,10 +54,10 @@ type MockLlmOpenAiEnvironmentRpc = {
     slug: string,
     credential: string,
     request: JsonValue
-  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmPlan>>;
+  ): Promise<MockLlmOpenAiRuntimeResult<EnvironmentMockLlmPlanSelection>>;
 };
 
-type MockLlmAnthropicEnvironmentRpc = {
+type MockLlmAnthropicEnvironmentRpc = MockLlmEnvironmentObservationRpc & {
   getMockLlmAnthropicCatalog(
     slug: string,
     credential: string
@@ -51,8 +66,42 @@ type MockLlmAnthropicEnvironmentRpc = {
     slug: string,
     credential: string,
     request: JsonValue
-  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmPlan>>;
+  ): Promise<MockLlmAnthropicRuntimeResult<EnvironmentMockLlmPlanSelection>>;
 };
+
+type SelectedServerRevision = {
+  current: number | undefined;
+};
+
+const createObservationHook = (
+  rpc: MockLlmEnvironmentObservationRpc,
+  requestPath: string,
+  selectedServerRevision: SelectedServerRevision,
+  waitUntil: ProtocolRequestHooks["waitUntil"]
+): MockLlmProviderObservationHook => ({
+  reserve: (observation, privacyGuard) => {
+    const serverRevision = selectedServerRevision.current;
+    if (serverRevision === undefined) {
+      throw new Error("The selected mock LLM server revision is unavailable.");
+    }
+    if (
+      !privacyGuard({
+        requestPath,
+        serverRevision,
+        source: "inbound",
+        protocol: "http",
+        pendingOutcome: "pending",
+        pendingResponseStatus: 102,
+        pendingDurationMilliseconds: 0,
+      })
+    ) {
+      throw new Error("Prospective LLM observation metadata contains a credential.");
+    }
+    return rpc.reserveMockLlmObservation(serverRevision, requestPath, observation);
+  },
+  finish: (observation) => rpc.finalizeMockLlmObservation(observation),
+  ...(waitUntil ? { waitUntil } : {}),
+});
 
 const resolveEnvironmentId = async (
   locator: ReturnType<typeof resolveEnvironmentRequest>,
@@ -90,19 +139,34 @@ export const routeEnvironmentRequest = async (
   const id = bindings.ENVIRONMENTS.idFromName(environmentId);
   const stub = bindings.ENVIRONMENTS.get(id);
   if (resolution.kind === "mock-llm") {
+    const requestPath = new URL(request.url).pathname;
+    const selectedServerRevision: SelectedServerRevision = {
+      current: undefined,
+    };
     if (resolution.dialect === "anthropic") {
       const mockLlm = stub as unknown as MockLlmAnthropicEnvironmentRpc;
       const handler = createMockLlmAnthropicFetchHandler({
         ...(bindings.API_KEY ? { platformApiKey: bindings.API_KEY } : {}),
+        observation: createObservationHook(
+          mockLlm,
+          requestPath,
+          selectedServerRevision,
+          hooks.waitUntil
+        ),
         runtime: {
           getCatalog: (input) =>
             mockLlm.getMockLlmAnthropicCatalog(input.slug, input.credential),
-          planMessage: (input) =>
-            mockLlm.planMockLlmAnthropicMessage(
+          planMessage: async (input) => {
+            selectedServerRevision.current = undefined;
+            const result = await mockLlm.planMockLlmAnthropicMessage(
               input.slug,
               input.credential,
               input.request
-            ),
+            );
+            if (!result.ok) return result;
+            selectedServerRevision.current = result.value.serverRevision;
+            return { ok: true, value: result.value.plan };
+          },
         },
       });
       return handler(request, {
@@ -113,15 +177,26 @@ export const routeEnvironmentRequest = async (
     const mockLlm = stub as unknown as MockLlmOpenAiEnvironmentRpc;
     const handler = createMockLlmOpenAiFetchHandler({
       ...(bindings.API_KEY ? { platformApiKey: bindings.API_KEY } : {}),
+      observation: createObservationHook(
+        mockLlm,
+        requestPath,
+        selectedServerRevision,
+        hooks.waitUntil
+      ),
       runtime: {
         getCatalog: (input) =>
           mockLlm.getMockLlmOpenAiCatalog(input.slug, input.credential),
-        planChatCompletion: (input) =>
-          mockLlm.planMockLlmOpenAiChatCompletion(
+        planChatCompletion: async (input) => {
+          selectedServerRevision.current = undefined;
+          const result = await mockLlm.planMockLlmOpenAiChatCompletion(
             input.slug,
             input.credential,
             input.request
-          ),
+          );
+          if (!result.ok) return result;
+          selectedServerRevision.current = result.value.serverRevision;
+          return { ok: true, value: result.value.plan };
+        },
       },
     });
     return handler(request, {

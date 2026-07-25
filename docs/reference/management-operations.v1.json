@@ -15,7 +15,7 @@
           "revisionMismatch": "typed-409"
         },
         "interface": "MCP-only",
-        "persistence": "environment-schema-v7",
+        "persistence": "environment-schema-v8",
         "putContract": {
           "expectedRevision": "required-null-create-or-positive-replace",
           "replacement": "full-definition",
@@ -23,8 +23,8 @@
           "strictCredentialReplacement": "resupply-or-rotate-every-enabled-provider"
         },
         "schemaCompatibility": {
-          "rollback": "v6-refuses-v7",
-          "upgrade": "v6-to-v7"
+          "rollback": "v7-refuses-v8",
+          "upgrade": "v7-to-v8"
         },
         "status": "source-implemented",
         "strictCredentials": "write-only-provider-scoped",
@@ -173,7 +173,82 @@
           "docs/reference/mock-llm-openai.v1.json",
           "docs/reference/mock-llm-anthropic.v1.json"
         ],
-        "observationsAndAssertions": "unavailable",
+        "observationsAndAssertions": {
+          "dialects": [
+            "openai",
+            "anthropic"
+          ],
+          "evidence": {
+            "actualNetwork": "unqualified",
+            "designed": "qualified",
+            "hostedSmoke": "unqualified",
+            "implemented": "qualified",
+            "integrationTested": "qualified-mounted-worker",
+            "productionReady": "unqualified",
+            "sdkClientQualified": "provider-behavior-only-observation-management-via-mounted-mcp",
+            "sourceTested": "qualified",
+            "verifiedLive": "unqualified"
+          },
+          "lifecycle": {
+            "failurePolicy": "fail-open-best-effort-no-provider-response-change",
+            "finalization": "append-once-terminal-overlay-one-logical-row",
+            "replay": "exact-idempotent-conflicting-rejected-trimmed-no-op",
+            "reservation": "pending-before-provider-delay-and-response-headers",
+            "reservationBudgetMilliseconds": 50,
+            "terminalOutcomes": [
+              "completed",
+              "cancelled",
+              "deadline_exceeded",
+              "failed"
+            ]
+          },
+          "managementTools": [
+            "get_request_log",
+            "assert_requests"
+          ],
+          "metadata": {
+            "durationClock": "monotonic-elapsed-integer-milliseconds",
+            "pendingCompatibilitySentinel": {
+              "durationMs": 0,
+              "meaning": "legacy-non-null-columns-not-delivery-metadata",
+              "responseStatus": 102
+            },
+            "persistedTerminal": [
+              "outcome",
+              "responseStatus",
+              "durationMs"
+            ],
+            "queryAndAssertionMatch": "exact",
+            "responseId": "preallocated-response-plan-only-omitted-for-configured-errors",
+            "resultShape": "response-plan-metadata-or-configured-error-kind",
+            "sequence": "greedy-earliest-non-overlapping-append-order",
+            "serverRevision": "exact-rechecked-plan-selection-revision",
+            "stream": "accepted-request-stream-intent-configured-errors-may-return-json",
+            "streamFrameAndByteCounts": "internal-test-only-not-persisted-or-queryable"
+          },
+          "operations": [
+            "chat.completions.create",
+            "messages.create"
+          ],
+          "privacy": {
+            "collisionPolicy": "skip-entire-observation-when-any-prospective-metadata-contains-request-credential",
+            "excluded": [
+              "prompts",
+              "outputs",
+              "credentials",
+              "headers",
+              "tool-inputs",
+              "planId",
+              "requestHash"
+            ],
+            "requestBody": "null",
+            "requestHeaders": "empty",
+            "responseBody": "null",
+            "responseHeaders": "empty"
+          },
+          "scope": "successfully-parsed-and-planned-posts-after-response-preflight",
+          "status": "bounded-metadata-only-source-qualified"
+        },
         "openAi": {
           "authentication": {
             "acceptAny": "valid-mock-credential-required-no-verifier-comparison",
@@ -2217,7 +2292,7 @@
         "title": "Clear deterministic failure scenarios"
       },
       {
-        "description": "Returns a filtered page of inbound, outbound, or control traffic for an environment.",
+        "description": "Returns a filtered page of inbound, outbound, or control traffic, including structured mock-LLM lifecycle observations without prompts, credentials, headers, or bodies.",
         "effect": "read",
         "http": null,
         "mcp": {
@@ -2246,6 +2321,103 @@
                 "default": 100,
                 "maximum": 1000,
                 "minimum": 1,
+                "type": "integer"
+              },
+              "llmDialect": {
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "type": "string"
+              },
+              "llmErrorKind": {
+                "enum": [
+                  "invalid_request",
+                  "authentication",
+                  "permission_denied",
+                  "not_found",
+                  "request_too_large",
+                  "rate_limit",
+                  "timeout",
+                  "internal",
+                  "overloaded"
+                ],
+                "type": "string"
+              },
+              "llmInputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmModel": {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "type": "string"
+              },
+              "llmOperation": {
+                "enum": [
+                  "chat.completions.create",
+                  "messages.create"
+                ],
+                "type": "string"
+              },
+              "llmOutcome": {
+                "enum": [
+                  "pending",
+                  "completed",
+                  "cancelled",
+                  "deadline_exceeded",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "llmOutputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmResponseId": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "llmServerRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "llmServerSlug": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "llmStopReason": {
+                "enum": [
+                  "end_turn",
+                  "max_tokens",
+                  "stop_sequence",
+                  "tool_use"
+                ],
+                "type": "string"
+              },
+              "llmStream": {
+                "type": "boolean"
+              },
+              "llmToolNames": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "llmTurnIndex": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
                 "type": "integer"
               },
               "mcpMethod": {
@@ -2287,6 +2459,13 @@
                   },
                   {
                     "const": "mcp",
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "openai",
+                      "anthropic"
+                    ],
                     "type": "string"
                   }
                 ]
@@ -2364,6 +2543,103 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "llmDialect": {
+                          "enum": [
+                            "openai",
+                            "anthropic"
+                          ],
+                          "type": "string"
+                        },
+                        "llmErrorKind": {
+                          "enum": [
+                            "invalid_request",
+                            "authentication",
+                            "permission_denied",
+                            "not_found",
+                            "request_too_large",
+                            "rate_limit",
+                            "timeout",
+                            "internal",
+                            "overloaded"
+                          ],
+                          "type": "string"
+                        },
+                        "llmInputTokens": {
+                          "maximum": 1000000000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "llmModel": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "pattern": "^[\\x21-\\x7e]+$",
+                          "type": "string"
+                        },
+                        "llmOperation": {
+                          "enum": [
+                            "chat.completions.create",
+                            "messages.create"
+                          ],
+                          "type": "string"
+                        },
+                        "llmOutcome": {
+                          "enum": [
+                            "pending",
+                            "completed",
+                            "cancelled",
+                            "deadline_exceeded",
+                            "failed"
+                          ],
+                          "type": "string"
+                        },
+                        "llmOutputTokens": {
+                          "maximum": 1000000000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "llmResponseId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "llmServerRevision": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "llmServerSlug": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                          "type": "string"
+                        },
+                        "llmStopReason": {
+                          "enum": [
+                            "end_turn",
+                            "max_tokens",
+                            "stop_sequence",
+                            "tool_use"
+                          ],
+                          "type": "string"
+                        },
+                        "llmStream": {
+                          "type": "boolean"
+                        },
+                        "llmToolNames": {
+                          "items": {
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[A-Za-z0-9_-]+$",
+                            "type": "string"
+                          },
+                          "maxItems": 64,
+                          "type": "array"
+                        },
+                        "llmTurnIndex": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
                         "mcpArguments": {
                           "additionalProperties": {
                             "$ref": "#/definitions/__schema0"
@@ -2420,6 +2696,13 @@
                             },
                             {
                               "const": "mcp",
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "openai",
+                                "anthropic"
+                              ],
                               "type": "string"
                             }
                           ]
@@ -2544,7 +2827,7 @@
         "title": "Get request log"
       },
       {
-        "description": "Evaluates a deterministic assertion against captured environment traffic.",
+        "description": "Evaluates deterministic count or ordered-sequence assertions against captured environment traffic and structured mock-LLM metadata.",
         "effect": "read",
         "http": null,
         "mcp": {
@@ -2626,6 +2909,103 @@
                 "pattern": "^[a-z0-9][a-z0-9_-]+$",
                 "type": "string"
               },
+              "llmDialect": {
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "type": "string"
+              },
+              "llmErrorKind": {
+                "enum": [
+                  "invalid_request",
+                  "authentication",
+                  "permission_denied",
+                  "not_found",
+                  "request_too_large",
+                  "rate_limit",
+                  "timeout",
+                  "internal",
+                  "overloaded"
+                ],
+                "type": "string"
+              },
+              "llmInputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmModel": {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "type": "string"
+              },
+              "llmOperation": {
+                "enum": [
+                  "chat.completions.create",
+                  "messages.create"
+                ],
+                "type": "string"
+              },
+              "llmOutcome": {
+                "enum": [
+                  "pending",
+                  "completed",
+                  "cancelled",
+                  "deadline_exceeded",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "llmOutputTokens": {
+                "maximum": 1000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "llmResponseId": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "llmServerRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "llmServerSlug": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "llmStopReason": {
+                "enum": [
+                  "end_turn",
+                  "max_tokens",
+                  "stop_sequence",
+                  "tool_use"
+                ],
+                "type": "string"
+              },
+              "llmStream": {
+                "type": "boolean"
+              },
+              "llmToolNames": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "llmTurnIndex": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "mcpArguments": {
                 "additionalProperties": {
                   "$ref": "#/definitions/__schema0"
@@ -2671,6 +3051,103 @@
                       "maxLength": 8192,
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "llmDialect": {
+                      "enum": [
+                        "openai",
+                        "anthropic"
+                      ],
+                      "type": "string"
+                    },
+                    "llmErrorKind": {
+                      "enum": [
+                        "invalid_request",
+                        "authentication",
+                        "permission_denied",
+                        "not_found",
+                        "request_too_large",
+                        "rate_limit",
+                        "timeout",
+                        "internal",
+                        "overloaded"
+                      ],
+                      "type": "string"
+                    },
+                    "llmInputTokens": {
+                      "maximum": 1000000000,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "llmModel": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "pattern": "^[\\x21-\\x7e]+$",
+                      "type": "string"
+                    },
+                    "llmOperation": {
+                      "enum": [
+                        "chat.completions.create",
+                        "messages.create"
+                      ],
+                      "type": "string"
+                    },
+                    "llmOutcome": {
+                      "enum": [
+                        "pending",
+                        "completed",
+                        "cancelled",
+                        "deadline_exceeded",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "llmOutputTokens": {
+                      "maximum": 1000000000,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "llmResponseId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "llmServerRevision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "llmServerSlug": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                      "type": "string"
+                    },
+                    "llmStopReason": {
+                      "enum": [
+                        "end_turn",
+                        "max_tokens",
+                        "stop_sequence",
+                        "tool_use"
+                      ],
+                      "type": "string"
+                    },
+                    "llmStream": {
+                      "type": "boolean"
+                    },
+                    "llmToolNames": {
+                      "items": {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "type": "string"
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    },
+                    "llmTurnIndex": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
                     },
                     "mcpArguments": {
                       "additionalProperties": {

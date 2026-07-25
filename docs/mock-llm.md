@@ -1,6 +1,6 @@
 # MCP-managed mock OpenAI and Anthropic
 
-Status: Bounded OpenAI and Anthropic streaming provider data planes source-qualified locally; F2 remains partial
+Status: Bounded OpenAI and Anthropic JSON/SSE plus metadata-only observation/query/assertion source-qualified locally; F2 remains partial
 Last reviewed: 2026-07-25
 
 mockOS is MCP-first. Agents and automation create, inspect, replace, and delete mock
@@ -10,8 +10,11 @@ never moves to provider HTTP, and application traffic never becomes a management
 
 The current source-qualified slice supports model list/retrieve plus JSON and SSE
 OpenAI Chat Completions and Anthropic Messages through pinned official
-JavaScript SDKs. It is a pair of bounded compatibility subsets, not a general OpenAI or Anthropic API,
-deployed service, live-provider comparison, or complete F2 runtime.
+JavaScript SDKs. Successfully parsed and planned provider POSTs that pass response
+preflight also enter the existing management request log as bounded metadata-only
+observations that agents can query and assert through MCP. This is a pair of bounded
+compatibility subsets, not a general OpenAI or Anthropic API, deployed service,
+complete audit trail, live-provider comparison, or complete F2 runtime.
 Start with the [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](./quickstarts/anthropic-sdk.md). The generated
 [OpenAI](./reference/mock-llm-openai.v1.json) and
@@ -34,7 +37,7 @@ management MCP /mcp
                      │
                      ▼
           environment-local definition
-          schema v7 + monotonic revision
+          schema v8 + monotonic revision
 
 application or provider SDK
           │
@@ -54,6 +57,10 @@ application or provider SDK
                                ▼
           same environment definition
           deterministic stateless plan
+                      │
+                      ▼
+          one attempted metadata-only request-log row
+          get_request_log / assert_requests
 ```
 
 The source contains exactly **24 management MCP tools**. The four mock-LLM
@@ -80,11 +87,12 @@ It is not an alternative way to configure mockOS.
 | SDK evidence | Pinned `openai` 6.49.0 and `@anthropic-ai/sdk` 0.115.0 through local Worker integrations using injected Fetch |
 | Runtime state | Stateless; the prior `assistant` message count selects the turn |
 | Timing | Shared pre-header initial delay, payload-only SSE pacing, absolute duration/backpressure deadline, 2 MiB preflight, and abort/cancel cleanup |
+| Observation | One metadata-only reservation attempt, capped at 50 milliseconds, for each successfully parsed/planned provider POST that passes response preflight; privacy collisions skip the row, and existing MCP tools exact-match persisted rows |
 | Evidence | Package and local Worker source qualification only |
 
 Anthropic betas, the OpenAI Responses API, configured mid-stream errors,
-conversation state, LLM observations/assertions, Cloud pinning, and deployment
-remain unavailable or unqualified.
+conversation state, actual-network qualification, Cloud pinning, and deployment remain
+unavailable or unqualified.
 
 ## Prerequisites
 
@@ -670,6 +678,173 @@ message/content-block structural events are immediate. The shared preflight, 2 M
 UTF-8 cap, absolute initial/pacing/backpressure deadline, and pre-header versus
 post-header failure boundary described above apply unchanged.
 
+## Observe and assert provider calls
+
+The existing management MCP tools `get_request_log` and `assert_requests` now
+understand bounded OpenAI and Anthropic lifecycle metadata. No new LLM-only
+management tool or provider-side inspection route is added.
+
+An observation is reserved only after a Chat Completions or Messages `POST` is
+successfully parsed and planned and its JSON serialization or complete SSE preflight
+has passed. Model catalog reads, unsupported routes or methods, authentication and
+Anthropic version failures, invalid content/JSON/request shapes, missing models,
+planning failures, and response serialization/preflight failures do not create an
+LLM observation. A configured provider error is a successful plan and is observed.
+
+Reservation happens before provider delay and before response headers, but the edge
+waits at most 50 milliseconds for it. Failure, timeout, or a credential collision in
+any prospective durable metadata serves the valid provider response without treating
+the row as reserved. A storage hook which cannot be cancelled can still finish after
+the edge timeout; that late row remains `pending` because no terminal finalization is
+scheduled. A successful in-budget reservation creates one logical request-log row with
+`llmOutcome: "pending"`. Terminal finalization overlays the same row rather than
+appending a second entry, so its request ID and append sequence do not change. The
+terminal outcomes are:
+
+| Outcome | Meaning |
+| --- | --- |
+| `completed` | The selected JSON response or complete SSE stream was delivered. A configured error that was delivered as provider JSON is also `completed`; use `llmErrorKind` and `responseStatus` to distinguish it from a success plan. |
+| `cancelled` | The request signal or stream reader cancelled before completion. An accepted stream retains its selected HTTP status, normally `200`; a pre-header abort can finalize with `499`. |
+| `deadline_exceeded` | The absolute provider delivery deadline expired. A pre-header deadline failure is returned as generic `500`; a post-header deadline truncates the accepted stream. |
+| `failed` | A non-deadline provider delay, response construction, or stream delivery failure terminated the planned call. |
+
+Exact terminal replay is idempotent. A conflicting second terminal result is rejected,
+and finalization after retention has already trimmed the reservation is a no-op. A
+query sees the actual delivered `responseStatus` and elapsed `durationMs` only after
+terminal finalization. Because the legacy request-log columns are non-null, a
+still-`pending` row exposes the explicit compatibility sentinels
+`responseStatus: 102` and `durationMs: 0`. Those values mean only “terminal metadata
+not persisted”; they are not a planned or delivered status/duration.
+
+### Metadata contract
+
+Every LLM entry uses `source: "inbound"`, `protocol: "http"`, method `POST`, the
+actual environment request path, the fresh provider request ID as both `id` and
+`correlationId`, and the exact server revision returned by the runtime's final
+definition recheck. The LLM-specific fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `llmDialect` | Exact `openai` or `anthropic` provider dialect; it also matches `provider` |
+| `llmOperation` | Exact `chat.completions.create` or `messages.create` operation for that dialect |
+| `llmServerSlug`, `llmServerRevision` | Selected definition identity and exact positive revision |
+| `llmModel`, `llmStream`, `llmTurnIndex` | Requested model, accepted request's Boolean streaming intent, and stateless prior-assistant count. A configured error can have `llmStream: true` while being returned as pre-header JSON. |
+| `llmOutcome`, `llmResponseId` | Pending/terminal lifecycle and preallocated provider response/message ID. `llmResponseId` exists only for response plans and is omitted for configured errors. |
+| `llmInputTokens`, `llmOutputTokens`, `llmStopReason`, `llmToolNames` | Complete response-plan metadata. Tool names preserve plan order and duplicates; tool inputs are excluded. |
+| `llmErrorKind` | Configured neutral error kind, mutually exclusive with the four response-plan fields |
+| `responseStatus`, `durationMs` | Actual delivered HTTP status and monotonic elapsed integer milliseconds after terminal finalization; pending rows expose only the `102`/`0` compatibility sentinels |
+
+The existing request-log fields `requestHeaders` and `responseHeaders` are always
+empty objects for LLM entries; `requestBody` and `responseBody` are always `null`.
+mockOS does not persist prompts, provider outputs, credentials, headers, tool inputs,
+`planId`, or `requestHash` in this contract.
+
+Before reservation, a request-local privacy guard checks the complete observation,
+the actual routed path, exact server revision, pending sentinels, every possible
+terminal outcome, and candidate response statuses against the presented Mock
+Credential and platform key. Final status and duration are checked again before
+terminal persistence. If any value would disclose a credential—including an
+`accept_any` credential deliberately chosen to equal an operation, path component,
+or terminal outcome—the entire observation is skipped while the provider response
+continues.
+
+The edge stream helper internally counts emitted frames and UTF-8 bytes so direct
+stream tests can prove terminal accounting.
+Frame and byte counts are internal test accounting only.
+They are not persisted or queryable, are not returned by `get_request_log`, and
+cannot be used by `assert_requests`.
+
+### Query exact metadata
+
+`get_request_log` accepts every LLM field in the table above as an exact filter in
+addition to the existing source/provider/protocol/method/path/status filters. Boolean
+`false`, integer zero, and an empty `llmToolNames` array are real exact values rather
+than omitted filters. `llmToolNames` matches the complete ordered array, including
+duplicates.
+
+For example, after resolving the current definition revision through MCP:
+
+```json
+{
+  "environmentId": "env_replace_me",
+  "llmDialect": "openai",
+  "llmOperation": "chat.completions.create",
+  "llmServerSlug": "agent-tests",
+  "llmServerRevision": 7,
+  "llmModel": "mock-agent-1",
+  "llmStream": false,
+  "llmOutcome": "completed",
+  "limit": 100
+}
+```
+
+The result contains one entry per provider invocation, not one row for reservation
+and another for finalization. A configured `rate_limit` plan that was successfully
+delivered can be selected exactly with `llmErrorKind: "rate_limit"`,
+`llmOutcome: "completed"`, and `status: 429`.
+
+### Assert counts and ordered sequences
+
+`assert_requests` accepts the same exact matchers at the top level and inside each
+ordered `sequence` step. Count assertions retain the existing `atLeast`, `atMost`, or
+`exactly` contract. Sequence assertions remain greedy-earliest, non-overlapping
+subsequences in append order; finalization never reorders an observation.
+
+```json
+{
+  "environmentId": "env_replace_me",
+  "sequence": [
+    {
+      "llmDialect": "openai",
+      "llmOperation": "chat.completions.create",
+      "llmTurnIndex": 0,
+      "llmOutcome": "completed"
+    },
+    {
+      "llmDialect": "openai",
+      "llmOperation": "chat.completions.create",
+      "llmTurnIndex": 1,
+      "llmStopReason": "tool_use",
+      "llmToolNames": ["get_weather"],
+      "llmOutcome": "completed"
+    }
+  ],
+  "count": {
+    "exactly": 1
+  }
+}
+```
+
+### Observation evidence boundary
+
+Observation is deliberately fail-open and best-effort. Reservation failure or a
+privacy collision cannot change the provider response, and reservation waiting is
+bounded to 50 milliseconds. A failed reservation creates no entry; a timed-out
+non-cancellable storage attempt can still create a late `pending` entry. If terminal
+persistence fails, the provider response still proceeds and the reserved row can
+remain `pending`. The completion hook is scheduled through the Worker lifetime when
+available, but it is not a retrying audit queue. Do not use this slice as a complete,
+tamper-evident, billing, security-audit, or compliance record.
+
+| Evidence level | Status for this bounded observation slice |
+| --- | --- |
+| Designed | Yes: strict metadata, lifecycle, privacy, query, assertion, and append-order contracts are explicit. |
+| Implemented | Yes: schema v8, provider hooks, Environment Durable Object reservation/finalization, and existing MCP query/assertion projections are wired. |
+| Source-tested | Yes: contracts, v7→v8 migration, append-once terminal persistence, exact matchers, fail-open behavior, terminal stream accounting, and privacy are covered. |
+| Integration-tested | Yes: mounted local Worker tests drive official provider SDK calls, then query and assert observations through the official MCP client. |
+| SDK/client-qualified | Bounded: the pinned OpenAI/Anthropic SDK claim applies to provider behavior. Observation query/assertion itself is qualified through the mounted Worker and MCP-client tests, not a separate provider-SDK contract. |
+| Actual-network-qualified | No: no real socket or `wrangler dev` observation journey is recorded. |
+| Hosted-smoke-verified | No. |
+| Verified-live | No provider account or tenant was contacted. |
+| Production-ready | No: Cloud pinning, rollout, durability/load, and operated audit guarantees are unqualified. |
+
+Direct HTTP-adapter and edge-router tests prove a reader cancellation finalizes as
+`cancelled` without rewriting an already accepted `200`. The local Worker-pool
+service binding used by the mounted SDK suite does not propagate downstream stream
+reader cancellation back through that binding, so the mounted Worker observation
+assertions do not claim `cancelled` persistence. They do separately prove SDK
+cancellation omits fabricated OpenAI/Anthropic terminal success.
+
 ## Diagnose provider failures
 
 OpenAI local request failures use a bounded OpenAI-shaped envelope and fresh
@@ -774,12 +949,17 @@ fields. Unknown top-level arguments collapse to one generic, secret-safe validat
 issue so neither their name nor value is echoed. Nested definition objects are strict.
 Never use a real credential merely because mockOS tests non-reflection.
 
-Opening this runtime applies append-only environment **schema v7** for canonical
-definition rows and the monotonic LLM revision allocator. It adds no provider-request
-log, conversation, response, or evaluator-state table. A v6 store upgrades without
-changing F1 rows, while an older v6 bundle refuses a store already touched by schema
-v7. Recovery must roll forward to a v7-aware build or use a separately reviewed
-migration/export bridge; a source rollback is not a SQLite downgrade.
+Opening this runtime applies append-only environment **schema v8**. Schema v7 already
+owns canonical definition rows and the monotonic LLM revision allocator; v8 adds
+nullable structured LLM columns to the existing request log plus an append-once
+terminal child table keyed by request ID. Reads join that terminal state back into
+one logical row. No prompt/output table, conversation, response, or evaluator-state
+table is added.
+
+A v7 store upgrades without rewriting existing request-log rows. An older v7 bundle
+refuses a store already touched by schema v8. Recovery must roll forward to a v8-aware
+build or use a separately reviewed migration/export bridge; a source rollback is not
+a SQLite downgrade.
 
 ## Verify and clean up
 
@@ -792,12 +972,15 @@ After the management put:
    `x-api-key` plus the exact stable version;
 4. run one JSON or SSE OpenAI completion or Anthropic message with
    SDK retries disabled;
-5. record only source evidence unless an exact deployment record exists; and
-6. delete the definition with the latest positive revision in `finally`.
+5. poll `get_request_log` for the fresh provider response/request ID and a terminal
+   `llmOutcome`, then use `assert_requests` for the exact count or ordered sequence;
+6. treat an absent or still-`pending` entry as inconclusive because observation is
+   fail-open, not as proof that the provider call did not occur;
+7. record only source evidence unless an exact deployment record exists; and
+8. delete the definition with the latest positive revision in `finally`.
 
-The general request log does not yet provide LLM-specific observations or assertions.
-Do not claim that a successful `get_request_log` call proves a provider invocation,
-and do not place provider credentials in prompts to test logging.
+Never place a provider credential in a prompt to test logging. Credential reflection
+is rejected before planning, so that invalid request is intentionally unobserved.
 
 Deleting the containing environment also removes its Durable Object state. Prefer
 definition-level cleanup when the environment belongs to a larger test, and
@@ -821,7 +1004,10 @@ This partial slice does not provide:
   `tool_use`↔`tool_result` correlation, or real model pagination;
 - implicit sessions, conversation handles, persisted sequence/evaluator state,
   reset, or retry deduplication;
-- LLM-specific request observations, assertions, or provider request-log capture;
+- prompt/output/header/body capture, tool-input capture, frame/byte telemetry,
+  guaranteed observation delivery, or an audit-grade retry queue;
+- LLM observations for model reads, authentication/version/parse/model-selection
+  failures, or response preflight failures;
 - a mock-LLM management HTTP route, CLI workflow, or console workflow;
 - Cloud pinning, private hosted composition, hosted CI qualification, Wrangler
   network qualification, staging, production, or service-level guarantees; or
@@ -830,28 +1016,33 @@ This partial slice does not provide:
 Do not call F2 complete. The strongest current wording is:
 
 > MCP-managed definitions plus bounded JSON/SSE OpenAI Chat Completions and
-> Anthropic Messages are source-qualified locally through package tests and pinned
-> official SDK Worker integrations. Anthropic betas, configured
-> mid-stream errors, state, observations, Cloud integration, deployment, and
-> live-provider parity remain unqualified or unavailable.
+> Anthropic Messages plus metadata-only request-log query/assertion are
+> source-qualified locally through package tests and pinned official SDK Worker/MCP
+> integrations. Anthropic betas, configured mid-stream errors, state, actual-network
+> qualification, Cloud integration, deployment, and live-provider parity remain
+> unqualified or unavailable.
 
 ## Source ownership and exact reference
 
 | Source | Responsibility |
 | --- | --- |
 | [`packages/contracts/src/mock-llm-server.ts`](../packages/contracts/src/mock-llm-server.ts) | Strict write/persisted/safe-view definition contracts and bounds |
+| [`packages/contracts/src/index.ts`](../packages/contracts/src/index.ts) | Structured LLM request-log entry, terminal, query, count, and sequence matcher contracts |
 | [`packages/contracts/src/operations/management.ts`](../packages/contracts/src/operations/management.ts) | Four MCP-only management operations |
 | [`packages/core/src/mock-llm/repository.ts`](../packages/core/src/mock-llm/repository.ts) | Canonical definition persistence, revision allocation, replay, and compare-and-swap |
+| [`packages/core/src/log/request-log.ts`](../packages/core/src/log/request-log.ts) | One-row reservation, append-once terminal overlay, exact query/assertion matching, retention, and pagination |
 | [`packages/llm-mock/src/planner.ts`](../packages/llm-mock/src/planner.ts) | Provider-neutral deterministic response planning |
+| [`packages/llm-mock/src/observation.ts`](../packages/llm-mock/src/observation.ts) | Fail-open provider reservation/finalization hook and Worker-lifetime scheduling |
 | [`packages/llm-mock/src/openai.ts`](../packages/llm-mock/src/openai.ts) | OpenAI JSON and pure SSE-frame projection |
 | [`packages/llm-mock/src/openai-http.ts`](../packages/llm-mock/src/openai-http.ts) | Executable OpenAI operation manifest, bounded request adapter, auth-safe errors, model projection, edge-stream integration, and transport IDs |
 | [`packages/llm-mock/src/anthropic.ts`](../packages/llm-mock/src/anthropic.ts) | Anthropic JSON and pure SSE-frame projection |
 | [`packages/llm-mock/src/anthropic-http.ts`](../packages/llm-mock/src/anthropic-http.ts) | Executable Anthropic operation manifest, version/auth boundary, bounded Messages adapter, model projection, edge-stream integration, and fresh transport IDs |
 | [`packages/llm-mock/src/edge-stream.ts`](../packages/llm-mock/src/edge-stream.ts) | Shared complete-body/schedule preflight, edge-owned cadence, backpressure/deadline enforcement, and cancellation cleanup |
 | [`packages/worker-kit/src/mock-llm-runtime.ts`](../packages/worker-kit/src/mock-llm-runtime.ts) | Current-definition authentication, stateless planning, and revision recheck |
-| [`packages/worker-kit/src/edge-router.ts`](../packages/worker-kit/src/edge-router.ts) | Environment route composition and edge-owned provider response |
-| [`apps/worker/test/mock-llm.integration.test.ts`](../apps/worker/test/mock-llm.integration.test.ts) | MCP-to-Worker official OpenAI SDK source qualification |
-| [`apps/worker/test/mock-llm-anthropic.integration.test.ts`](../apps/worker/test/mock-llm-anthropic.integration.test.ts) | MCP-to-Worker official Anthropic SDK 0.115.0 source qualification |
+| [`packages/worker-kit/src/edge-router.ts`](../packages/worker-kit/src/edge-router.ts) | Environment route composition, exact selected-revision handoff, and observation lifecycle bridge |
+| [`packages/worker-kit/src/environment-do.ts`](../packages/worker-kit/src/environment-do.ts) | Metadata-only request-log reservation and terminal persistence |
+| [`apps/worker/test/mock-llm.integration.test.ts`](../apps/worker/test/mock-llm.integration.test.ts) | MCP-to-Worker official OpenAI SDK source qualification plus mounted observation query/assertion |
+| [`apps/worker/test/mock-llm-anthropic.integration.test.ts`](../apps/worker/test/mock-llm-anthropic.integration.test.ts) | MCP-to-Worker official Anthropic SDK 0.115.0 source qualification plus mounted observation query/assertion |
 | [`docs/reference/mock-llm-openai.v1.json`](./reference/mock-llm-openai.v1.json) | Generated machine-readable operation, limit, planning, authentication, and evidence contract |
 | [`docs/reference/mock-llm-anthropic.v1.json`](./reference/mock-llm-anthropic.v1.json) | Generated machine-readable Anthropic operation, header, limit, planning, authentication, and evidence contract |
 

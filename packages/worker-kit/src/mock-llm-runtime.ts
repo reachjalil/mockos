@@ -1,5 +1,6 @@
 import {
   type MockLlmDialect,
+  type MockLlmPlan,
   type MockLlmServerRecord,
   mockLlmMockCredentialSchema,
   mockLlmSlugSchema,
@@ -7,13 +8,13 @@ import {
 import { hashSecret, type MockLlmRepository } from "@mockos/core";
 import {
   type MockLlmAnthropicCatalog,
-  type MockLlmAnthropicRuntimeResult,
   MockLlmAnthropicRequestError,
-  parseMockLlmAnthropicMessageRequest,
+  type MockLlmAnthropicRuntimeResult,
   type MockLlmOpenAiCatalog,
+  MockLlmOpenAiRequestError,
   type MockLlmOpenAiRuntimeResult,
   mockLlmValueContainsSecret,
-  MockLlmOpenAiRequestError,
+  parseMockLlmAnthropicMessageRequest,
   parseMockLlmOpenAiChatRequest,
   planMockLlmResponse,
 } from "@mockos/llm-mock";
@@ -34,6 +35,14 @@ type MockLlmRuntimeErrorCode = Exclude<
 type MockLlmRuntimeResult<Value> =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly code: MockLlmRuntimeErrorCode };
+
+export type EnvironmentMockLlmPlanSelection = {
+  readonly plan: MockLlmPlan;
+  /**
+   * Exact definition revision rechecked immediately before the plan commits.
+   */
+  readonly serverRevision: number;
+};
 
 const sameSecret = (left: string, right: string): boolean => {
   const length = Math.max(left.length, right.length);
@@ -149,9 +158,7 @@ export class EnvironmentMockLlmOpenAiRuntime {
     slug: string,
     credential: string,
     request: unknown
-  ): Promise<
-    MockLlmOpenAiRuntimeResult<Awaited<ReturnType<typeof planMockLlmResponse>>["plan"]>
-  > {
+  ): Promise<MockLlmOpenAiRuntimeResult<EnvironmentMockLlmPlanSelection>> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const authenticated = await this.#context.authenticatedServer(
@@ -187,7 +194,10 @@ export class EnvironmentMockLlmOpenAiRuntime {
           continue;
         }
         planned.commit();
-        return success(planned.plan);
+        return success({
+          plan: planned.plan,
+          serverRevision: authenticated.value.revision,
+        });
       } catch (error) {
         return failure(
           error instanceof MockLlmOpenAiRequestError ? "invalid_request" : "internal"
@@ -235,11 +245,7 @@ export class EnvironmentMockLlmAnthropicRuntime {
     slug: string,
     credential: string,
     request: unknown
-  ): Promise<
-    MockLlmAnthropicRuntimeResult<
-      Awaited<ReturnType<typeof planMockLlmResponse>>["plan"]
-    >
-  > {
+  ): Promise<MockLlmAnthropicRuntimeResult<EnvironmentMockLlmPlanSelection>> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const authenticated = await this.#context.authenticatedServer(
@@ -273,7 +279,10 @@ export class EnvironmentMockLlmAnthropicRuntime {
           continue;
         }
         planned.commit();
-        return success(planned.plan);
+        return success({
+          plan: planned.plan,
+          serverRevision: authenticated.value.revision,
+        });
       } catch (error) {
         return failure(
           error instanceof MockLlmAnthropicRequestError ? "invalid_request" : "internal"

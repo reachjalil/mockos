@@ -67,13 +67,16 @@ dialect-scoped Mock Credential. OpenAI uses Bearer; Anthropic uses `x-api-key` p
 exactly `anthropic-version: 2023-06-01`. Both `accept_any` and `strict` require a valid
 credential; only `strict` compares its stored verifier. The bounded source supports
 model list/retrieve plus OpenAI and Anthropic JSON/SSE Chat Completions/Messages
-through pinned official SDKs. See the
+through pinned official SDKs. Successfully parsed/planned provider POSTs that pass
+response preflight attempt one metadata-only request-log reservation within a
+50-millisecond fail-open budget; prospective metadata/credential collisions skip it.
+Management MCP can query/assert successfully persisted rows. See the
 [OpenAI](./quickstarts/openai-sdk.md) and
 [Anthropic](./quickstarts/anthropic-sdk.md) SDK quickstarts and
 [MCP-managed mock OpenAI and Anthropic](./mock-llm.md). The listed workers.dev
 deployments have no F2 acceptance; configured midstream errors, OpenAI Responses,
-Anthropic betas, state, LLM observations/assertions, and Cloud integration
-remain unavailable.
+Anthropic betas, state, actual-network qualification, and Cloud integration remain
+unavailable.
 
 Save a local CLI profile without putting the key directly in the command line:
 

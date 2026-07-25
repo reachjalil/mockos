@@ -365,6 +365,39 @@ const migrationV7 = [
       )`,
 ] as const;
 
+const migrationV8 = [
+  `ALTER TABLE request_log ADD COLUMN llm_dialect TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_operation TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_server_slug TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_server_revision INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN llm_model TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_stream INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN llm_turn_index INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN llm_outcome TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_response_id TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_input_tokens INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN llm_output_tokens INTEGER`,
+  `ALTER TABLE request_log ADD COLUMN llm_stop_reason TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_tool_names_json TEXT`,
+  `ALTER TABLE request_log ADD COLUMN llm_error_kind TEXT`,
+  `CREATE TABLE IF NOT EXISTS request_log_llm_terminal (
+    request_id TEXT PRIMARY KEY
+      REFERENCES request_log(id) ON DELETE CASCADE,
+    llm_outcome TEXT NOT NULL
+      CHECK (llm_outcome IN (
+        'completed', 'cancelled', 'deadline_exceeded', 'failed'
+      )),
+    response_status INTEGER NOT NULL
+      CHECK (response_status >= 100 AND response_status <= 599),
+    duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0)
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS request_log_llm_filters_idx
+    ON request_log(
+      llm_dialect, llm_operation, llm_server_slug, llm_model, llm_stream,
+      llm_turn_index, sequence DESC
+    )`,
+] as const;
+
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 1, statements: migrationV1 },
   { version: 2, statements: migrationV2 },
@@ -373,6 +406,7 @@ export const CORE_MIGRATIONS: readonly SqlMigration[] = [
   { version: 5, statements: migrationV5 },
   { version: 6, statements: migrationV6 },
   { version: 7, statements: migrationV7 },
+  { version: 8, statements: migrationV8 },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };
