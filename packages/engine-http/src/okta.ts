@@ -10,6 +10,8 @@ import type {
 } from "./okta-types";
 
 const DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code" as const;
+const MAX_SESSION_TOKEN_BYTES = 512;
+const textEncoder = new TextEncoder();
 
 const noStoreHeaders = {
   "cache-control": "no-store",
@@ -64,6 +66,40 @@ const issuerFromRequest = (request: Request, header: string) => {
     return issuer.toString().replace(/\/$/, "");
   } catch (cause) {
     throw new OAuthProtocolError("INVALID_REQUEST", "Invalid issuer base URL.", {
+      cause,
+    });
+  }
+};
+
+const directoryBaseFromRequest = (
+  request: Request,
+  directoryBaseHeader: string,
+  issuerHeader: string
+) => {
+  const value = request.headers.get(directoryBaseHeader)?.trim();
+  if (!value) {
+    const issuer = new URL(issuerFromRequest(request, issuerHeader));
+    issuer.pathname = issuer.pathname.replace(/\/oauth2\/[^/]+\/?$/, "");
+    return issuer.toString().replace(/\/$/, "");
+  }
+  try {
+    const directoryBase = new URL(value);
+    if (!hasTrustedPublicProtocol(directoryBase)) {
+      throw new Error("Directory base must use HTTPS.");
+    }
+    if (
+      directoryBase.username ||
+      directoryBase.password ||
+      directoryBase.search ||
+      directoryBase.hash
+    ) {
+      throw new Error(
+        "Directory base must not contain credentials, query, or fragment."
+      );
+    }
+    return directoryBase.toString().replace(/\/$/, "");
+  } catch (cause) {
+    throw new OAuthProtocolError("INVALID_REQUEST", "Invalid directory base URL.", {
       cause,
     });
   }
@@ -145,6 +181,24 @@ const authorizationFromParams = (params: URLSearchParams): OktaAuthorizationRequ
   };
 };
 
+const sessionTokenFromParams = (params: URLSearchParams): string | undefined => {
+  const values = params.getAll("sessionToken");
+  if (values.length === 0) return undefined;
+  const token = values[0];
+  if (
+    values.length !== 1 ||
+    !token ||
+    textEncoder.encode(token).byteLength > MAX_SESSION_TOKEN_BYTES ||
+    !/^[A-Za-z0-9_-]+$/.test(token)
+  ) {
+    throw new OAuthProtocolError(
+      "INVALID_REQUEST",
+      "The sessionToken parameter is invalid."
+    );
+  }
+  return token;
+};
+
 const formValue = (form: FormData, name: string) => {
   const value = form.get(name);
   return typeof value === "string" ? value : undefined;
@@ -159,7 +213,11 @@ const basicCredentials = (request: Request) => {
   try {
     const decoded = atob(authorization.slice(6));
     const separator = decoded.indexOf(":");
-    if (separator < 0) throw new Error("Missing Basic credential separator.");
+    if (separator < 0) {
+      return {
+        clientId: decodeURIComponent(decoded),
+      };
+    }
     return {
       clientId: decodeURIComponent(decoded.slice(0, separator)),
       clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
@@ -306,6 +364,7 @@ export const renderOktaDeviceActivationPage = (
 
 export const createOktaHttpApp = ({
   authorizationServerId = "default",
+  directoryBaseHeader = "x-mockos-directory-base",
   engine,
   issuerHeader = "x-mockos-issuer-base",
   publicPathHeader = "x-mockos-public-path",
@@ -343,8 +402,17 @@ export const createOktaHttpApp = ({
 
   app.get("/oauth2/:authorizationServerId/v1/authorize", async (context) => {
     assertAuthorizationServer(context.req.param("authorizationServerId"));
-    const input = authorizationFromParams(new URL(context.req.url).searchParams);
+    const params = new URL(context.req.url).searchParams;
+    const input = authorizationFromParams(params);
+    const sessionToken = sessionTokenFromParams(params);
     await engine.validateAuthorizationRequest?.(input);
+    if (sessionToken) {
+      const result = await engine.authorizeWithSessionToken({
+        ...input,
+        sessionToken,
+      });
+      return authorizationRedirect(input, result.code);
+    }
     return context.html(
       renderOktaLoginPage(input, {
         action: publicActionFromRequest(context.req.raw, publicPathHeader),
@@ -434,6 +502,11 @@ export const createOktaHttpApp = ({
       const { clientId } = clientCredentials(form, context.req.raw);
       const result = await engine.createDeviceAuthorization({
         clientId,
+        directoryBaseUrl: directoryBaseFromRequest(
+          context.req.raw,
+          directoryBaseHeader,
+          issuerHeader
+        ),
         issuerBase: issuerFromRequest(context.req.raw, issuerHeader),
         scope: required(formValue(form, "scope"), "scope"),
       });

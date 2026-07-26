@@ -1,25 +1,86 @@
 # Known limitations
 
-Status: Accepted M3/M5 boundaries plus sampled M6 deployment, source-only M7 management reads, and remaining limits; deliberately candid
-Last reviewed: 2026-07-23
+Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
+source-qualified F0/F1, partial OpenAI/Anthropic F2 with bounded metadata observation,
+bounded MSAL Node and Okta Auth JS Classic factor-to-OIDC local X/Q,
+and remaining limits; deliberately candid
+Last reviewed: 2026-07-26
 
-Source, deployed, and verified-live are separate evidence tiers. Hosted CI is source
-evidence; a workers.dev or hosted-edge run tied to an exact version is deployed mock
-evidence; only sanitized, reviewed comparison with a real provider can be
-verified-live. The bounded M6 slice has sampled exact-version deployment evidence, but
-no M6 fixture/corpus is verified-live and no current fixture has verified-live status.
+Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
+SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
+(P) are separate levels. Hosted CI is source execution; H requires an exact remote
+serving version and recorded smoke; V requires sanitized, reviewed real-provider
+comparison. The bounded MSAL Node and dedicated Okta Auth JS Classic factor-to-OIDC
+slices are D/I/S/X/Q yes and H/V/P no. The bounded M6 slice has sampled H evidence,
+but no current fixture is V or P.
 
-- The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
-  eight M6 token/key/overage cases marked `implemented` that execute through an
-  authenticated local Worker fixture runner. None has been validated against a live
-  tenant. The linked tests prove only their exercised slices, not corpus-wide parity.
+- The Entra OIDC corpus has 25 source-reviewed expectations marked `documented` and
+  13 marked `implemented`. Five device fixtures execute through a core-backed HTTP
+  executor; the mounted Worker covers creation, pending/slow-down, credential-gated
+  denial, approval/token/refresh/consumption, and unknown code, but not deterministic
+  expiry. Eight M6 token/key/overage cases execute through an authenticated local
+  Worker fixture runner. None has been validated against a live tenant. The linked
+  tests prove only their exercised slices, not corpus-wide parity.
 - The M3 deployed smoke exercises the Entra OIDC/refresh/lifecycle path and an Okta
   SCIM/directory subset. Okta discovery, authorization-code, PKCE, introspection,
   revocation, device flow, and lifecycle behavior pass local and hosted Worker tests
   but were not run in the deployed acceptance flow or compared with a live tenant.
-- Entra remains a narrow OIDC/OAuth slice. Authorization code and rotating refresh
-  grants have local evidence; client credentials, device flow, UserInfo, logout
-  fidelity, and SAML remain unimplemented or unqualified.
+- Entra remains a narrow OIDC/OAuth slice. Authorization code, rotating refresh, and
+  bounded public-client device grants have local evidence. Client credentials,
+  UserInfo, logout fidelity, and SAML remain unimplemented or unqualified. The device
+  path covers a 900-second/five-second policy, credential-gated approve and deny,
+  pending/slow-down/declined/invalid/expired errors, atomic redemption, refresh, and
+  lifecycle rejection; it is not a broad RFC 8628, Microsoft UI/localization, or
+  upstream error-catalog claim.
+- Entra and Okta OIDC discovery plus `get_wellknown_urls` intentionally omit UserInfo
+  until an executable route exists. Entra fixtures 28 and 29 remain documented-only
+  targets. This corrects capability discovery; it is not UserInfo implementation,
+  qualification, hosted evidence, or provider parity.
+- The only official Entra identity-client qualification is `@azure/msal-node` 5.4.2
+  for one tenant-specific custom authority: a confidential authorization-code + S256
+  PKCE client and a separate secret-free public device client, each with forced silent
+  refresh and lifecycle rejection. Both use host-only `knownAuthorities` plus
+  `ProtocolMode.OIDC` and pass through local Wrangler HTTPS. The management path is
+  separately driven by `@modelcontextprotocol/sdk` 1.29.0. This is local X/Q evidence,
+  not workers.dev, hosted Cloud, or custom-domain H. It does not qualify
+  `@azure/msal-browser`, other versions, public-client browser helpers, client
+  credentials, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real
+  Entra tenant, or P.
+- MSAL Node 5.4.2 polls the device token endpoint immediately and retries
+  `authorization_pending`, but it does not retry `slow_down`. mockOS implements the
+  throttle and increases the interval by five seconds; the qualified harness avoids
+  the incompatibility by activating after the observed pending poll. This is an exact
+  pinned-client behavior boundary, not permission to omit `slow_down` from other
+  protocol tests.
+- Redirect-free registration is deliberately narrow: a secret-free public
+  device-only application uses `redirectUris: []`. Any application that includes
+  `authorization_code`, including a mixed authorization-code/device client, still
+  requires at least one real, exact callback URI. This does not add native-app loopback
+  discovery, custom-URI policy, or browser redirect qualification.
+- The dedicated Okta identity-client qualification pins `@okta/okta-auth-js` 8.0.1 for one
+  public application and custom authorization server. It starts Classic Authn with
+  `signInWithCredentials`, follows the returned factor-verification function with the
+  static synthetic passcode `000000`, passes the one-use `sessionToken` to
+  `getWithRedirect`, and continues through S256 PKCE, Node `parseFromUrl` using the
+  exact SDK-exposed `_getLocation` seam, JWKS-backed ID-token verification, refresh
+  rotation, owner-bound public access-token revocation, and refresh rejection after
+  `suspend`. `@modelcontextprotocol/sdk` 1.29.0 remains the management client. This is
+  bounded local D/I/S/X/Q evidence; H/V/P are no. It does not qualify RFC 6238/TOTP
+  verification, MFA
+  assurance claims, browser callback UX, Sign-In Widget, IDX, other Auth JS versions,
+  UserInfo, device flow, Sessions API/cookies, access-token signature validation,
+  distributed transaction storage, or P.
+- Public OAuth registration is explicit, not a general anonymous-client mode. Public
+  clients store and receive no secret and cannot request `client_credentials`.
+  SDK 1.29 `tools/list` exposes the same conditional input and exact result branches;
+  omitted `clientType` remains confidential.
+  Code/refresh redemption requires the known public client with no spurious secret.
+  Introspection stays confidential-client-only. Revocation accepts `none` and the
+  Auth JS client-ID-only Basic compatibility shape, but updates only tokens owned by
+  that public client. A core negative regression protects another application's active
+  access token and rotated family, while the actual-client lifecycle count proves SDK
+  revocation changed state rather than merely returning idempotent 200. Refresh tokens
+  remain bearer credentials without DPoP or another sender constraint.
 - The bounded SCIM parser/PATCH/core service, HTTP adapter, and Worker mount are
   accepted for M3. All 113 SCIM fixtures execute green against the HTTP composition
   locally and in hosted CI, with focused Worker integration tested separately. The
@@ -42,13 +103,33 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   Okta Group-member listing is currently unpaginated and can return up to the directory
   membership cap. Neither surface claims broad provider API parity. The bounded M6
   implementation adds Okta Classic `/api/v1/authn` primary states, transaction
-  retrieval, and cancellation, but not factor verification, password-change
-  execution, recovery/unlock execution, or Sessions API exchange.
+  retrieval, cancellation, and one synthetic TOTP-shaped factor-verification route.
+  It does not implement password-change execution, recovery/unlock execution, or the
+  Sessions API. Unsupported password-change and unlock links are omitted rather than
+  advertised.
 - Classic Authn state retrieval renews its five-minute expiry from each successful
   read; this is sliding state, not an unlimited transaction, because idle state still
   expires. The one-time session capability keeps its original fixed five-minute
-  expiry. Both are stored only as hashes. Lifecycle changes and SCIM password changes
-  revoke both kinds, and a stale post-verification User snapshot cannot issue one.
+  expiry. Both are stored only as hashes. The bounded Okta authorize route can consume
+  a session capability once after validating the client, callback, scope, response
+  type, and S256 request; replay is `invalid_grant`. This direct bridge is not the
+  Sessions API and creates no Okta or application cookie. Lifecycle changes and SCIM
+  password changes revoke both kinds, and a stale post-verification User snapshot
+  cannot issue one.
+- Classic factor verification requires the returned factor, live `MFA_REQUIRED`
+  state, and exact fixed passcode `000000`. A wrong factor or passcode returns
+  `E0000068` without consuming state; invalid, expired, cancelled, or replayed state
+  returns `E0000011`. The fixed value is deterministic mock input, not RFC 6238/TOTP,
+  shared-secret, clock-step, drift, enrollment, or authenticator behavior.
+- When the User is both MFA-required and password-expired, correct factor verification
+  advances the same live transaction to `PASSWORD_EXPIRED`, refreshes its bounded
+  expiry, returns the same `stateToken`, keeps cancel mounted, and issues no session
+  capability. Repeating factor verification returns `E0000011` without deleting that
+  password-expired transaction; retrieval and cancellation still work. Password
+  change remains unavailable and no change-password link is emitted.
+- Tokens issued after session-token authorization still contain
+  `acr: "urn:okta:loa:1fa:any"` and `amr: ["pwd"]`. Factor chaining must not be
+  presented as MFA-assurance token parity.
 - Classic Authn retention is bounded independently per table: 10,000 retained state
   rows and 10,000 retained session rows per environment, plus 32 retained rows per
   User per kind.
@@ -59,12 +140,39 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   the `accept`/`content-type` request headers, never emits
   `Access-Control-Allow-Credentials`, and returns `403` for cross-origin requests.
   Provider-shaped MFA uses the singular `_embedded.factor` key containing an array,
-  and embedded Users omit `passwordChanged`. Authn request/response bodies are
-  recursively redacted by secret-like field name; malformed or primitive bodies are
-  wholly replaced, and sensitive headers including authorization, proxy authorization,
-  cookies, and token/secret-like headers are redacted. The deployed smoke sampled the
-  public state, CORS, privacy, and redaction behavior; deeper retention/revocation/race
-  tests remain source evidence, and neither tier is a general log-security audit.
+  and embedded Users omit `passwordChanged`. Authn and factor request/response bodies
+  are recursively redacted by secret-like field name; malformed or primitive bodies
+  are wholly replaced, and sensitive headers including authorization, proxy
+  authorization, cookies, and token/secret-like headers are redacted. The deployed M6
+  smoke sampled the original primary-state, CORS, privacy, and redaction behavior; it
+  did not run factor verification or the session-token OIDC bridge. Deeper
+  retention/revocation/race tests remain source evidence, and neither tier is a
+  general log-security audit.
+- Structured provider request-log capture now redacts secret-bearing form and JSON
+  keys across routes, sensitive request/response header families, and secret query or
+  fragment fields in redirect `Location` values before persistence. The MSAL and Okta
+  Auth JS actual-network flows plus focused Worker coverage protect each named
+  exercised password, Authn state/passcode/session capability, authorization code,
+  PKCE verifier, and issued token field; the
+  confidential MSAL flow additionally checks its client secret. The dedicated Auth JS
+  run parses its named fields as `[REDACTED]` and rejects raw,
+  `encodeURIComponent`, and URL-form-encoded representations of every exercised
+  value. Safe request sequences remain assertable.
+  This is not arbitrary-encoding classification or a general log-security audit:
+  non-secret structured protocol fields and non-JSON response bodies may still be
+  retained. Malformed form/JSON, primitive JSON request, and unsupported-media request
+  bodies are replaced rather than stored, but production credentials and personal
+  data remain prohibited.
+- The MSAL, original Auth JS, and dedicated Classic-factor Auth JS wrappers share one
+  local official-client parent and one cleanup verifier. The accepted MSAL, original
+  Auth JS, and dedicated Auth JS runs have focused normal-completion and ready-Worker
+  `SIGTERM` cleanup evidence.
+  Distinct provider/inspector pairs are `8794`/`18794`, `8795`/`18795`, and
+  `8796`/`18796`, so the qualifications can run concurrently. The
+  parent and cleanup verifier reject inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and
+  strip it from children. This does not qualify uncatchable `SIGKILL`, Windows
+  process-tree behavior, abrupt machine loss, or every interruption point while either
+  client is active.
 - Lifecycle transitions model only the documented Entra/Okta action matrices. Token
   revocation covers tracked access/refresh credentials and removes bounded Classic
   Authn state/session capabilities. There are no production sessions, external
@@ -76,7 +184,8 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Refresh tokens rotate only within this deterministic mock. Scope escalation and
   replay fail closed, but sender-constrained tokens, refresh-token binding, distributed
   race behavior, provider-specific grace windows, and every obscure parameter
-  combination are not claimed.
+  combination are not claimed. Public-client refresh tokens are bearer credentials;
+  the Auth JS qualification does not add browser-storage or exfiltration resistance.
 - The M6 signing-key implementation keeps active and pre-published successor private
   JWKs in the environment's SQLite state; application-level encryption at rest is not
   implemented. Rotation scrubs the previous active private JWK in the same transaction
@@ -106,26 +215,186 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   directory-specific `scim.request`, `graph.request`, and `okta.api` error/delay
   routing. The M5 runtime interprets outbound HTTP and rate-limit responses,
   but it does not add a scheduler, recurring provisioning cycles, scheduled lifecycle
-  events, or the F-series behavior system.
+  events, or the F-series behavior runtime.
 - The authenticated M3 MCP registry contains 14 management tools, including
   `simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15. Its authenticated
   mount, local gates, hosted CI, and exact-pair controlled-target acceptance are green.
   The standalone public staging/production Access Keys were preserved, so the
   authenticated hosted acceptance ran through the private edge consuming the public
   runtime rather than those standalone credentials.
-  The registry does not yet host
-  user-configured mock MCP servers, LLM mocks, Code Mode, team ACLs, blueprints, or
-  OIDC-federated CI access.
+  F1 appends eight locally source-qualified tools: five for environment-hosted mock
+  MCP definitions/state and three for listing, reading, and installing built-in
+  presets. Put and install require `expectedRevision: null` for create or the positive
+  current revision for changed replacement; reset/delete require the positive current
+  revision. Canonically identical put/install replay precedes CAS and converges
+  without mutation, including an identical delete/recreate generation. Only a changed
+  definition with stale or delete/recreate ABA intent returns typed `409`, while
+  missing reset/delete and a repeated delete return typed `404`. Reset retry succeeds
+  with `cleared: 0`; delete success is literal `deleted: true`. A changed put or
+  install deletes the previous revision's application state and terminates its
+  revision-bound sessions. The mounted official MCP SDK `1.29.0` Worker flow qualifies
+  this bounded management path through D/I/S/X/Q only. It is not actual-network
+  evidence, and those eight have no inherited M5 hosted/deployed, H, or P acceptance;
+  V is not applicable to generic user-authored synthetic servers and remains
+  unqualified for the provider-derived preset.
+  F2 appends four source-implemented tools for mock-LLM definitions, bringing the
+  current source registry to 27. Those four likewise inherit no hosted/deployed
+  evidence.
+- The locally source-qualified F1 implementation supports only MCP `2025-11-25` over POST-only Streamable
+  HTTP. `GET` returns `405`; there are no `listChanged` notifications, JSON-RPC
+  batches, legacy HTTP+SSE fallback, or second protocol-version adapter. The route is
+  source-tested in path and subdomain resolution, but no current workers.dev version,
+  wildcard TLS route, private hosted composition, or external ecosystem matrix is
+  qualified for F1.
+- F1 definition replacement is a complete write, not a patch. A Bearer Mock
+  Credential must be resupplied or rotated from caller-owned secret storage; the
+  safe `configured: true` read marker cannot be submitted to preserve it. Clients
+  must read and reconcile the current server after a typed revision conflict rather
+  than incrementing or overwriting revisions blindly. Delete is idempotent only in
+  state effect: retry after success reports `MOCK_MCP_SERVER_NOT_FOUND` instead of
+  replaying success.
+- The exact raw mock-MCP Bearer value is accepted only at
+  `authentication.token`; the same value in every other definition key or string
+  value is rejected. A reflected credential in an MCP dependency result fails closed.
+  Blueprint install accepts no Salesforce credential and validates the complete
+  public installed server specification, not only its slug or authentication mode.
+- F1 protects staged sequence state when an HTTP Fetch abort/disconnect is observed
+  during configured latency and uses JSON-RPC `-32800` if it can still render a
+  response. It has no in-flight request-ID registry: `notifications/cancelled` is
+  accepted with HTTP `202` and deliberately ignored. MCP defines cancellation as a
+  SHOULD rather than a MUST, but clients cannot rely on message-level cancellation in
+  this tranche.
+- F1 supports bounded declarative `static`, `template`, `match`, `sequence`, and
+  configured `error` behavior. A `script` definition can only use an explicit
+  declarative fallback or fail closed because no executor is installed. `proxy`
+  record/replay is rejected. F1 itself does not define an LLM provider surface; the
+  separate partial F2 slice below owns bounded mock OpenAI/Anthropic. Code Mode, team
+  ACLs, the F5 portable blueprint export/import/apply system, and OIDC-federated CI
+  access remain future work.
+- The built-in `salesforce/hosted-mcp/sobject-reads` preset contains exactly six
+  deterministic tools derived from Salesforce documentation reviewed on 2026-07-25.
+  It does not contact a Salesforce organization or provider network, proxy Salesforce
+  REST, perform OAuth, field-level security, or sharing checks, or qualify Salesforce
+  output-wire parity. Its catalog, install, mounted client flow, deterministic
+  fixtures, observation/assertion, and cleanup are D/I/S/X/Q locally only;
+  actual-network, H, V, and P are unqualified. See the
+  [blueprint guide](./blueprints/salesforce-sobject-reads.md) and generated
+  [catalog](./reference/mock-mcp-blueprints.v1.json).
+- The partial F2 source has an MCP-only configuration plane and separate bounded
+  OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
+  strict definitions, baseline schema persistence, mandatory changed-write revision CAS,
+  canonical replay, atomic revision-bound delete, and write-only provider-key views.
+  Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
+  Completions and Anthropic Messages as JSON or bounded SSE. OpenAI
+  requires Bearer and Anthropic requires `x-api-key` plus exactly
+  `anthropic-version: 2023-06-01`; both auth modes require a valid provider Mock
+  Credential. `accept_any` skips verifier comparison, while `strict` checks the
+  dialect's current hash-only verifier. The OpenAI parser accepts only bounded text
+  messages, function tools, `n` absent/one, `stream` absent/false/true, and
+  `tool_choice` absent/`auto`. `stream_options` is valid only with `stream: true`,
+  accepts only optional Boolean `include_usage` and `include_obfuscation`, and rejects
+  unknown fields. Usage is omitted by default. Obfuscation defaults on and adds fresh
+  opaque compatibility padding to regular delta chunks; it is not qualified as
+  upstream size normalization or a security control. Unknown fields, multimodal
+  content, and the broader OpenAI parameter surface fail closed.
+  The runtime derives a stateless turn from prior assistant messages, commits the
+  selected plan in the Environment Durable Object after the final definition-revision
+  check and before returning it to the edge, and injects fresh request/completion IDs
+  while content-derived plan IDs stay internal. The current planner is stateless, so
+  the completed Durable Object commit writes no conversation/evaluator cursor; future
+  state cannot assume a post-header abort rolls that commit back. Shared initial delay
+  is abort-aware and occurs before response headers. Only payload deltas are
+  cadence-paced; provider structural/terminal frames are immediate. One absolute maximum
+  duration includes initial wait, pacing, and response backpressure, and the complete
+  precomputed SSE body is capped at 2,097,152 UTF-8 bytes. The schedule is accepted
+  only when `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+  is strictly less than `maximumDurationMilliseconds`;
+  equality is rejected. Payload frame count comes from Unicode code-point chunks of
+  text and canonical provider tool arguments/input JSON. Preflight failures return a generic JSON error
+  before HTTP `200`; cancellation or deadline after HTTP `200` truncates the stream
+  without fabricating terminal success. OpenAI ends with `[DONE]`; Anthropic uses
+  named message/content-block events, cumulative `message_delta` usage, and
+  `message_stop`, with neither `[DONE]` nor mock-emitted `ping`. Clients should still
+  tolerate upstream Anthropic `ping`. Configured errors stay provider JSON before
+  `200`, even when streaming is requested; configured midstream errors are not
+  supported.
+- F2 observation is bounded metadata evidence, not provider traffic capture or an
+  audit trail. Only successfully parsed/planned Chat Completions and Messages POSTs
+  that also pass response serialization/SSE preflight reserve one request-log row.
+  Model reads, route/method/auth/version/content/JSON/request/model-selection/planning
+  failures, and response-preflight failures create no LLM row. Reservation waiting is
+  capped at 50 milliseconds. Reservation and terminal finalization are fail-open: a
+  valid provider response can have no row, and a row can remain `pending` if
+  finalization storage fails or a non-cancellable reservation commits after the
+  adapter's wait budget. A prospective durable-metadata collision with the presented
+  Mock Credential or platform key skips the whole observation. Terminal persistence
+  overlays the same append sequence as `completed`, `cancelled`,
+  `deadline_exceeded`, or `failed`; a delivered configured provider error is
+  `completed` and distinguished by `llmErrorKind` plus status; it has no
+  `llmResponseId`, and `llmStream` records request intent rather than JSON/SSE delivery
+  form. Actual status and monotonic elapsed duration exist only in that terminal child.
+  Until then, the legacy non-null base
+  columns expose compatibility sentinels `responseStatus: 102` and `durationMs: 0`,
+  not planned or delivered response evidence.
+- LLM entries deliberately store empty request/response headers and null bodies.
+  Prompts, outputs, credentials, tool inputs, `planId`, and `requestHash` are excluded.
+  Internal edge-stream frame and byte counts are tested for lifecycle accounting but
+  are not persisted, returned, queryable, or assertable. Query/count/sequence LLM
+  matchers are exact; `llmToolNames` includes order and duplicates. Direct
+  HTTP-adapter/edge-router tests prove `cancelled` persistence, because the mounted
+  Worker-pool service binding does not propagate stream reader cancellation through
+  that binding. Mounted Worker/MCP observation assertions cover completed and
+  configured-error rows, not cancellation persistence.
+- The Anthropic parser accepts only bounded
+  `user`/`assistant` text/custom-tool history, requires `max_tokens`, rejects
+  betas/broad parameters, and deliberately does not enforce turn alternation
+  or `tool_use`↔`tool_result` correlation. OpenAI Responses and other broad APIs,
+  conversation/evaluator state, reset, retry deduplication, Wrangler-network
+  qualification, hosted CI for this tranche, private Cloud pinning, deployment,
+  production readiness, and verified-live comparison remain unavailable or
+  unqualified. Safe `configured` markers remain non-writable, and
+  every changed full-definition put must resupply or rotate each enabled strict key
+  from caller-owned storage. The complete active platform key is rejected from
+  definition keys/string values and provider authentication/body reflection. Use the
+  generated [OpenAI](./reference/mock-llm-openai.v1.json) and
+  [Anthropic](./reference/mock-llm-anthropic.v1.json) provider manifests, not either
+  broader API, as the compatibility boundary.
+- The OpenAPI document contains exactly five already-implemented self-hosted HTTP
+  control routes; the other 22 management MCP operations, including all eight F1 and
+  all four F2 operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
+  contract metadata until F4 implements scoped-key/role/ACL enforcement. Code Mode has
+  no Worker import, flag, `LOADER`, or `worker_loaders` binding, and `NoSandbox` always
+  rejects JavaScript. The client, Code Mode, sandbox, and mock-MCP packages remain
+  unpublished workspaces; local builds do not qualify npm distribution.
+- F1 schemas intentionally implement a bounded JSON Schema subset rather than a
+  general validator. `$ref`, `pattern`, `format`, remote schemas, unsafe keys, and
+  unknown vocabularies are rejected. Resource templates support only safe absolute
+  Level-1 `{variable}` expressions. Their bounded reverse matcher accepts empty
+  expansions, decodes percent-encoded reserved characters, and assigns adjacent
+  variables leftmost-minimally; raw reserved characters do not belong to a simple
+  expansion. Server definitions are capped at 64 capabilities per kind and 64 servers
+  per environment; pages are capped at 50 and stateful servers at 100 active sessions.
+  Current-revision application state is capped at 256 rows and 2 MiB per server.
+  Pagination cursors use a public unkeyed checksum for correctness; they are opaque
+  client tokens, not authorization credentials or cryptographic tamper protection.
+- Structurally bounded tool input can still exhaust the validator's internal shared
+  work budget when composition, traversal, path rendering, uniqueness, or canonical
+  comparison multiplies work. It then returns a bounded tool-level schema mismatch
+  with one root diagnostic instead of attempting exhaustive validation. The numeric
+  budget is not a compatibility guarantee. Template expansion is independently
+  capped at 256 KiB of UTF-8 output; stricter method-result limits can reject a
+  smaller rendered value.
 - The additive M7 management-read substrate is source-only. Application and scenario
   pages default to and are capped at 25 records, use kind-bound keyset cursors, and are
   exposed only as typed Environment Durable Object RPCs in this slice. No new MCP tool,
-  public HTTP route, or CLI command was added. Application creation still returns its
-  plaintext client secret exactly once; later application pages are a distinct strict
-  summary shape that contains neither the secret nor its stored hash. There is no
-  secret recovery endpoint, and an ambiguous failed create response must not be retried
-  automatically. Hosted CI, exact-version deployment, private control-plane ownership
-  enforcement, no-store response handling, and console one-time-display behavior remain
-  pending evidence rather than inherited claims.
+  public HTTP route, or CLI command was added. Confidential application creation
+  returns its plaintext client secret exactly once; public creation returns none.
+  Later application pages are a distinct strict summary shape that contains neither a
+  secret nor its stored hash. There is no secret recovery endpoint, and an ambiguous
+  failed confidential create response must not be retried automatically. Hosted CI,
+  exact-version deployment, private control-plane ownership enforcement, no-store
+  response handling, and console one-time-display behavior remain pending evidence
+  rather than inherited claims.
 - M5 outbound provisioning is manually accepted for the exact tested source pair.
   Public revision `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`, CI run
   `29957994237`, the six active Worker versions, both terminal-success Workflow runs,
@@ -170,9 +439,11 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - Error descriptions, correlation identifiers, login HTML, cookie behavior, and
   obscure parameter combinations can differ from Entra even where the OAuth error
   code is correct.
-- workers.dev cannot provide wildcard subdomains. Path mode needs explicit SDK
-  authority configuration; SDKs that require an Okta-style bare organization host
-  may not work before custom-domain cutover.
+- workers.dev cannot provide wildcard subdomains. The MSAL Node and Okta Auth JS local
+  qualifications prove explicit request-derived path authorities only against an HTTPS
+  loopback Wrangler listener; no workers.dev or Cloud official-client smoke has run.
+  SDKs that require an Okta-style bare organization host may not work before
+  custom-domain cutover.
 - Subdomain resolution can be unit tested with fake Host headers, but is not
   live-verifiable before an account-owned wildcard route and suitable certificate exist.
 - The staging and production workers.dev targets most recently passed the sampled M6
@@ -186,8 +457,10 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
   are external publishing prerequisites.
 - The fixture runner compares HTTP status, exact selected headers, exact bodies, and
   object subsets. It executes all 113 SCIM fixtures against the local HTTP composition
-  and eight M6 Entra fixtures through the authenticated local Worker setup; it does not
-  execute every OIDC fixture or all 113 SCIM fixtures through the Worker runtime. The
+  and five Entra device fixtures against a core-backed HTTP composition. The device
+  Worker suite covers the non-expiry flow, while eight M6 Entra fixtures execute
+  through the authenticated local Worker setup. It does not execute device expiry,
+  every OIDC fixture, or all 113 SCIM fixtures through the Worker runtime. The
   runner does not yet understand JSONPath, regex, or arbitrary JWT-claim expressions.
   The M5 request-log assertion can count repeated non-overlapping ordered sequences,
   but that capability is separate from the fixture runner; the accepted M5 flow
@@ -196,11 +469,14 @@ no M6 fixture/corpus is verified-live and no current fixture has verified-live s
 - SQLite Durable Object and `node:sqlite` share a synchronous design, and focused
   Worker integrations plus the sampled M3 deployment cover OIDC/MCP and selected
   directory/lifecycle paths, but this is not a general SQLite-equivalence claim.
-- Environment request logs are designed to retain protocol bodies, including many
-  synthetic test tokens. The M6 Classic Authn slice is an explicit exception: it
-  recursively redacts password, state-token, and session-token fields in Authn request
-  and response bodies, including malformed-body fallback redaction. Never put
-  production tokens, account API keys, Cloudflare credentials, or real personal data
-  into a mock environment.
+- Environment request logs are designed to retain assertable protocol structure and
+  may retain non-secret synthetic fields. Structured form/JSON secret keys, sensitive
+  headers, and redirect-location secrets are now redacted generally. Malformed JSON,
+  malformed form requests, primitive JSON requests, and unsupported-media request
+  bodies are replaced with markers. Credential-bearing OAuth, device, activation, and
+  Classic Authn paths use a stricter authentication-body marker where applicable.
+  These rules are path-, key-, and media-type based, not a promise to detect every
+  credential in arbitrary retained content. Never put production tokens, account API
+  keys, Cloudflare credentials, or real personal data into a mock environment.
 - Absolute issuer URLs must never be persisted. Any violation would make host cutover
   unsafe and should block release.

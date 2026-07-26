@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import { OAuthProtocolError, renderEntraError } from "./errors";
+import {
+  OAuthProtocolError,
+  renderEntraDeviceAuthorizationError,
+  renderEntraError,
+} from "./errors";
 import { renderEntraLoginPage } from "./login";
 import type {
   CreateEntraHttpAppOptions,
@@ -8,7 +12,11 @@ import type {
   EntraTokenRequest,
 } from "./types";
 
-export { OAuthProtocolError, renderEntraError } from "./errors";
+export {
+  OAuthProtocolError,
+  renderEntraDeviceAuthorizationError,
+  renderEntraError,
+} from "./errors";
 export type * from "./graph";
 export { createGraphHttpApp } from "./graph";
 export { renderEntraLoginPage, renderOktaLoginPage } from "./login";
@@ -26,6 +34,8 @@ const noStoreHeaders = {
   "cache-control": "no-store",
   pragma: "no-cache",
 };
+
+const DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code" as const;
 
 const required = (value: string | undefined, name: string) => {
   if (!value) {
@@ -133,6 +143,16 @@ const tenantMatches = (tenant: string, engine: EntraHttpEngine) => {
 };
 
 const entraJsonError = (error: unknown) => {
+  const deviceError = renderEntraDeviceAuthorizationError(error);
+  if (deviceError) {
+    return new Response(JSON.stringify(deviceError.body), {
+      status: deviceError.status,
+      headers: {
+        ...noStoreHeaders,
+        "content-type": "application/json; charset=UTF-8",
+      },
+    });
+  }
   const rendered = renderEntraError(error);
   return new Response(JSON.stringify(rendered.body), {
     status: rendered.status,
@@ -196,6 +216,13 @@ const tokenRequest = (
       refreshToken: required(get("refresh_token"), "refresh_token"),
     };
   }
+  if (grantType === "device_code" || grantType === DEVICE_CODE_GRANT_TYPE) {
+    return {
+      ...common,
+      grantType: DEVICE_CODE_GRANT_TYPE,
+      deviceCode: required(get("device_code"), "device_code"),
+    };
+  }
   throw new OAuthProtocolError("UNSUPPORTED_GRANT");
 };
 
@@ -217,6 +244,78 @@ const escapeHtml = (value: string) =>
     .replaceAll("'", "&#39;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+
+export const renderEntraDeviceActivationPage = (
+  input: { userCode?: string; username?: string },
+  options: {
+    action: string;
+    error?: string;
+    outcome?: "approved" | "denied";
+  }
+) => {
+  const message =
+    options.outcome === "approved"
+      ? '<div class="success" role="status">Device authorized. You may return to your device.</div>'
+      : options.outcome === "denied"
+        ? '<div class="notice" role="status">Device authorization declined. You may close this page.</div>'
+        : options.error
+          ? `<div class="error" role="alert">${escapeHtml(options.error)}</div>`
+          : "";
+  const form = options.outcome
+    ? ""
+    : `<form method="post" action="${escapeHtml(options.action)}">
+        <label for="user-code">Code</label>
+        <input id="user-code" name="user_code" type="text" autocomplete="one-time-code" required value="${escapeHtml(input.userCode ?? "")}">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="email" autocomplete="username" required value="${escapeHtml(input.username ?? "")}">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <div class="actions">
+          <button class="secondary" type="submit" name="decision" value="deny">Decline</button>
+          <button type="submit" name="decision" value="approve">Continue</button>
+        </div>
+      </form>`;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Sign in on this device · mockOS test environment</title>
+    <style>
+      :root { color-scheme: light; font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #1b1b1b; background: #f5f5f5; }
+      main { width: min(440px, 100%); padding: 42px 44px; border: 1px solid #d7d7d7; background: #fff; box-shadow: 0 2px 7px rgb(0 0 0 / 14%); }
+      .brand { font-size: 21px; font-weight: 650; letter-spacing: -.03em; }
+      .provider { margin: 28px 0 0; color: #0067b8; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+      h1 { margin: 8px 0; font-size: 25px; font-weight: 600; }
+      .hint { margin: 0 0 24px; color: #5f5f5f; font-size: 14px; line-height: 1.5; }
+      label { display: block; margin-top: 16px; font-size: 14px; }
+      input { width: 100%; padding: 10px 2px; border: 0; border-bottom: 1px solid #666; font: inherit; }
+      .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 28px; }
+      button { min-width: 108px; border: 0; padding: 9px 18px; color: #fff; background: #0067b8; font: inherit; font-weight: 600; }
+      button.secondary { color: #1b1b1b; background: #e5e5e5; }
+      .error, .success, .notice { margin-top: 18px; padding: 10px 12px; font-size: 14px; }
+      .error { border-left: 3px solid #a4262c; color: #8a2025; background: #fdf3f4; }
+      .success { border-left: 3px solid #107c10; color: #0d640d; background: #f1f8f1; }
+      .notice { border-left: 3px solid #666; color: #444; background: #f5f5f5; }
+      footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid #e5e5e5; color: #666; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand" aria-label="mockOS"><span aria-hidden="true">🥸</span> mockOS</div>
+      <p class="provider">Microsoft Entra simulation</p>
+      <h1>Sign in on this device</h1>
+      <p class="hint">Use a seeded mockOS identity. Never enter production credentials.</p>
+      ${message}
+      ${form}
+      <footer>Test environment · Synthetic identities only</footer>
+    </main>
+  </body>
+</html>`;
+};
 
 const assertResponseMode = (responseMode: string | undefined) => {
   if (
@@ -254,6 +353,7 @@ const authorizationResponse = (
 };
 
 export const createEntraHttpApp = ({
+  directoryBaseHeader = "x-mockos-directory-base",
   engine,
   graphBaseHeader = "x-mockos-graph-base",
   issuerHeader = "x-mockos-issuer-base",
@@ -323,6 +423,108 @@ export const createEntraHttpApp = ({
         ),
         rendered.status === 429 ? 429 : 400,
         { "cache-control": "no-store" }
+      );
+    }
+  });
+
+  app.post("/:tenant/oauth2/v2.0/devicecode", async (context) => {
+    tenantMatches(context.req.param("tenant"), engine);
+    try {
+      const form = await context.req.formData();
+      const get = (key: string) => {
+        const value = form.get(key);
+        return typeof value === "string" ? value : undefined;
+      };
+      const result = await engine.createDeviceAuthorization({
+        clientId: required(get("client_id"), "client_id"),
+        directoryBaseUrl: trustedBaseFromRequest(
+          context.req.raw,
+          directoryBaseHeader,
+          "directory base"
+        ),
+        issuerBase: issuerFromRequest(context.req.raw, issuerHeader),
+        scope: required(get("scope"), "scope"),
+      });
+      return context.json(
+        {
+          device_code: result.deviceCode,
+          user_code: result.userCode,
+          verification_uri: result.verificationUri,
+          expires_in: result.expiresIn,
+          interval: result.interval,
+          message: `To sign in, use a web browser to open the page ${result.verificationUri} and enter the code ${result.userCode} to authenticate.`,
+        },
+        200,
+        noStoreHeaders
+      );
+    } catch (error) {
+      return entraJsonError(error);
+    }
+  });
+
+  app.get("/devicelogin", (context) =>
+    context.html(
+      renderEntraDeviceActivationPage(
+        { userCode: optional(context.req.query("user_code")) },
+        { action: publicActionFromRequest(context.req.raw, publicPathHeader) }
+      ),
+      200,
+      noStoreHeaders
+    )
+  );
+
+  app.post("/devicelogin", async (context) => {
+    const form = await context.req.formData();
+    const get = (key: string) => {
+      const value = form.get(key);
+      return typeof value === "string" ? value : undefined;
+    };
+    const userCode = required(get("user_code"), "user_code");
+    const decision = required(get("decision"), "decision");
+    const action = publicActionFromRequest(context.req.raw, publicPathHeader);
+    const username = required(get("username"), "username");
+    const password = required(get("password"), "password");
+    try {
+      if (decision === "deny") {
+        await engine.denyDeviceAuthorization({ userCode, username, password });
+        return context.html(
+          renderEntraDeviceActivationPage({ userCode }, { action, outcome: "denied" }),
+          200,
+          noStoreHeaders
+        );
+      }
+      if (decision !== "approve") {
+        throw new OAuthProtocolError(
+          "INVALID_REQUEST",
+          "The decision must be either 'approve' or 'deny'."
+        );
+      }
+      await engine.activateDeviceAuthorization({
+        userCode,
+        username,
+        password,
+      });
+      return context.html(
+        renderEntraDeviceActivationPage(
+          { userCode, username },
+          { action, outcome: "approved" }
+        ),
+        200,
+        noStoreHeaders
+      );
+    } catch (error) {
+      const renderedDeviceError = renderEntraDeviceAuthorizationError(error);
+      const rendered = renderedDeviceError ?? renderEntraError(error);
+      return context.html(
+        renderEntraDeviceActivationPage(
+          { userCode, username },
+          {
+            action,
+            error: rendered.body.error_description.split(" Trace ID:")[0],
+          }
+        ),
+        rendered.status === 429 ? 429 : 400,
+        noStoreHeaders
       );
     }
   });

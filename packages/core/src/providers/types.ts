@@ -1,9 +1,19 @@
-import type { ProviderId, ScimDialect, SemanticErrorCode } from "@mockos/contracts";
+import type {
+  OAuthClientType,
+  ProviderId,
+  ScimDialect,
+  SemanticErrorCode,
+} from "@mockos/contracts";
 import type { UserRecord } from "../directory";
 
 export interface ProviderUrlContext {
   /** Request-derived final OIDC issuer. Never persist this value. */
   readonly issuerBase: string;
+  /**
+   * Trusted request-derived provider directory base. Required by directory-hosted
+   * URL projections such as Entra device activation; never persist this value.
+   */
+  readonly directoryBaseUrl?: string;
   readonly tenantId: string;
 }
 
@@ -12,7 +22,7 @@ export interface ProviderUrls {
   authorization(context: ProviderUrlContext): string;
   token(context: ProviderUrlContext): string;
   jwks(context: ProviderUrlContext): string;
-  userInfo(context: ProviderUrlContext): string;
+  userInfo?(context: ProviderUrlContext): string;
   discovery(context: ProviderUrlContext): string;
   introspection?(context: ProviderUrlContext): string;
   revocation?(context: ProviderUrlContext): string;
@@ -68,7 +78,7 @@ export interface OidcDiscoveryDocument {
   readonly authorization_endpoint: string;
   readonly token_endpoint: string;
   readonly jwks_uri: string;
-  readonly userinfo_endpoint: string;
+  readonly userinfo_endpoint?: string;
   readonly response_types_supported: readonly string[];
   readonly response_modes_supported: readonly string[];
   readonly subject_types_supported: readonly string[];
@@ -92,6 +102,13 @@ export interface TokenPolicy {
   readonly idTokenIdPrefix?: string;
 }
 
+export interface DeviceAuthorizationPolicy {
+  readonly lifetimeSeconds: number;
+  readonly intervalSeconds: number;
+  readonly includeVerificationUriComplete: boolean;
+  readonly allowedClientTypes: readonly OAuthClientType[];
+}
+
 export interface ProviderProfile {
   readonly id: ProviderId;
   readonly displayName: string;
@@ -104,6 +121,7 @@ export interface ProviderProfile {
   readonly loginPage: Readonly<Record<string, unknown>>;
   readonly authn?: Readonly<Record<string, unknown>>;
   readonly tokenPolicy: TokenPolicy;
+  readonly deviceAuthorizationPolicy?: DeviceAuthorizationPolicy;
 }
 
 export const normalizeIssuerBase = (value: string): string => {

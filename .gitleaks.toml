@@ -12,3 +12,35 @@ condition = "AND"
 regexTarget = "match"
 regexes = ['''Authorization: Bearer synthetic-(?:scim|graph)-token''']
 paths = ['''^docs/quickstarts/curl\.md$''']
+
+[[rules]]
+id = "generic-api-key"
+
+# These fixtures exist to prove containment and redaction. They authenticate
+# nothing, and the tests fail if the runtime ever forwards or echoes them.
+[[rules.allowlists]]
+description = "Deterministic synthetic Mock Credentials in containment and observation tests"
+condition = "AND"
+regexTarget = "match"
+regexes = [
+  '''synthetic-validation-secret-\d+''',
+  '''req_secret_observation_\d+''',
+  '''mk_platform_secret_must_not_be_forwarded''',
+]
+paths = [
+  '''^packages/mcp/src/index\.test\.ts$''',
+  '''^packages/llm-mock/src/observation\.test\.ts$''',
+]
+
+# Markdown link targets and slash-separated prose trip the entropy heuristic.
+# A credential never contains a path separator, so this stays narrow: any
+# secret-shaped token without a slash is still reported in documentation.
+[[rules.allowlists]]
+description = "Documentation link targets and slash-separated prose"
+condition = "AND"
+regexTarget = "match"
+regexes = ['''[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+''']
+paths = [
+  '''\.md$''',
+  '''^llms-full\.txt$''',
+]

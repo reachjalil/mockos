@@ -140,20 +140,26 @@ const entraUrls = {
     appendIssuerPath(entraAuthority(issuerBase), "oauth2/v2.0/authorize"),
   token: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(entraAuthority(issuerBase), "oauth2/v2.0/token"),
+  deviceAuthorization: ({ issuerBase }: ProviderUrlContext) =>
+    appendIssuerPath(entraAuthority(issuerBase), "oauth2/v2.0/devicecode"),
   jwks: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(entraAuthority(issuerBase), "discovery/v2.0/keys"),
-  userInfo: ({ issuerBase }: ProviderUrlContext) =>
-    appendIssuerPath(entraAuthority(issuerBase), "openid/userinfo"),
   discovery: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, ".well-known/openid-configuration"),
+  activation: ({ directoryBaseUrl }: ProviderUrlContext) => {
+    if (!directoryBaseUrl) {
+      throw new Error("Entra device activation requires a trusted directory base URL.");
+    }
+    return appendIssuerPath(directoryBaseUrl, "devicelogin");
+  },
 };
 
 const entraDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   issuer: entraUrls.issuer(context),
   authorization_endpoint: entraUrls.authorization(context),
   token_endpoint: entraUrls.token(context),
+  device_authorization_endpoint: entraUrls.deviceAuthorization(context),
   jwks_uri: entraUrls.jwks(context),
-  userinfo_endpoint: entraUrls.userInfo(context),
   response_types_supported: ["code"],
   response_modes_supported: ["query", "form_post"],
   subject_types_supported: ["pairwise"],
@@ -176,10 +182,15 @@ const entraDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => (
     "preferred_username",
     "oid",
     "tid",
+    "uti",
     "groups",
     "roles",
   ],
-  grant_types_supported: ["authorization_code", "refresh_token"],
+  grant_types_supported: [
+    "authorization_code",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:device_code",
+  ],
   code_challenge_methods_supported: ["S256"],
   cloud_instance_name: "mockos.live",
   tenant_region_scope: "EU",
@@ -260,6 +271,7 @@ export const entraProfile: ProviderProfile = {
     name: context.user.displayName,
     preferred_username: context.user.userName,
     upn: context.user.userName,
+    ...(context.tokenId ? { uti: context.tokenId } : {}),
     ...(context.user.givenName ? { given_name: context.user.givenName } : {}),
     ...(context.user.familyName ? { family_name: context.user.familyName } : {}),
     ...(context.nonce ? { nonce: context.nonce } : {}),
@@ -280,5 +292,11 @@ export const entraProfile: ProviderProfile = {
     idTokenLifetimeSeconds: 3_600,
     authorizationCodeLifetimeSeconds: 600,
     refreshTokenLifetimeSeconds: 90 * 24 * 3_600,
+  },
+  deviceAuthorizationPolicy: {
+    lifetimeSeconds: 900,
+    intervalSeconds: 5,
+    includeVerificationUriComplete: false,
+    allowedClientTypes: ["public"],
   },
 };

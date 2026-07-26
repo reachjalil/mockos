@@ -5,6 +5,7 @@ import type { SqlRow, SqlStore } from "../store";
 
 export const OKTA_AUTHN_STATE_TOKEN_TTL_MS = 5 * 60 * 1_000;
 export const OKTA_AUTHN_SESSION_TOKEN_TTL_MS = 5 * 60 * 1_000;
+export const OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE = "000000";
 export const OKTA_AUTHN_EXPIRY_GC_BATCH_SIZE = 256;
 export const OKTA_AUTHN_MAX_STATE_TRANSACTIONS = 10_000;
 export const OKTA_AUTHN_MAX_SESSION_TOKENS = 10_000;
@@ -33,6 +34,7 @@ export type OktaAuthnResult =
 
 export type OktaAuthnErrorCode =
   | "INVALID_CREDENTIALS"
+  | "INVALID_PASSCODE"
   | "INVALID_SESSION_TOKEN"
   | "INVALID_STATE_TOKEN";
 
@@ -43,7 +45,9 @@ export class OktaAuthnError extends Error {
     super(
       code === "INVALID_CREDENTIALS"
         ? "Authentication failed."
-        : "Invalid token provided."
+        : code === "INVALID_PASSCODE"
+          ? "Invalid Passcode/Answer"
+          : "Invalid token provided."
     );
     this.name = "OktaAuthnError";
     this.code = code;
@@ -86,6 +90,17 @@ type CapabilityTable = "authn_transactions" | "web_sessions";
 
 const isPendingStatus = (value: string): value is OktaAuthnPendingStatus =>
   value === "MFA_REQUIRED" || value === "PASSWORD_EXPIRED";
+
+export const oktaAuthnFactorId = (userId: string): string => `mfa_${userId}`;
+
+const samePasscode = (left: string, right: string): boolean => {
+  const length = Math.max(left.length, right.length);
+  let difference = left.length ^ right.length;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+};
 
 const positiveTtl = (value: number, name: string): number => {
   if (!Number.isSafeInteger(value) || value < 1) {
@@ -262,6 +277,79 @@ export class OktaAuthnService {
     if (!cancelled) throw new OktaAuthnError("INVALID_STATE_TOKEN");
   }
 
+  async verifyFactor(input: {
+    readonly factorId: string;
+    readonly passCode: string;
+    readonly stateToken: string;
+  }): Promise<OktaAuthnResult> {
+    const [tokenHash, sessionToken] = await Promise.all([
+      hashSecret(input.stateToken),
+      this.#prepareToken("session"),
+    ]);
+    const result = this.#store.transaction<OktaAuthnResult | "INVALID_PASSCODE" | null>(
+      () => {
+        const row = this.#store.get<AuthnTransactionRow>(
+          `SELECT id, state, user_id, created_at, expires_at
+           FROM authn_transactions WHERE id = ?`,
+          tokenHash
+        );
+        if (!row) return null;
+        if (Date.parse(row.expires_at) <= this.#clock.now().getTime()) {
+          this.#store.run("DELETE FROM authn_transactions WHERE id = ?", tokenHash);
+          return null;
+        }
+        // A factor route cannot act on a different live transaction state, but
+        // it must not destroy that state's still-valid cancellation capability.
+        if (row.state !== "MFA_REQUIRED" || !row.user_id) return null;
+        const user = this.#users.findById(row.user_id);
+        if (
+          user?.lifecycleState !== "active" ||
+          user.softDeletedAt ||
+          user.mfaState !== "required"
+        ) {
+          this.#store.run("DELETE FROM authn_transactions WHERE id = ?", tokenHash);
+          return null;
+        }
+        if (
+          input.factorId !== oktaAuthnFactorId(user.id) ||
+          !samePasscode(input.passCode, OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE)
+        ) {
+          return "INVALID_PASSCODE";
+        }
+        if (user.passwordState !== "valid") {
+          const expiresAt = new Date(
+            this.#clock.now().getTime() + this.#stateTokenTtlMs
+          ).toISOString();
+          const transitioned = this.#store.run(
+            `UPDATE authn_transactions
+             SET state = 'PASSWORD_EXPIRED', expires_at = ?
+             WHERE id = ? AND state = 'MFA_REQUIRED'`,
+            expiresAt,
+            tokenHash
+          );
+          if (transitioned.changes !== 1) return null;
+          return {
+            expiresAt,
+            stateToken: input.stateToken,
+            status: "PASSWORD_EXPIRED" as const,
+            user,
+          };
+        }
+        const deleted = this.#store.run(
+          "DELETE FROM authn_transactions WHERE id = ?",
+          tokenHash
+        );
+        if (deleted.changes !== 1) return null;
+        return this.#createSuccessWithinTransaction(user, sessionToken);
+      }
+    );
+    if (result === "INVALID_PASSCODE") {
+      throw new OktaAuthnError("INVALID_PASSCODE");
+    }
+    if (!result) throw new OktaAuthnError("INVALID_STATE_TOKEN");
+    return result;
+  }
+
   async consumeSessionToken(sessionToken: string): Promise<UserRecord> {
     const tokenHash = await hashSecret(sessionToken);
     const user = this.#store.transaction<UserRecord | undefined>(() => {
@@ -330,27 +418,34 @@ export class OktaAuthnService {
   }
 
   #createSuccess(user: UserRecord, token: PreparedToken): OktaAuthnResult {
+    return this.#store.transaction(() =>
+      this.#createSuccessWithinTransaction(user, token)
+    );
+  }
+
+  #createSuccessWithinTransaction(
+    user: UserRecord,
+    token: PreparedToken
+  ): OktaAuthnResult {
     const createdAt = this.#clock.now();
     const expiresAt = new Date(createdAt.getTime() + this.#sessionTokenTtlMs);
-    return this.#store.transaction(() => {
-      this.#assertCurrentIssuanceUser(user);
-      this.#pruneExpired(createdAt.toISOString());
-      this.#reserveCapabilitySlot("web_sessions", user.id, this.#maxSessionTokens);
-      this.#store.run(
-        `INSERT INTO web_sessions (id_hash, user_id, created_at, expires_at)
-         VALUES (?, ?, ?, ?)`,
-        token.hash,
-        user.id,
-        createdAt.toISOString(),
-        expiresAt.toISOString()
-      );
-      return {
-        expiresAt: expiresAt.toISOString(),
-        sessionToken: token.value,
-        status: "SUCCESS" as const,
-        user,
-      };
-    });
+    this.#assertCurrentIssuanceUser(user);
+    this.#pruneExpired(createdAt.toISOString());
+    this.#reserveCapabilitySlot("web_sessions", user.id, this.#maxSessionTokens);
+    this.#store.run(
+      `INSERT INTO web_sessions (id_hash, user_id, created_at, expires_at)
+       VALUES (?, ?, ?, ?)`,
+      token.hash,
+      user.id,
+      createdAt.toISOString(),
+      expiresAt.toISOString()
+    );
+    return {
+      expiresAt: expiresAt.toISOString(),
+      sessionToken: token.value,
+      status: "SUCCESS" as const,
+      user,
+    };
   }
 
   #pruneExpired(now: string): void {

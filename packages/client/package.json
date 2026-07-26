@@ -1,0 +1,56 @@
+{
+  "name": "@mockos/client",
+  "version": "0.0.0",
+  "description": "Typed fetch client for implemented mockOS management HTTP operations.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Jalil Laaraichi",
+  "homepage": "https://github.com/reachjalil/mockos#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reachjalil/mockos.git",
+    "directory": "packages/client"
+  },
+  "bugs": {
+    "url": "https://github.com/reachjalil/mockos/issues"
+  },
+  "keywords": [
+    "client",
+    "identity",
+    "mock",
+    "mockos",
+    "testing"
+  ],
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "test": "vitest run",
+    "types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@mockos/llm-mock",
+  "version": "0.0.0",
+  "description": "Provider-neutral mock LLM planning and pure wire rendering.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@mockos/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "catalog:",
+    "openai": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

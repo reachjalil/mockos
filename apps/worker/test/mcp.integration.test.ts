@@ -1,4 +1,5 @@
 import { env, exports } from "cloudflare:workers";
+import { mockosMcpToolNames } from "@mockos/contracts";
 import { describe, expect, it } from "vitest";
 
 const apiKey = "mockos-integration-test-key";
@@ -248,6 +249,176 @@ describe("management MCP", () => {
     });
   });
 
+  it("rejects the platform key as a mock MCP bearer credential before tool dispatch", async () => {
+    const sessionId = await initialize();
+    const response = await mcpRequest(
+      {
+        jsonrpc: "2.0",
+        id: 100,
+        method: "tools/call",
+        params: {
+          name: "put_mock_mcp_server",
+          arguments: {
+            environmentId: "env_missing01",
+            expectedRevision: null,
+            server: {
+              version: 1,
+              slug: "platform-key",
+              serverInfo: { name: "Rejected server", version: "1.0.0" },
+              authentication: { mode: "bearer", token: apiKey },
+            },
+          },
+        },
+      },
+      sessionId
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    const body = await response.text();
+    expect(body).not.toContain(apiKey);
+    expect(JSON.parse(body)).toMatchObject({
+      code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+      status: 400,
+    });
+  });
+
+  it("does not reflect a mock MCP bearer credential from pre-handler validation", async () => {
+    const sessionId = await initialize();
+    const credential = "synthetic-mcp-validation-secret";
+    const result = await callTool(sessionId, 101, "put_mock_mcp_server", {
+      environmentId: "env_missing01",
+      expectedRevision: null,
+      server: {
+        version: 1,
+        slug: "invalid-server",
+        serverInfo: { name: "Invalid server", version: "1.0.0" },
+        authentication: { mode: "bearer", token: credential },
+        [credential]: "unknown server field",
+      },
+    });
+
+    expect(result?.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(credential);
+  });
+
+  it.each(["openai", "anthropic"] as const)(
+    "rejects the platform key as the %s strict mock LLM credential before tool dispatch",
+    async (dialect) => {
+      const sessionId = await initialize();
+      const response = await mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: `platform-key-${dialect}`,
+          method: "tools/call",
+          params: {
+            name: "put_mock_llm_server",
+            arguments: {
+              environmentId: "env_missing01",
+              expectedRevision: null,
+              server: {
+                version: 1,
+                slug: `platform-key-${dialect}`,
+                name: "Rejected LLM server",
+                dialects: {
+                  openai:
+                    dialect === "openai"
+                      ? {
+                          enabled: true,
+                          authentication: { mode: "strict", apiKey },
+                        }
+                      : { enabled: false },
+                  anthropic:
+                    dialect === "anthropic"
+                      ? {
+                          enabled: true,
+                          authentication: { mode: "strict", apiKey },
+                        }
+                      : { enabled: false },
+                },
+                models: [
+                  {
+                    id: "mockos-text-1",
+                    displayName: "mockOS Text",
+                    createdAtEpochSeconds: 1_785_000_000,
+                    behavior: {
+                      version: 1,
+                      type: "static",
+                      value: "Never persisted.",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        sessionId
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("content-type")).toContain(
+        "application/problem+json"
+      );
+      const body = await response.text();
+      expect(body).not.toContain(apiKey);
+      expect(JSON.parse(body)).toMatchObject({
+        code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+        status: 400,
+      });
+    }
+  );
+
+  it("rejects the platform key copied into returned mock LLM material", async () => {
+    const sessionId = await initialize();
+    const response = await mcpRequest(
+      {
+        jsonrpc: "2.0",
+        id: "platform-key-response-material",
+        method: "tools/call",
+        params: {
+          name: "put_mock_llm_server",
+          arguments: {
+            environmentId: "env_missing01",
+            expectedRevision: null,
+            server: {
+              version: 1,
+              slug: "platform-key-response",
+              name: "Rejected LLM response",
+              dialects: {
+                openai: {
+                  enabled: true,
+                  authentication: { mode: "accept_any" },
+                },
+                anthropic: { enabled: false },
+              },
+              models: [
+                {
+                  id: "mockos-text-1",
+                  displayName: "mockOS Text",
+                  createdAtEpochSeconds: 1_785_000_000,
+                  behavior: {
+                    version: 1,
+                    type: "static",
+                    value: `copied-${apiKey}-suffix`,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+      sessionId
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.text();
+    expect(body).not.toContain(apiKey);
+    expect(JSON.parse(body)).toMatchObject({
+      code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
+      status: 400,
+    });
+  });
+
   it("keeps reserved and deleting catalog entries out of active listings", async () => {
     const environment = {
       id: "catalog-state-01",
@@ -285,6 +456,121 @@ describe("management MCP", () => {
     await environmentCatalog.completeDeleteEnvironment(environment.id);
   });
 
+  it("isolates mock LLM definitions between environment Durable Objects", async () => {
+    const sessionId = await initialize();
+    const createEnvironment = async (id: number, name: string, seed: string) => {
+      const result = await callTool(sessionId, id, "create_environment", {
+        name,
+        provider: "entra",
+        seed,
+      });
+      expect(result?.isError).not.toBe(true);
+      return result?.structuredContent?.data as { id: string };
+    };
+    const first = await createEnvironment(200, "First LLM environment", "llm-first");
+    const second = await createEnvironment(201, "Second LLM environment", "llm-second");
+    const server = (name: string) => ({
+      version: 1,
+      slug: "shared-slug",
+      name,
+      dialects: {
+        openai: {
+          enabled: true,
+          authentication: { mode: "accept_any" },
+        },
+        anthropic: { enabled: false },
+      },
+      models: [
+        {
+          id: "mockos-text-1",
+          displayName: "mockOS Text",
+          createdAtEpochSeconds: 1_785_000_000,
+          behavior: {
+            version: 1,
+            type: "static",
+            value: `Response from ${name}.`,
+          },
+        },
+      ],
+    });
+
+    for (const [id, environment, name] of [
+      [202, first, "First server"],
+      [203, second, "Second server"],
+    ] as const) {
+      const put = await callTool(sessionId, id, "put_mock_llm_server", {
+        environmentId: environment.id,
+        expectedRevision: null,
+        server: server(name),
+      });
+      expect(put?.isError).not.toBe(true);
+      expect(put?.structuredContent?.data).toMatchObject({
+        revision: 1,
+        spec: { name },
+      });
+    }
+
+    for (const [id, environment, name] of [
+      [204, first, "First server"],
+      [205, second, "Second server"],
+    ] as const) {
+      const get = await callTool(sessionId, id, "get_mock_llm_server", {
+        environmentId: environment.id,
+        slug: "shared-slug",
+      });
+      expect(get?.isError).not.toBe(true);
+      expect(get?.structuredContent?.data).toMatchObject({
+        revision: 1,
+        spec: { name },
+      });
+    }
+
+    const contenders = await Promise.all([
+      callTool(sessionId, 206, "put_mock_llm_server", {
+        environmentId: first.id,
+        expectedRevision: 1,
+        server: server("First contender"),
+      }),
+      callTool(sessionId, 207, "put_mock_llm_server", {
+        environmentId: first.id,
+        expectedRevision: 1,
+        server: server("Second contender"),
+      }),
+    ]);
+    const committed = contenders.filter((result) => result?.isError !== true);
+    const conflicted = contenders.filter((result) => result?.isError === true);
+    expect(committed).toHaveLength(1);
+    expect(committed[0]?.structuredContent?.data).toMatchObject({ revision: 2 });
+    expect(conflicted).toHaveLength(1);
+    expect(conflicted[0]?._meta?.["mockos/problem"]).toMatchObject({
+      code: "MOCK_LLM_SERVER_REVISION_CONFLICT",
+      status: 409,
+    });
+
+    const isolatedSecond = await callTool(sessionId, 208, "get_mock_llm_server", {
+      environmentId: second.id,
+      slug: "shared-slug",
+    });
+    expect(isolatedSecond?.structuredContent?.data).toMatchObject({
+      revision: 1,
+      spec: { name: "Second server" },
+    });
+
+    for (const [id, environment] of [
+      [209, first],
+      [210, second],
+    ] as const) {
+      const deleted = await callTool(sessionId, id, "delete_environment", {
+        environmentId: environment.id,
+      });
+      expect(deleted?.isError).not.toBe(true);
+      expect(deleted?.structuredContent?.data).toEqual({
+        environmentId: environment.id,
+        deleted: true,
+      });
+    }
+  });
+
   it("mounts all tools and keeps the selected environment session-local", async () => {
     const sessionId = await initialize();
     const listResponse = await mcpRequest(
@@ -292,26 +578,19 @@ describe("management MCP", () => {
       sessionId
     );
     const [listMessage] = await parseMessages(listResponse);
-    const tools = (listMessage?.result?.tools ?? []) as Array<{ name: string }>;
+    const tools = (listMessage?.result?.tools ?? []) as Array<{
+      name: string;
+      description?: string;
+      annotations?: { idempotentHint?: boolean };
+    }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(
-      [
-        "assert_requests",
-        "clear_scenario",
-        "configure_environment",
-        "create_application",
-        "create_environment",
-        "delete_environment",
-        "get_request_log",
-        "get_wellknown_urls",
-        "list_environments",
-        "mint_token",
-        "run_provisioning_cycle",
-        "seed_identities",
-        "set_current_environment",
-        "set_scenario",
-        "simulate_lifecycle",
-      ].sort()
+      [...mockosMcpToolNames].sort()
     );
+    expect(tools.find(({ name }) => name === "delete_environment")).toMatchObject({
+      description:
+        "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.",
+      annotations: { idempotentHint: true },
+    });
 
     const created = await callTool(sessionId, 3, "create_environment", {
       name: "MCP integration environment",
@@ -362,6 +641,228 @@ describe("management MCP", () => {
       name: "Configured MCP environment",
       idleTtlHours: 48,
       requestLogLimit: 250,
+    });
+
+    const llmEnvironmentNamespace = Reflect.get(env, "ENVIRONMENTS") as {
+      get(id: DurableObjectId): {
+        putMockLlmServer(
+          server: Record<string, unknown>,
+          expectedRevision: number | null
+        ): Promise<unknown>;
+      };
+      idFromName(name: string): DurableObjectId;
+    };
+    const llmEnvironmentStub = llmEnvironmentNamespace.get(
+      llmEnvironmentNamespace.idFromName(environment?.id ?? "")
+    );
+    let directPlatformKeyError: unknown;
+    try {
+      await llmEnvironmentStub.putMockLlmServer(
+        {
+          version: 1,
+          slug: "direct-platform-key",
+          name: "Direct platform key denial",
+          dialects: {
+            openai: {
+              enabled: true,
+              authentication: { mode: "strict", apiKey },
+            },
+            anthropic: { enabled: false },
+          },
+          models: [
+            {
+              id: "mockos-text-1",
+              displayName: "mockOS Text",
+              createdAtEpochSeconds: 1_785_000_000,
+              behavior: {
+                version: 1,
+                type: "static",
+                value: "Never persisted.",
+              },
+            },
+          ],
+        },
+        null
+      );
+    } catch (error) {
+      directPlatformKeyError = error;
+    }
+    expect(directPlatformKeyError).toBeInstanceOf(Error);
+    expect((directPlatformKeyError as Error).message).toMatch(/platform Access Key/u);
+
+    const openAiMockCredential = "mockos_openai_strict_test_key_123";
+    const anthropicMockCredential = "mockos_anthropic_strict_test_key_456";
+    const mockLlmServer = {
+      version: 1,
+      slug: "agent-models",
+      name: "Agent models",
+      dialects: {
+        openai: {
+          enabled: true,
+          authentication: {
+            mode: "strict",
+            apiKey: openAiMockCredential,
+          },
+        },
+        anthropic: {
+          enabled: true,
+          authentication: {
+            mode: "strict",
+            apiKey: anthropicMockCredential,
+          },
+        },
+      },
+      models: [
+        {
+          id: "mockos-text-1",
+          displayName: "mockOS Text",
+          createdAtEpochSeconds: 1_785_000_000,
+          behavior: {
+            version: 1,
+            type: "static",
+            value: "Hello from mockOS.",
+          },
+        },
+      ],
+    };
+    let copiedPlatformKeyError: unknown;
+    try {
+      await llmEnvironmentStub.putMockLlmServer(
+        {
+          ...mockLlmServer,
+          slug: "direct-copied-platform-key",
+          dialects: {
+            openai: {
+              enabled: true,
+              authentication: { mode: "accept_any" },
+            },
+            anthropic: { enabled: false },
+          },
+          models: [
+            {
+              ...mockLlmServer.models[0],
+              behavior: {
+                version: 1,
+                type: "static",
+                value: `copied-${apiKey}-suffix`,
+              },
+            },
+          ],
+        },
+        null
+      );
+    } catch (error) {
+      copiedPlatformKeyError = error;
+    }
+    expect(copiedPlatformKeyError).toBeInstanceOf(Error);
+    expect((copiedPlatformKeyError as Error).message).toMatch(/platform Access Key/u);
+
+    const putMockLlm = await callTool(sessionId, 30, "put_mock_llm_server", {
+      expectedRevision: null,
+      server: mockLlmServer,
+    });
+    expect(putMockLlm?.isError).not.toBe(true);
+    expect(putMockLlm?.structuredContent?.data).toMatchObject({
+      revision: 1,
+      spec: {
+        slug: "agent-models",
+        dialects: {
+          openai: {
+            enabled: true,
+            authentication: { mode: "strict", configured: true },
+          },
+          anthropic: {
+            enabled: true,
+            authentication: { mode: "strict", configured: true },
+          },
+        },
+      },
+    });
+    const serializedMockLlmView = JSON.stringify(putMockLlm?.structuredContent?.data);
+    expect(serializedMockLlmView).not.toContain(openAiMockCredential);
+    expect(serializedMockLlmView).not.toContain(anthropicMockCredential);
+    expect(serializedMockLlmView).not.toContain("apiKeySha256");
+
+    const replayedMockLlm = await callTool(sessionId, 31, "put_mock_llm_server", {
+      expectedRevision: null,
+      server: mockLlmServer,
+    });
+    expect(replayedMockLlm?.isError).not.toBe(true);
+    expect(replayedMockLlm?.structuredContent?.data).toMatchObject({
+      revision: 1,
+    });
+
+    const listedMockLlms = await callTool(sessionId, 32, "list_mock_llm_servers", {});
+    expect(listedMockLlms?.isError).not.toBe(true);
+    expect(listedMockLlms?.structuredContent?.data).toMatchObject({
+      servers: [
+        {
+          slug: "agent-models",
+          revision: 1,
+          modelCount: 1,
+          enabledDialects: ["openai", "anthropic"],
+        },
+      ],
+    });
+
+    const fetchedMockLlm = await callTool(sessionId, 33, "get_mock_llm_server", {
+      slug: "agent-models",
+    });
+    expect(fetchedMockLlm?.isError).not.toBe(true);
+    expect(fetchedMockLlm?.structuredContent?.data).toEqual(
+      putMockLlm?.structuredContent?.data
+    );
+
+    const staleMockLlmPut = await callTool(sessionId, 34, "put_mock_llm_server", {
+      expectedRevision: 99,
+      server: { ...mockLlmServer, name: "Conflicting agent models" },
+    });
+    expect(staleMockLlmPut?.isError).toBe(true);
+    expect(staleMockLlmPut?._meta?.["mockos/problem"]).toMatchObject({
+      code: "MOCK_LLM_SERVER_REVISION_CONFLICT",
+      status: 409,
+    });
+
+    const staleMockLlmDelete = await callTool(sessionId, 35, "delete_mock_llm_server", {
+      slug: "agent-models",
+      expectedRevision: 99,
+    });
+    expect(staleMockLlmDelete?.isError).toBe(true);
+    expect(staleMockLlmDelete?._meta?.["mockos/problem"]).toMatchObject({
+      code: "MOCK_LLM_SERVER_REVISION_CONFLICT",
+      status: 409,
+    });
+
+    const deletedMockLlm = await callTool(sessionId, 36, "delete_mock_llm_server", {
+      slug: "agent-models",
+      expectedRevision: 1,
+    });
+    expect(deletedMockLlm?.isError).not.toBe(true);
+    expect(deletedMockLlm?.structuredContent?.data).toEqual({
+      slug: "agent-models",
+      deleted: true,
+    });
+    const replayedMockLlmDelete = await callTool(
+      sessionId,
+      37,
+      "delete_mock_llm_server",
+      {
+        slug: "agent-models",
+        expectedRevision: 1,
+      }
+    );
+    expect(replayedMockLlmDelete?.isError).not.toBe(true);
+    expect(replayedMockLlmDelete?.structuredContent?.data).toEqual({
+      slug: "agent-models",
+      deleted: false,
+    });
+    const missingMockLlm = await callTool(sessionId, 38, "get_mock_llm_server", {
+      slug: "agent-models",
+    });
+    expect(missingMockLlm?.isError).toBe(true);
+    expect(missingMockLlm?._meta?.["mockos/problem"]).toMatchObject({
+      code: "MOCK_LLM_SERVER_NOT_FOUND",
+      status: 404,
     });
 
     const userName = "grace@example.test";
@@ -543,6 +1044,7 @@ describe("management MCP", () => {
           openidConfiguration?: string;
           scimBaseUrl?: string;
           tokenEndpoint?: string;
+          userinfoEndpoint?: string;
         }
       | undefined;
     const managementBase = `${publicOrigin}/e/${environment?.id}`;
@@ -556,6 +1058,7 @@ describe("management MCP", () => {
       scimBaseUrl: `${managementBase}/scim/v2`,
       graphBaseUrl: `${managementBase}/graph/v1.0`,
     });
+    expect(wellKnownData).not.toHaveProperty("userinfoEndpoint");
     expect(normalTokenData?.claims?.iss).toBe(managementIssuer);
 
     const scenarioId = "mcp-discovery-mfa";

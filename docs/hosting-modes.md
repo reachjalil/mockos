@@ -1,7 +1,9 @@
 # Hosting modes
 
-Status: Bounded M6 path-mode sample deployed; wildcard/subdomain mode remains open
-Last reviewed: 2026-07-22
+Status: Bounded M6 path-mode sample deployed; F1 and partial OpenAI/Anthropic F2
+routes are source-only; MSAL code/public-device and Auth JS path authorities are
+qualified only over local HTTPS; wildcard/subdomain live mode remains open
+Last reviewed: 2026-07-26
 
 ## Path mode
 
@@ -20,6 +22,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
 
 - Entra discovery:
   `/e/<env>/<tenant-guid>/v2.0/.well-known/openid-configuration`
+- Entra public device authorization and activation:
+  `/e/<env>/<tenant-guid>/oauth2/v2.0/devicecode` and `/e/<env>/devicelogin`
 - Entra Microsoft Graph reads:
   `/e/<env>/graph/v1.0/users`
 - Okta authorization:
@@ -30,6 +34,12 @@ Provider traffic is routed beneath an environment segment. Current examples are:
   `/e/<env>/api/v1/authn`
 - Entra- or Okta-profile SCIM:
   `/e/<env>/scim/v2/Users`
+- Environment-hosted mock MCP:
+  `/e/<env>/mcp-mock/<slug>`
+- Environment-hosted mock OpenAI:
+  `/e/<env>/llm-mock/<slug>/openai/v1`
+- Environment-hosted mock Anthropic:
+  `/e/<env>/llm-mock/<slug>/anthropic`
 
 The Graph, Okta directory, and SCIM paths are accepted for the bounded M3 scope. The
 M3 deployed smoke sampled both SCIM profiles, an Entra Graph read, and an Okta directory
@@ -38,17 +48,47 @@ provider profile, so the same path exposes Entra or Okta PATCH and lifecycle sem
 rather than a third provider.
 
 Protocol endpoints are intentionally reachable test surfaces once their unguessable
-environment URL is known. OIDC/OAuth uses registered synthetic clients; SCIM and Graph
+environment URL is known. OIDC/OAuth uses registered synthetic clients. Confidential
+clients receive a creation-only synthetic secret; public clients receive none, cannot
+use `client_credentials`, and rely on PKCE plus bearer refresh credentials. SCIM and Graph
 accept a non-empty synthetic Bearer value, while the Okta directory API accepts a
 non-empty synthetic SSWS value. Those directory checks validate scheme and presence,
 not a real provider token. Never send the MCP/control Access Key, real identities, or
 production credentials to these endpoints.
+
+The bounded Entra device route accepts public clients only. It returns an
+environment-owned `/devicelogin` URI, and both approval and denial require the seeded
+synthetic username/password. The edge strips caller-supplied `x-mockos-*` values and
+supplies the trusted directory and Graph bases used for activation and token claims.
+
+The F1 mock MCP route accepts no credential or the separate Bearer Mock Credential
+configured for that slug. It negotiates MCP `2025-11-25` over POST-only Streamable
+HTTP. The path resolver and local Worker integration are source evidence only; neither
+recorded workers.dev origin has F1 deployment acceptance.
+
+The partial F2 routes always require a syntactically valid dialect Mock Credential.
+OpenAI uses Bearer; Anthropic uses `x-api-key` plus exactly
+`anthropic-version: 2023-06-01`. `accept_any` skips verifier comparison and `strict`
+compares the current dialect verifier. Source-qualified operations are model
+list/retrieve plus OpenAI and Anthropic JSON/SSE Chat Completions/Messages. Local
+Worker integrations use pinned official SDKs; neither recorded
+workers.dev origin has F2 deployment acceptance. Configured midstream errors, OpenAI
+Responses, and Anthropic betas remain unavailable. See
+[MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
 
 Path mode works without an account-owned zone, but some SDKs assume provider-shaped
 hosts. Configure explicit authorities and never infer broad SDK compatibility from a
 curl or single-client success. The authenticated MCP, OIDC, scenario, log, assertion,
 and cleanup checks recorded for both live origins are in the M3 and latest
 [M6 workers.dev smoke evidence](./evidence/m6-workers-dev-smoke.md).
+
+Two pinned clients separately pass path-mode authorities over an owned local Wrangler
+HTTPS socket: `@azure/msal-node` 5.4.2 as an Entra confidential authorization-code
+client plus a separate public device client, and
+`@okta/okta-auth-js` 8.0.1 as an Okta public client. These are local D/I/S/X/Q records,
+not H for either workers.dev origin. See the
+[MSAL Node](./evidence/entra-msal-node-local-qualification.md) and
+[Okta Auth JS](./evidence/okta-auth-js-local-qualification.md) evidence.
 
 Path mode does not imply broad provider API coverage. Microsoft Graph is read-only,
 the M6 Classic Authn slice stops after primary state retrieval/cancellation, and both
@@ -70,12 +110,17 @@ For Entra, the request-derived OIDC issuer is
 `https://login.<base-domain>/<tenant-guid>/v2.0`, while directory URLs remain scoped to
 the resolved environment:
 
+- `https://<environment>.<base-domain>/devicelogin`
 - `https://<environment>.<base-domain>/scim/v2`
 - `https://<environment>.<base-domain>/graph/v1.0`
+- `https://<environment>.<base-domain>/mcp-mock/<slug>`
+- `https://<environment>.<base-domain>/llm-mock/<slug>/openai/v1`
+- `https://<environment>.<base-domain>/llm-mock/<slug>/anthropic`
 
-Unit tests cover this split for MCP direct minting, well-known URL results, routed
-group-overage claim sources, and spoofed internal routing-header replacement. Live TLS
-and wildcard-route qualification remain pending.
+Unit tests cover this split for management-MCP direct minting, well-known URL results,
+routed group-overage claim sources, mock-MCP and mock-LLM route classification, and
+spoofed internal routing-header replacement. Live TLS and wildcard-route
+qualification remain pending.
 
 The critical invariant is that stored state contains no absolute issuer URL. Cutover
 must be only host resolution, routes, variables, certificates, and index backfill—not a

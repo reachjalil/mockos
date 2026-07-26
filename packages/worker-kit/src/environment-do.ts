@@ -1,10 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   type ApplicationListPage,
-  applicationListPageSchema,
   type ApplicationRegistration,
   type AssertionResult,
   type AssertionSpec,
+  applicationListPageSchema,
+  applicationRegistrationSchema,
   type ClearScenarioResult,
   type CreateApplicationInput,
   type EnvironmentConfig,
@@ -16,10 +17,17 @@ import {
   type LifecycleAction,
   type LifecycleResult,
   type ManagementListQuery,
-  managementListQuerySchema,
   type MintedToken,
   type MintTokenRequest,
+  type MockLlmServerSummary,
+  type MockLlmServerView,
+  type MockMcpServerSummary,
+  type MockMcpServerView,
+  managementListQuerySchema,
   mintTokenRequestSchema,
+  mockLlmServerWriteSchema,
+  mockMcpServerWriteSchema,
+  mockMcpSlugSchema,
   type ProvisioningHttpOperation,
   type ProvisioningHttpResponse,
   type ProvisioningRun,
@@ -36,11 +44,12 @@ import {
   type RequestLogQuery,
   type RunProvisioningCycleToolInput,
   runProvisioningCycleToolInputSchema,
-  type ScenarioSpec,
   type ScenarioListPage,
+  type ScenarioSpec,
   scenarioListPageSchema,
+  toMockLlmServerView,
+  toMockMcpServerView,
   type WellKnownUrls,
-  wellKnownUrlsSchema,
 } from "@mockos/contracts";
 import {
   applyMigrations,
@@ -49,7 +58,11 @@ import {
   DeviceAuthorizationError,
   decodeJwt,
   Engine,
+  hashSecret,
   MAX_REQUEST_LOG_BODY_BYTES,
+  MockLlmRepository,
+  MockMcpRepository,
+  OktaAuthnError,
   OAuthError,
   type RenderedProviderError,
   ScimService,
@@ -72,11 +85,25 @@ import {
   type OktaHttpEngine,
   type OktaRenderedError,
 } from "@mockos/engine-http";
+import type {
+  MockLlmAnthropicCatalog,
+  MockLlmAnthropicRuntimeResult,
+  MockLlmOpenAiCatalog,
+  MockLlmOpenAiRuntimeResult,
+  MockLlmProviderObservationFinish,
+  MockLlmProviderObservationStart,
+} from "@mockos/llm-mock";
+import { createMockMcpFetchHandler, type MockMcpObservation } from "@mockos/mcp-mock";
 import {
   createGraphDirectoryEngine,
   createOktaDirectoryEngine,
 } from "./directory-http";
 import { DoSqlStore } from "./do-sql-store";
+import {
+  EnvironmentMockLlmAnthropicRuntime,
+  EnvironmentMockLlmOpenAiRuntime,
+  type EnvironmentMockLlmPlanSelection,
+} from "./mock-llm-runtime";
 import { assertProvisioningPreparedOutputBounds } from "./provisioning-bounds";
 import { performProvisioningHttpOperation } from "./provisioning-http";
 import {
@@ -94,6 +121,7 @@ import {
   validateOutboundTarget,
 } from "./secure-fetch";
 import { trustedPublicUrl } from "./trusted-public-url";
+import { buildWellKnownUrls } from "./well-known-urls";
 
 const CONFIG_KEY = "environment_config";
 const LAST_ACTIVITY_KEY = "last_activity";
@@ -162,17 +190,21 @@ const validateUserState = (user: UserRecord | undefined) => {
 
 const applicationRegistration = (
   application: Awaited<ReturnType<Engine["applications"]["create"]>>
-): ApplicationRegistration => ({
-  id: application.id,
-  name: application.name,
-  clientId: application.clientId,
-  clientSecret: application.clientSecret,
-  redirectUris: [...application.redirectUris],
-  grantTypes: [...application.grantTypes],
-  appRoles: [...application.appRoles],
-  groupClaimsMode: application.groupClaimsMode,
-  createdAt: application.createdAt,
-});
+): ApplicationRegistration =>
+  applicationRegistrationSchema.parse({
+    id: application.id,
+    name: application.name,
+    clientId: application.clientId,
+    clientType: application.clientType,
+    ...(application.clientSecret !== undefined
+      ? { clientSecret: application.clientSecret }
+      : {}),
+    redirectUris: [...application.redirectUris],
+    grantTypes: [...application.grantTypes],
+    appRoles: [...application.appRoles],
+    groupClaimsMode: application.groupClaimsMode,
+    createdAt: application.createdAt,
+  });
 
 const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
   const validateAuthorizationRequest = (input: EntraAuthorizationRequest) => {
@@ -213,17 +245,26 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
     }
   };
 
+  const authenticate = async (input: { username: string; password: string }) => {
+    const candidate = engine.users.findByUserName(input.username);
+    validateUserState(candidate);
+    const user = await engine.users.authenticate(input.username, input.password);
+    if (!user) throw new OAuthProtocolError("INVALID_GRANT");
+    return user;
+  };
+
   return {
     tenantId: engine.tenantId,
     discovery: (issuerBase) => engine.discovery(issuerBase),
     jwks: () => engine.jwks(),
     validateAuthorizationRequest,
+    async activateDeviceAuthorization(input) {
+      const user = await authenticate(input);
+      engine.oauth.activateDeviceAuthorization(input.userCode, user.id);
+    },
     async authorize(input: EntraAuthorizationLogin) {
       validateAuthorizationRequest(input);
-      const candidate = engine.users.findByUserName(input.username);
-      validateUserState(candidate);
-      const user = await engine.users.authenticate(input.username, input.password);
-      if (!user) throw new OAuthProtocolError("INVALID_GRANT");
+      const user = await authenticate(input);
       return engine.oauth.createAuthorizationCode({
         clientId: input.clientId,
         redirectUri: validatedUrl(input.redirectUri),
@@ -234,7 +275,20 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
         nonce: input.nonce,
       });
     },
+    createDeviceAuthorization: (input) => engine.oauth.createDeviceAuthorization(input),
+    async denyDeviceAuthorization(input) {
+      await authenticate(input);
+      engine.oauth.denyDeviceAuthorization(input.userCode);
+    },
     async token(input: EntraTokenRequest) {
+      if (input.grantType === "urn:ietf:params:oauth:grant-type:device_code") {
+        return engine.oauth.pollDeviceAuthorization({
+          clientId: input.clientId,
+          deviceCode: input.deviceCode,
+          graphBaseUrl: input.graphBaseUrl,
+          issuerBase: input.issuerBase,
+        });
+      }
       if (input.grantType === "refresh_token") {
         return engine.oauth.redeemRefreshToken({
           refreshToken: input.refreshToken,
@@ -349,6 +403,31 @@ const createOktaHttpEngine = (engine: Engine): OktaHttpEngine => {
         ...(input.nonce ? { nonce: input.nonce } : {}),
       });
     },
+    async authorizeWithSessionToken(input) {
+      validateAuthorizationRequest(input);
+      let user: UserRecord;
+      try {
+        user = await engine.authn.consumeSessionToken(input.sessionToken);
+      } catch (error) {
+        if (error instanceof OktaAuthnError) {
+          throw new OAuthProtocolError(
+            "INVALID_GRANT",
+            "The session token is invalid or expired."
+          );
+        }
+        throw error;
+      }
+      return engine.oauth.createAuthorizationCode({
+        authenticationMode: "session_token",
+        clientId: input.clientId,
+        redirectUri: input.redirectUri,
+        userId: user.id,
+        scope: input.scope,
+        codeChallenge: input.codeChallenge,
+        codeChallengeMethod: "S256",
+        ...(input.nonce ? { nonce: input.nonce } : {}),
+      });
+    },
     async activateDeviceAuthorization(input) {
       const user = await authenticate(input);
       engine.oauth.activateDeviceAuthorization(input.userCode, user.id);
@@ -376,6 +455,7 @@ const headersRecord = (
     if (normalizedName.startsWith("x-mockos-")) continue;
     const sensitiveHeader =
       normalizedName === "authorization" ||
+      normalizedName === "mcp-session-id" ||
       normalizedName === "proxy-authorization" ||
       normalizedName === "cookie" ||
       normalizedName === "set-cookie" ||
@@ -387,7 +467,9 @@ const headersRecord = (
       (normalizedName === "authorization" && options.redactAuthorization) ||
       (options.redactSecrets && sensitiveHeader)
         ? "[REDACTED]"
-        : rawValue;
+        : options.redactSecrets && normalizedName === "location"
+          ? redactLocationSecrets(rawValue)
+          : rawValue;
     const candidate = { ...captured, [normalizedName]: value };
     if (
       new TextEncoder().encode(JSON.stringify(candidate)).byteLength >
@@ -493,15 +575,41 @@ const injectionPointFor = (pathname: string): string => {
   ) {
     return "oauth.authorize";
   }
-  if (pathname.endsWith("/v1/device/authorize")) return "oauth.device";
+  if (
+    pathname.endsWith("/oauth2/v2.0/devicecode") ||
+    pathname.endsWith("/v1/device/authorize")
+  ) {
+    return "oauth.device";
+  }
   if (pathname.endsWith("/v1/introspect")) return "oauth.introspect";
   if (pathname.endsWith("/v1/revoke")) return "oauth.revoke";
-  if (pathname.endsWith("/activate")) return "oauth.device.activate";
+  if (pathname.endsWith("/activate") || pathname.endsWith("/devicelogin")) {
+    return "oauth.device.activate";
+  }
   return "http.request";
 };
 
 const isOktaAuthnPath = (pathname: string): boolean =>
   pathname === "/api/v1/authn" || pathname.startsWith("/api/v1/authn/");
+
+const isCredentialBearingProtocolPath = (pathname: string): boolean =>
+  isOktaAuthnPath(pathname) ||
+  pathname === "/activate" ||
+  pathname === "/devicelogin" ||
+  [
+    "/oauth2/v2.0/authorize",
+    "/oauth2/v2.0/devicecode",
+    "/oauth2/v2.0/token",
+    "/v1/authorize",
+    "/v1/token",
+    "/v1/device/authorize",
+    "/v1/introspect",
+    "/v1/revoke",
+  ].some((suffix) => pathname.endsWith(suffix));
+
+const isDeviceAuthorizationPath = (pathname: string): boolean =>
+  pathname.endsWith("/oauth2/v2.0/devicecode") ||
+  pathname.endsWith("/v1/device/authorize");
 
 const authenticationSecretKey = (key: string): boolean => {
   const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
@@ -512,12 +620,65 @@ const authenticationSecretKey = (key: string): boolean => {
     normalized === "credential" ||
     normalized === "credentials" ||
     normalized === "code" ||
+    normalized === "codeverifier" ||
+    normalized === "authorizationcode" ||
+    normalized === "devicecode" ||
+    normalized === "usercode" ||
+    normalized === "clientassertion" ||
     normalized === "apikey" ||
     normalized === "privatekey" ||
     normalized.startsWith("password") ||
     normalized.endsWith("passcode") ||
     normalized.endsWith("secret") ||
     normalized.endsWith("token")
+  );
+};
+
+const redactLocationSecrets = (value: string): string => {
+  if (/%(?![0-9a-f]{2})/i.test(value)) return "[REDACTED location]";
+  try {
+    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
+    const schemeRelative = value.startsWith("//");
+    const parsed = new URL(value, "https://mockos.invalid");
+    if (parsed.username || parsed.password) return "[REDACTED location]";
+    let changed = false;
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (authenticationSecretKey(key)) {
+        parsed.searchParams.set(key, "[REDACTED]");
+        changed = true;
+      }
+    }
+    if (parsed.hash.startsWith("#") && parsed.hash.length > 1) {
+      const fragment = new URLSearchParams(parsed.hash.slice(1));
+      let fragmentChanged = false;
+      for (const key of [...fragment.keys()]) {
+        if (authenticationSecretKey(key)) {
+          fragment.set(key, "[REDACTED]");
+          fragmentChanged = true;
+        }
+      }
+      if (fragmentChanged) {
+        parsed.hash = fragment.toString();
+        changed = true;
+      }
+    }
+    if (!changed) return value;
+    if (absolute) return parsed.toString();
+    if (schemeRelative) {
+      return `//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "[REDACTED location]";
+  }
+};
+
+const containsAuthenticationSecret = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(containsAuthenticationSecret);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, entry]) =>
+      authenticationSecretKey(key) || containsAuthenticationSecret(entry)
   );
 };
 
@@ -532,20 +693,113 @@ const redactAuthenticationSecrets = (value: unknown): unknown => {
   );
 };
 
-const authenticationBodyForLog = (
-  pathname: string,
-  body: string | null
-): string | null => {
-  if (!isOktaAuthnPath(pathname) || body === null) return body;
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return "[REDACTED authentication body]";
+const deviceAuthorizationSecretKey = (key: string): boolean => {
+  const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
+  return normalized === "devicecode" || normalized === "usercode";
+};
+
+const encodedSecretVariants = (secret: string): readonly string[] => {
+  const formEncoded = new URLSearchParams({ value: secret })
+    .toString()
+    .slice("value=".length);
+  return [...new Set([secret, encodeURIComponent(secret), formEncoded])].sort(
+    (left, right) => right.length - left.length
+  );
+};
+
+const redactDeviceAuthorizationResponse = (value: unknown): unknown => {
+  const secrets: string[] = [];
+  const collect = (candidate: unknown): void => {
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) collect(entry);
+      return;
     }
-    return JSON.stringify(redactAuthenticationSecrets(parsed));
-  } catch {
+    if (!candidate || typeof candidate !== "object") return;
+    for (const [key, entry] of Object.entries(candidate as Record<string, unknown>)) {
+      if (deviceAuthorizationSecretKey(key) && typeof entry === "string" && entry) {
+        secrets.push(entry);
+      }
+      collect(entry);
+    }
+  };
+  collect(value);
+  const variants = [...new Set(secrets.flatMap(encodedSecretVariants))];
+  const redactString = (candidate: string): string => {
+    let result = candidate;
+    for (const secret of variants) {
+      result = result.replaceAll(secret, "[REDACTED]");
+    }
+    return result;
+  };
+  const redact = (candidate: unknown): unknown => {
+    if (typeof candidate === "string") return redactString(candidate);
+    if (Array.isArray(candidate)) return candidate.map(redact);
+    if (!candidate || typeof candidate !== "object") return candidate;
+    return Object.fromEntries(
+      Object.entries(candidate as Record<string, unknown>).map(([key, entry]) => {
+        const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
+        return [
+          key,
+          deviceAuthorizationSecretKey(key) || normalized === "message"
+            ? "[REDACTED]"
+            : redact(entry),
+        ];
+      })
+    );
+  };
+  return redact(value);
+};
+
+const structuredBodyForLog = (
+  pathname: string,
+  contentType: string | null,
+  body: string | null,
+  direction: "request" | "response"
+): string | null => {
+  if (body === null) return null;
+  const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType === "application/x-www-form-urlencoded") {
+    if (direction === "request" && /%(?![0-9a-f]{2})/i.test(body)) {
+      return "[REDACTED malformed form body]";
+    }
+    const parsed = new URLSearchParams(body);
+    if (![...parsed.keys()].some(authenticationSecretKey)) return body;
+    const redacted = new URLSearchParams();
+    for (const [key, value] of parsed) {
+      redacted.append(key, authenticationSecretKey(key) ? "[REDACTED]" : value);
+    }
+    return redacted.toString();
+  }
+  if (mediaType === "application/json" || mediaType?.endsWith("+json")) {
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      if (
+        direction === "request" &&
+        (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      ) {
+        return isCredentialBearingProtocolPath(pathname)
+          ? "[REDACTED authentication body]"
+          : "[REDACTED unstructured JSON request body]";
+      }
+      if (direction === "response" && isDeviceAuthorizationPath(pathname)) {
+        return JSON.stringify(redactDeviceAuthorizationResponse(parsed));
+      }
+      return containsAuthenticationSecret(parsed)
+        ? JSON.stringify(redactAuthenticationSecrets(parsed))
+        : body;
+    } catch {
+      return isCredentialBearingProtocolPath(pathname)
+        ? "[REDACTED authentication body]"
+        : "[REDACTED malformed JSON body]";
+    }
+  }
+  if (isCredentialBearingProtocolPath(pathname)) {
     return "[REDACTED authentication body]";
   }
+  if (direction === "request") {
+    return "[REDACTED unsupported request body]";
+  }
+  return body;
 };
 
 const scenarioErrorResponse = (
@@ -757,6 +1011,10 @@ export class UnknownProvisioningApplicationError extends Error {
 /** One isolated identity engine and SQLite database per mock environment. */
 export class EnvironmentDurableObject extends DurableObject {
   readonly #store: DoSqlStore;
+  readonly #mockLlm: MockLlmRepository;
+  readonly #mockLlmAnthropic: EnvironmentMockLlmAnthropicRuntime;
+  readonly #mockLlmOpenAi: EnvironmentMockLlmOpenAiRuntime;
+  readonly #mockMcp: MockMcpRepository;
   readonly #provisioning: ProvisioningPersistence;
   readonly #provisioningEnvironment: ProvisioningEnvironmentVariables;
   readonly #outboundTargetPolicy: OutboundTargetPolicy;
@@ -779,8 +1037,20 @@ export class EnvironmentDurableObject extends DurableObject {
     super(ctx, env);
     this.#store = new DoSqlStore(ctx.storage);
     this.#ensureSchema();
-    this.#provisioning = new ProvisioningPersistence(this.#store);
     this.#provisioningEnvironment = asProvisioningEnvironment(env);
+    this.#mockLlm = new MockLlmRepository(this.#store);
+    this.#mockLlmAnthropic = new EnvironmentMockLlmAnthropicRuntime(this.#mockLlm, {
+      ...(this.#provisioningEnvironment.API_KEY
+        ? { platformApiKey: this.#provisioningEnvironment.API_KEY }
+        : {}),
+    });
+    this.#mockLlmOpenAi = new EnvironmentMockLlmOpenAiRuntime(this.#mockLlm, {
+      ...(this.#provisioningEnvironment.API_KEY
+        ? { platformApiKey: this.#provisioningEnvironment.API_KEY }
+        : {}),
+    });
+    this.#mockMcp = new MockMcpRepository(this.#store);
+    this.#provisioning = new ProvisioningPersistence(this.#store);
     this.#outboundTargetPolicy = outboundTargetPolicy(env);
     const provisioningFetcher = this.#provisioningEnvironment.PROVISIONING_FETCHER;
     if (provisioningFetcher) {
@@ -790,14 +1060,26 @@ export class EnvironmentDurableObject extends DurableObject {
 
   #assertNotPlatformCredential(bearerToken: string | undefined): void {
     const platformApiKey = this.#provisioningEnvironment.API_KEY?.trim();
-    if (
-      bearerToken &&
-      platformApiKey &&
-      sameProvisioningSecret(bearerToken, platformApiKey)
-    ) {
+    if (bearerToken && platformApiKey && bearerToken.includes(platformApiKey)) {
       throw new Error(
-        "The platform Access Key cannot be used as an outbound target credential."
+        "The platform Access Key cannot be used as a Mock Credential or outbound target credential."
       );
+    }
+  }
+
+  #assertNoPlatformCredentialInValue(root: unknown): void {
+    const pending: unknown[] = [root];
+    while (pending.length > 0) {
+      const value = pending.pop();
+      if (!value || typeof value !== "object") continue;
+      for (const [key, child] of Object.entries(value)) {
+        this.#assertNotPlatformCredential(key);
+        if (typeof child === "string") {
+          this.#assertNotPlatformCredential(child);
+        } else {
+          pending.push(child);
+        }
+      }
     }
   }
 
@@ -938,6 +1220,318 @@ export class EnvironmentDurableObject extends DurableObject {
     const created = await engine.applications.create(input);
     await this.#touch();
     return applicationRegistration(created);
+  }
+
+  async putMockMcpServer(
+    input: unknown,
+    expectedRevision: number | null
+  ): Promise<MockMcpServerView> {
+    const server = mockMcpServerWriteSchema.parse(input);
+    const { authentication, ...common } = server;
+    if (authentication.mode === "bearer") {
+      this.#assertNotPlatformCredential(authentication.token);
+    }
+    const persisted = this.#mockMcp.put(
+      {
+        ...common,
+        authentication:
+          authentication.mode === "none"
+            ? authentication
+            : {
+                mode: "bearer",
+                tokenSha256: await hashSecret(authentication.token),
+              },
+      },
+      expectedRevision
+    );
+    await this.#touch();
+    return toMockMcpServerView(persisted);
+  }
+
+  async listMockMcpServers(): Promise<MockMcpServerSummary[]> {
+    const servers = this.#mockMcp.list();
+    await this.#touch();
+    return servers;
+  }
+
+  async getMockMcpServer(slug: string): Promise<MockMcpServerView | undefined> {
+    const server = this.#mockMcp.get(slug);
+    if (server) await this.#touch();
+    return server ? toMockMcpServerView(server) : undefined;
+  }
+
+  async deleteMockMcpServer(slug: string, expectedRevision: number): Promise<true> {
+    const deleted = this.#mockMcp.delete(slug, expectedRevision);
+    await this.#touch();
+    return deleted;
+  }
+
+  async resetMockMcpState(slug: string, expectedRevision: number): Promise<number> {
+    const cleared = this.#mockMcp.resetState(slug, expectedRevision);
+    await this.#touch();
+    return cleared;
+  }
+
+  async putMockLlmServer(
+    input: unknown,
+    expectedRevision: number | null
+  ): Promise<MockLlmServerView> {
+    const server = mockLlmServerWriteSchema.parse(input);
+    this.#assertNoPlatformCredentialInValue(server);
+
+    const persistDialect = async (
+      dialect: typeof server.dialects.openai | typeof server.dialects.anthropic
+    ) => {
+      if (!dialect.enabled) return dialect;
+      if (dialect.authentication.mode === "accept_any") return dialect;
+      return {
+        enabled: true as const,
+        authentication: {
+          mode: "strict" as const,
+          apiKeySha256: await hashSecret(dialect.authentication.apiKey),
+        },
+      };
+    };
+    const [openai, anthropic] = await Promise.all([
+      persistDialect(server.dialects.openai),
+      persistDialect(server.dialects.anthropic),
+    ]);
+    const persisted = this.#mockLlm.put(
+      {
+        ...server,
+        dialects: { openai, anthropic },
+      },
+      expectedRevision
+    );
+    await this.#touch();
+    return toMockLlmServerView(persisted);
+  }
+
+  async listMockLlmServers(): Promise<MockLlmServerSummary[]> {
+    const servers = this.#mockLlm.list();
+    await this.#touch();
+    return servers;
+  }
+
+  async getMockLlmServer(slug: string): Promise<MockLlmServerView | undefined> {
+    const server = this.#mockLlm.get(slug);
+    if (server) await this.#touch();
+    return server ? toMockLlmServerView(server) : undefined;
+  }
+
+  async getMockLlmOpenAiCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmOpenAiRuntimeResult<MockLlmOpenAiCatalog>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmOpenAi.getCatalog(slug, credential);
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async planMockLlmOpenAiChatCompletion(
+    slug: string,
+    credential: string,
+    request: unknown
+  ): Promise<MockLlmOpenAiRuntimeResult<EnvironmentMockLlmPlanSelection>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmOpenAi.planChatCompletion(
+      slug,
+      credential,
+      request
+    );
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async getMockLlmAnthropicCatalog(
+    slug: string,
+    credential: string
+  ): Promise<MockLlmAnthropicRuntimeResult<MockLlmAnthropicCatalog>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmAnthropic.getCatalog(slug, credential);
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async planMockLlmAnthropicMessage(
+    slug: string,
+    credential: string,
+    request: unknown
+  ): Promise<MockLlmAnthropicRuntimeResult<EnvironmentMockLlmPlanSelection>> {
+    if (!this.#readConfig()) return { ok: false, code: "server_not_found" };
+    const result = await this.#mockLlmAnthropic.planMessage(slug, credential, request);
+    const currentConfig = this.#readConfig();
+    if (!currentConfig) return { ok: false, code: "server_not_found" };
+    if (result.ok) await this.#touch(currentConfig);
+    return result;
+  }
+
+  async reserveMockLlmObservation(
+    serverRevision: number,
+    requestPath: string,
+    observation: MockLlmProviderObservationStart
+  ): Promise<void> {
+    const engine = await this.#engine();
+    engine.reserveLlmObservation({
+      id: observation.observationId,
+      timestamp: new Date().toISOString(),
+      source: "inbound",
+      provider: observation.dialect,
+      protocol: "http",
+      method: observation.method,
+      path: requestPath,
+      requestHeaders: {},
+      requestBody: null,
+      responseHeaders: {},
+      responseBody: null,
+      correlationId: observation.observationId,
+      llmDialect: observation.dialect,
+      llmOperation: observation.operation,
+      llmServerSlug: observation.slug,
+      llmServerRevision: serverRevision,
+      llmModel: observation.model,
+      llmStream: observation.stream,
+      llmTurnIndex: observation.turnIndex,
+      llmOutcome: "pending",
+      ...(observation.responseId === undefined
+        ? {}
+        : { llmResponseId: observation.responseId }),
+      ...(observation.response
+        ? {
+            llmInputTokens: observation.response.inputTokens,
+            llmOutputTokens: observation.response.outputTokens,
+            llmStopReason: observation.response.stopReason,
+            llmToolNames: [...observation.response.toolNames],
+          }
+        : { llmErrorKind: observation.errorKind }),
+    });
+  }
+
+  async finalizeMockLlmObservation(
+    observation: MockLlmProviderObservationFinish
+  ): Promise<void> {
+    const engine = await this.#engine();
+    engine.finalizeLlmObservation(observation.observationId, {
+      llmOutcome: observation.outcome,
+      responseStatus: observation.responseStatus,
+      durationMs: observation.durationMilliseconds,
+    });
+  }
+
+  async deleteMockLlmServer(slug: string, expectedRevision: number): Promise<boolean> {
+    const deleted = this.#mockLlm.delete(slug, expectedRevision);
+    if (deleted) await this.#touch();
+    return deleted;
+  }
+
+  async #appendMockMcpObservation(
+    engine: Engine,
+    request: Request,
+    observation: MockMcpObservation
+  ): Promise<void> {
+    const correlationId = crypto.randomUUID();
+    try {
+      engine.requestLog.append({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        source: "inbound",
+        provider: "mcp",
+        protocol: "mcp",
+        method: observation.transportMethod,
+        path: protocolPath(request),
+        requestHeaders: headersRecord(request.headers, {
+          redactAuthorization: true,
+          redactSecrets: true,
+        }),
+        requestBody: null,
+        responseStatus: observation.httpStatus,
+        responseHeaders: {},
+        responseBody: null,
+        durationMs: observation.durationMs,
+        correlationId,
+        ...(observation.mcpMethod === undefined
+          ? {}
+          : { mcpMethod: observation.mcpMethod }),
+        ...(observation.mcpTool === undefined ? {} : { mcpTool: observation.mcpTool }),
+        ...(observation.mcpArguments === undefined
+          ? {}
+          : { mcpArguments: { ...observation.mcpArguments } }),
+        ...(observation.mcpErrorCode === undefined
+          ? {}
+          : { mcpErrorCode: observation.mcpErrorCode }),
+        ...(observation.mcpToolIsError === undefined
+          ? {}
+          : { mcpToolIsError: observation.mcpToolIsError }),
+      });
+    } catch {
+      console.error("Failed to append a bounded mock MCP request-log entry.");
+    }
+    await this.#touch();
+  }
+
+  async #fetchMockMcp(request: Request, engine: Engine): Promise<Response> {
+    const slug = request.headers.get("x-mockos-mcp-slug");
+    if (
+      request.headers.get("x-mockos-route-kind") !== "mock-mcp" ||
+      !slug ||
+      !mockMcpSlugSchema.safeParse(slug).success
+    ) {
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32_600, message: "The mock MCP route is invalid." },
+        },
+        { status: 400 }
+      );
+    }
+    if (request.headers.get("x-mockos-redact-authorization") === "true") {
+      void request.body?.cancel("platform credential rejected").catch(() => undefined);
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: {
+            code: -32_001,
+            message: "A Mock Credential is required at this endpoint.",
+          },
+        },
+        {
+          status: 401,
+          headers: { "www-authenticate": "Bearer" },
+        }
+      );
+    }
+    const server = this.#mockMcp.get(slug);
+    if (!server) {
+      void request.body?.cancel("mock MCP server not found").catch(() => undefined);
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32_001, message: "Mock MCP server not found." },
+        },
+        { status: 404 }
+      );
+    }
+    const handler = createMockMcpFetchHandler({
+      repository: this.#mockMcp,
+      authenticateBearer: async ({ token, tokenSha256 }) => {
+        this.#assertNotPlatformCredential(token);
+        return sameProvisioningSecret(await hashSecret(token), tokenSha256);
+      },
+      observe: (observation) =>
+        this.#appendMockMcpObservation(engine, request, observation),
+      waitUntil: (promise) => this.ctx.waitUntil(promise),
+    });
+    return handler(request, { server });
   }
 
   async listApplications(input: ManagementListQuery): Promise<ApplicationListPage> {
@@ -1541,49 +2135,7 @@ export class EnvironmentDurableObject extends DurableObject {
 
   async getWellKnownUrls(location: WellKnownPublicLocation): Promise<WellKnownUrls> {
     const engine = await this.#engine();
-    const issuerBase = trustedPublicUrl(location.issuerBase, "Well-known issuer base");
-    const directoryBaseUrl = trustedPublicUrl(
-      location.directoryBaseUrl,
-      "Well-known directory base",
-      { protocol: new URL(issuerBase).protocol }
-    );
-    const context = { issuerBase, tenantId: engine.tenantId };
-    const urls = engine.provider.urls;
-    const graphBaseUrl =
-      engine.providerId === "entra"
-        ? trustedPublicUrl(location.graphBaseUrl ?? "", "Well-known Graph base", {
-            pathSuffix: "/graph/v1.0",
-            protocol: new URL(issuerBase).protocol,
-          })
-        : undefined;
-    if (
-      graphBaseUrl &&
-      graphBaseUrl !== `${directoryBaseUrl.replace(/\/+$/, "")}/graph/v1.0`
-    ) {
-      throw new Error("Well-known Graph base must belong to the directory base.");
-    }
-    const result = wellKnownUrlsSchema.parse({
-      issuer: urls.issuer(context),
-      openidConfiguration: urls.discovery(context),
-      authorizationEndpoint: urls.authorization(context),
-      tokenEndpoint: urls.token(context),
-      jwksUri: urls.jwks(context),
-      scimBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/scim/v2`,
-      ...(engine.providerId === "entra"
-        ? { graphBaseUrl }
-        : {
-            oktaApiBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1`,
-            oktaAuthnEndpoint: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1/authn`,
-          }),
-      userinfoEndpoint: urls.userInfo(context),
-      ...(urls.introspection
-        ? { introspectionEndpoint: urls.introspection(context) }
-        : {}),
-      ...(urls.revocation ? { revocationEndpoint: urls.revocation(context) } : {}),
-      ...(urls.deviceAuthorization
-        ? { deviceAuthorizationEndpoint: urls.deviceAuthorization(context) }
-        : {}),
-    });
+    const result = buildWellKnownUrls(engine.provider, engine.tenantId, location);
     await this.#touch();
     return result;
   }
@@ -1619,8 +2171,49 @@ export class EnvironmentDurableObject extends DurableObject {
     if (!config) {
       return Response.json({ error: "environment_not_configured" }, { status: 409 });
     }
+    if (request.headers.get("x-mockos-route-kind") === "mock-llm") {
+      void request.body
+        ?.cancel("mock LLM traffic must be composed at the edge")
+        .catch(() => undefined);
+      const requestId = `req_${crypto.randomUUID().replaceAll("-", "")}`;
+      if (request.headers.get("x-mockos-llm-dialect") === "anthropic") {
+        return Response.json(
+          {
+            type: "error",
+            error: {
+              type: "api_error",
+              message: "The mock Anthropic request could not be completed.",
+            },
+            request_id: requestId,
+          },
+          {
+            status: 500,
+            headers: { "request-id": requestId },
+          }
+        );
+      }
+      return Response.json(
+        {
+          error: {
+            message: "The mock OpenAI request could not be completed.",
+            type: "api_error",
+            param: null,
+            code: "invalid_edge_composition",
+          },
+        },
+        {
+          status: 500,
+          headers: {
+            "x-request-id": requestId,
+          },
+        }
+      );
+    }
     const engine = await this.#engine();
     if (generation !== this.#configGeneration) return this.fetch(request);
+    if (request.headers.get("x-mockos-route-kind") === "mock-mcp") {
+      return this.#fetchMockMcp(request, engine);
+    }
     let httpApp =
       this.#httpApp?.generation === generation ? this.#httpApp.app : undefined;
     if (!httpApp) {
@@ -1701,9 +2294,8 @@ export class EnvironmentDurableObject extends DurableObject {
       requestBodyPromise,
       readBoundedBody(response.clone().body),
     ]);
-    const authnPath = isOktaAuthnPath(routedPath);
     const responseHeaders = headersRecord(response.headers, {
-      redactSecrets: authnPath,
+      redactSecrets: true,
     });
     const responseJson = (() => {
       if (!responseBody) return undefined;
@@ -1735,14 +2327,23 @@ export class EnvironmentDurableObject extends DurableObject {
         path,
         requestHeaders: headersRecord(request.headers, {
           redactAuthorization:
-            authnPath ||
             request.headers.get("x-mockos-redact-authorization") === "true",
-          redactSecrets: authnPath,
+          redactSecrets: true,
         }),
-        requestBody: authenticationBodyForLog(routedPath, requestBody),
+        requestBody: structuredBodyForLog(
+          routedPath,
+          request.headers.get("content-type"),
+          requestBody,
+          "request"
+        ),
         responseStatus: response.status,
         responseHeaders,
-        responseBody: authenticationBodyForLog(routedPath, responseBody),
+        responseBody: structuredBodyForLog(
+          routedPath,
+          response.headers.get("content-type"),
+          responseBody,
+          "response"
+        ),
         durationMs: Math.max(0, Date.now() - startedAt),
         correlationId,
       });

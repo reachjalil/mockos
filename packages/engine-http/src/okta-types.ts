@@ -22,6 +22,10 @@ export type OktaAuthorizationResult = {
   code: string;
 };
 
+export type OktaSessionAuthorization = OktaAuthorizationRequest & {
+  sessionToken: string;
+};
+
 export type OktaAuthorizationCodeTokenRequest = {
   clientId: string;
   clientSecret?: string;
@@ -59,6 +63,7 @@ export type OktaTokenResult = {
 
 export type OktaDeviceAuthorizationRequest = {
   clientId: string;
+  directoryBaseUrl: string;
   issuerBase: string;
   scope: string;
 };
@@ -69,7 +74,7 @@ export type OktaDeviceAuthorizationResult = {
   interval: number;
   userCode: string;
   verificationUri: string;
-  verificationUriComplete: string;
+  verificationUriComplete?: string;
 };
 
 export type OktaDeviceActivationRequest = {
@@ -119,6 +124,9 @@ export type OktaRenderedError = {
 export interface OktaHttpEngine {
   activateDeviceAuthorization(input: OktaDeviceActivationRequest): OktaAwaitable<void>;
   authorize(input: OktaAuthorizationLogin): OktaAwaitable<OktaAuthorizationResult>;
+  authorizeWithSessionToken(
+    input: OktaSessionAuthorization
+  ): OktaAwaitable<OktaAuthorizationResult>;
   createDeviceAuthorization(
     input: OktaDeviceAuthorizationRequest
   ): OktaAwaitable<OktaDeviceAuthorizationResult>;
@@ -139,6 +147,7 @@ export interface OktaHttpEngine {
 
 export type CreateOktaHttpAppOptions = {
   authorizationServerId?: string;
+  directoryBaseHeader?: string;
   engine: OktaHttpEngine;
   issuerHeader?: string;
   publicPathHeader?: string;

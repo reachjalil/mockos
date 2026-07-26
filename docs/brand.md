@@ -1,7 +1,7 @@
 <h1><span aria-hidden="true">🥸</span> mockOS brand</h1>
 
-Status: Initial visual identity
-Last reviewed: 2026-07-22
+Status: Initial visual identity and compatibility-mark guidance
+Last reviewed: 2026-07-25
 
 mockOS uses the disguised-face idea as a direct visual shorthand for **mock identity**.
 The treatment is intentionally restrained: it is a product mark for developer
@@ -59,6 +59,23 @@ Provider fidelity belongs in routes, claims, errors, and behavior—not in ambig
 co-branding. Login screens must lead with mockOS, say that they are test environments,
 and name the simulated provider in text. Do not present Microsoft or Okta artwork as
 the mockOS product mark.
+
+## Third-party compatibility marks
+
+Use third-party product and company names only when they identify the compatibility
+target or the authoritative source being modeled. Prefer plain text, preserve the
+owner's spelling and capitalization, and keep the mockOS name and mark visually
+primary. Do not use a third-party logo, trade dress, partner badge, or wording that
+implies affiliation, sponsorship, endorsement, certification, or provider verification
+without documented permission.
+
+Place the relationship boundary beside provider-derived guides, presets, and catalog
+entries rather than relying on a site-wide footer alone. For the built-in Salesforce
+Hosted MCP SObject Reads preset, use this exact notice:
+
+> Salesforce is a trademark of Salesforce, Inc. Names are used only for compatibility
+> identification. mockOS is independent and is not affiliated with, sponsored by, or
+> endorsed by Salesforce, Inc.
 
 ## Accessibility
 

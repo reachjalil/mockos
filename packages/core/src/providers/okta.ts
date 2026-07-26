@@ -134,8 +134,6 @@ const oktaUrls = {
   token: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, "v1/token"),
   jwks: ({ issuerBase }: ProviderUrlContext) => appendIssuerPath(issuerBase, "v1/keys"),
-  userInfo: ({ issuerBase }: ProviderUrlContext) =>
-    appendIssuerPath(issuerBase, "v1/userinfo"),
   discovery: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, ".well-known/openid-configuration"),
   introspection: ({ issuerBase }: ProviderUrlContext) =>
@@ -157,7 +155,6 @@ const oktaDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   authorization_endpoint: oktaUrls.authorization(context),
   token_endpoint: oktaUrls.token(context),
   jwks_uri: oktaUrls.jwks(context),
-  userinfo_endpoint: oktaUrls.userInfo(context),
   introspection_endpoint: oktaUrls.introspection(context),
   revocation_endpoint: oktaUrls.revocation(context),
   device_authorization_endpoint: oktaUrls.deviceAuthorization(context),
@@ -166,7 +163,11 @@ const oktaDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   subject_types_supported: ["public"],
   id_token_signing_alg_values_supported: ["RS256"],
   scopes_supported: ["openid", "profile", "email", "groups", "offline_access"],
-  token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+  token_endpoint_auth_methods_supported: [
+    "client_secret_post",
+    "client_secret_basic",
+    "none",
+  ],
   introspection_endpoint_auth_methods_supported: [
     "client_secret_post",
     "client_secret_basic",
@@ -174,6 +175,7 @@ const oktaDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   revocation_endpoint_auth_methods_supported: [
     "client_secret_post",
     "client_secret_basic",
+    "none",
   ],
   claims_supported: [
     "sub",
@@ -275,5 +277,11 @@ export const oktaProfile: ProviderProfile = {
     includeTokenUseClaim: false,
     accessTokenIdPrefix: "AT.",
     idTokenIdPrefix: "ID.",
+  },
+  deviceAuthorizationPolicy: {
+    lifetimeSeconds: 600,
+    intervalSeconds: 5,
+    includeVerificationUriComplete: true,
+    allowedClientTypes: ["public", "confidential"],
   },
 };

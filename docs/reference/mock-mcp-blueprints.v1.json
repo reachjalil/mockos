@@ -1,0 +1,592 @@
+{
+  "blueprints": [
+    {
+      "blueprintVersion": 1,
+      "credentialMode": "none",
+      "defaultSlug": "salesforce-sobject-reads",
+      "description": "A deterministic synthetic model of the documented Salesforce Hosted MCP SObject Reads tool names and input semantics.",
+      "fidelity": {
+        "behavior": "deterministic-synthetic",
+        "outputWireParity": "unqualified",
+        "providerNetwork": false
+      },
+      "id": "salesforce/hosted-mcp/sobject-reads",
+      "provenance": {
+        "kind": "documentation-derived",
+        "officialDocumentationUrl": "https://developer.salesforce.com/docs/platform/hosted-mcp-servers/references/reference/sobject-reads.html",
+        "sourceReviewedAt": "2026-07-25",
+        "upstream": {
+          "product": "Salesforce Hosted MCP Servers",
+          "server": "platform/sobject-reads"
+        }
+      },
+      "provider": "salesforce",
+      "schemaVersion": 1,
+      "server": {
+        "authentication": {
+          "mode": "none"
+        },
+        "errorCodeMap": {},
+        "instructions": "This documentation-derived blueprint serves deterministic synthetic mockos.test fixtures. It never connects to Salesforce and does not claim Salesforce output-wire parity.",
+        "pageSize": 25,
+        "prompts": [],
+        "resourceTemplates": [],
+        "resources": [],
+        "serverInfo": {
+          "name": "Salesforce Hosted MCP SObject Reads (MockOS)",
+          "version": "1.0.0"
+        },
+        "slug": "salesforce-sobject-reads",
+        "tools": [
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "Get object schema"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/sobjects/schema-index\",\"objects\":[{\"apiName\":\"Account\",\"label\":\"Account\"}]}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/sobjects/schema-index",
+                        "objects": [
+                          {
+                            "apiName": "Account",
+                            "label": "Account"
+                          }
+                        ]
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments": {}
+                  }
+                },
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/sobjects/Account/schema\",\"object\":{\"apiName\":\"Account\",\"label\":\"Account\",\"fields\":[{\"name\":\"Id\",\"label\":\"Account ID\",\"type\":\"id\",\"nillable\":false},{\"name\":\"Name\",\"label\":\"Account Name\",\"type\":\"string\",\"length\":255,\"nillable\":false},{\"name\":\"Industry\",\"label\":\"Industry\",\"type\":\"picklist\",\"nillable\":true}]}}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/sobjects/Account/schema",
+                        "object": {
+                          "apiName": "Account",
+                          "fields": [
+                            {
+                              "label": "Account ID",
+                              "name": "Id",
+                              "nillable": false,
+                              "type": "id"
+                            },
+                            {
+                              "label": "Account Name",
+                              "length": 255,
+                              "name": "Name",
+                              "nillable": false,
+                              "type": "string"
+                            },
+                            {
+                              "label": "Industry",
+                              "name": "Industry",
+                              "nillable": true,
+                              "type": "picklist"
+                            }
+                          ],
+                          "label": "Account"
+                        }
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments.object-name": "Account"
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "getObjectSchema has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns a deterministic synthetic schema for the optional Salesforce object-name input.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "object-name": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "getObjectSchema",
+            "title": "Get object schema"
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "Run SOQL query"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/queries/acme-test-industries\",\"totalSize\":1,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"Account\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001\"},\"Id\":\"001MockOS0000001\",\"Name\":\"Acme Test Industries\",\"Industry\":\"Technology\"}]}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "done": true,
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/queries/acme-test-industries",
+                        "records": [
+                          {
+                            "Id": "001MockOS0000001",
+                            "Industry": "Technology",
+                            "Name": "Acme Test Industries",
+                            "attributes": {
+                              "type": "Account",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001"
+                            }
+                          }
+                        ],
+                        "totalSize": 1
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments.query": "SELECT Id, Name, Industry FROM Account WHERE Name = 'Acme Test Industries' LIMIT 1"
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "soqlQuery has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns a deterministic synthetic result for one documented-style SOQL fixture.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["query"],
+              "type": "object"
+            },
+            "name": "soqlQuery",
+            "title": "Run SOQL query"
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "Search Salesforce records"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/search/acme-test-industries\",\"searchRecords\":[{\"attributes\":{\"type\":\"Account\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001\"},\"Id\":\"001MockOS0000001\",\"Name\":\"Acme Test Industries\"},{\"attributes\":{\"type\":\"Contact\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Contact/003MockOS0000001\"},\"Id\":\"003MockOS0000001\",\"Name\":\"Ada Lovelace\",\"Email\":\"ada.lovelace@salesforce.mockos.test\"}]}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/search/acme-test-industries",
+                        "searchRecords": [
+                          {
+                            "Id": "001MockOS0000001",
+                            "Name": "Acme Test Industries",
+                            "attributes": {
+                              "type": "Account",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001"
+                            }
+                          },
+                          {
+                            "Email": "ada.lovelace@salesforce.mockos.test",
+                            "Id": "003MockOS0000001",
+                            "Name": "Ada Lovelace",
+                            "attributes": {
+                              "type": "Contact",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Contact/003MockOS0000001"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments.search": "FIND {Acme Test} IN NAME FIELDS RETURNING Account(Id, Name), Contact(Id, Name, Email)"
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "find has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns deterministic synthetic records for one documented-style search fixture.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "search": {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["search"],
+              "type": "object"
+            },
+            "name": "find",
+            "title": "Search Salesforce records"
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "Get user information"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/users/ada-lovelace\",\"userId\":\"005MockOS0000001\",\"organizationId\":\"00DMockOS0000001\",\"userName\":\"ada.lovelace@salesforce.mockos.test\",\"displayName\":\"Ada Lovelace\",\"locale\":\"en_US\"}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "displayName": "Ada Lovelace",
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/users/ada-lovelace",
+                        "locale": "en_US",
+                        "organizationId": "00DMockOS0000001",
+                        "userId": "005MockOS0000001",
+                        "userName": "ada.lovelace@salesforce.mockos.test"
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments": {}
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "getUserInfo has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns deterministic synthetic Salesforce user and organization information.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            },
+            "name": "getUserInfo",
+            "title": "Get user information"
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "List recent SObject records"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/sobjects/Account/recent\",\"records\":[{\"attributes\":{\"type\":\"Account\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001\"},\"Id\":\"001MockOS0000001\",\"Name\":\"Acme Test Industries\",\"LastModifiedDate\":\"2026-07-25T12:00:00.000Z\"},{\"attributes\":{\"type\":\"Account\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000002\"},\"Id\":\"001MockOS0000002\",\"Name\":\"Example Test Labs\",\"LastModifiedDate\":\"2026-07-24T12:00:00.000Z\"}]}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/sobjects/Account/recent",
+                        "records": [
+                          {
+                            "Id": "001MockOS0000001",
+                            "LastModifiedDate": "2026-07-25T12:00:00.000Z",
+                            "Name": "Acme Test Industries",
+                            "attributes": {
+                              "type": "Account",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000001"
+                            }
+                          },
+                          {
+                            "Id": "001MockOS0000002",
+                            "LastModifiedDate": "2026-07-24T12:00:00.000Z",
+                            "Name": "Example Test Labs",
+                            "attributes": {
+                              "type": "Account",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Account/001MockOS0000002"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments.sobject-name": "Account"
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "listRecentSobjectRecords has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns deterministic synthetic recent records for one SObject fixture.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "sobject-name": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["sobject-name"],
+              "type": "object"
+            },
+            "name": "listRecentSobjectRecords",
+            "title": "List recent SObject records"
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+              "title": "Get related records"
+            },
+            "behavior": {
+              "cases": [
+                {
+                  "behavior": {
+                    "type": "static",
+                    "value": {
+                      "content": [
+                        {
+                          "text": "{\"fixtureSource\":\"https://salesforce.mockos.test/fixtures/sobjects/Account/001MockOS0000001/Contacts\",\"records\":[{\"attributes\":{\"type\":\"Contact\",\"url\":\"https://salesforce.mockos.test/services/data/v64.0/sobjects/Contact/003MockOS0000001\"},\"Id\":\"003MockOS0000001\",\"Name\":\"Ada Lovelace\",\"Email\":\"ada.lovelace@salesforce.mockos.test\",\"AccountId\":\"001MockOS0000001\"}]}",
+                          "type": "text"
+                        }
+                      ],
+                      "structuredContent": {
+                        "fixtureSource": "https://salesforce.mockos.test/fixtures/sobjects/Account/001MockOS0000001/Contacts",
+                        "records": [
+                          {
+                            "AccountId": "001MockOS0000001",
+                            "Email": "ada.lovelace@salesforce.mockos.test",
+                            "Id": "003MockOS0000001",
+                            "Name": "Ada Lovelace",
+                            "attributes": {
+                              "type": "Contact",
+                              "url": "https://salesforce.mockos.test/services/data/v64.0/sobjects/Contact/003MockOS0000001"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "version": 1
+                  },
+                  "when": {
+                    "arguments.id": "001MockOS0000001",
+                    "arguments.relationship-path": "Contacts",
+                    "arguments.sobject-name": "Account"
+                  }
+                }
+              ],
+              "fallback": {
+                "type": "static",
+                "value": {
+                  "content": [
+                    {
+                      "text": "getRelatedRecords has no deterministic synthetic fixture for this input.",
+                      "type": "text"
+                    }
+                  ],
+                  "isError": true
+                },
+                "version": 1
+              },
+              "type": "match",
+              "version": 1
+            },
+            "description": "Returns deterministic synthetic related records for one SObject relationship fixture.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "relationship-path": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sobject-name": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["sobject-name", "id", "relationship-path"],
+              "type": "object"
+            },
+            "name": "getRelatedRecords",
+            "title": "Get related records"
+          }
+        ],
+        "transport": {
+          "enableGet": false,
+          "sessionTtlSeconds": 3600,
+          "stateful": false
+        },
+        "version": 1
+      },
+      "title": "Salesforce Hosted MCP SObject Reads",
+      "toolNames": [
+        "getObjectSchema",
+        "soqlQuery",
+        "find",
+        "getUserInfo",
+        "listRecentSobjectRecords",
+        "getRelatedRecords"
+      ]
+    }
+  ],
+  "boundaries": {
+    "catalogScope": "built-in-secret-free-server-definition-presets",
+    "liveProviderQualification": "unqualified",
+    "outputWireParity": "unqualified",
+    "portableBlueprintSystem": "not-f5-export-import-apply-or-gallery",
+    "providerNetwork": false,
+    "providerRestAdapter": "none"
+  },
+  "evidence": {
+    "actualNetwork": "unqualified",
+    "designed": "qualified",
+    "hostedSmoke": "unqualified",
+    "implemented": "qualified",
+    "integrationTested": "qualified-mounted-worker",
+    "productionReady": "unqualified",
+    "sdkClientQualified": "qualified-mcp-sdk-1.29.0-mounted-worker",
+    "sourceTested": "qualified",
+    "verifiedLive": "unqualified"
+  },
+  "generatedFrom": {
+    "getExport": "requireMockMcpBlueprint",
+    "listExport": "listMockMcpBlueprints",
+    "path": "packages/core/src/mock-mcp/blueprints.ts"
+  },
+  "schemaVersion": 1,
+  "status": "source-qualified-local",
+  "trademarks": {
+    "relationship": "mockOS is independent and is not affiliated with, sponsored by, or endorsed by Salesforce, Inc.",
+    "salesforce": "Salesforce is a trademark of Salesforce, Inc. Names are used only for compatibility identification."
+  }
+}

@@ -54,13 +54,15 @@ export interface CreateDeviceAuthorizationInput {
   readonly scope: string;
   /** Request-derived final OIDC issuer. */
   readonly issuerBase: string;
+  /** Trusted request-derived provider directory base. */
+  readonly directoryBaseUrl: string;
 }
 
 export interface CreatedDeviceAuthorization {
   readonly deviceCode: string;
   readonly userCode: string;
   readonly verificationUri: string;
-  readonly verificationUriComplete: string;
+  readonly verificationUriComplete?: string;
   readonly expiresIn: number;
   readonly interval: number;
 }
@@ -75,6 +77,13 @@ export interface DeviceAuthorizationGrant {
   readonly userId: string;
   readonly scope: string;
 }
+
+export interface PreparedDeviceAuthorizationGrant extends DeviceAuthorizationGrant {
+  /** Hashed lookup key; the raw device code is never persisted. */
+  readonly codeHash: string;
+}
+
+export type DeviceAuthorizationCommitOutcome = "success" | "expired" | "invalid";
 
 type DeviceCodeRow = SqlRow & {
   code_hash: string;
@@ -108,8 +117,6 @@ export class DeviceAuthorizationService {
   readonly #profile: ProviderProfile;
   readonly #applications: ApplicationRepository;
   readonly #users: UserRepository;
-  readonly #lifetimeSeconds: number;
-  readonly #intervalSeconds: number;
 
   constructor(options: {
     readonly store: SqlStore;
@@ -119,8 +126,6 @@ export class DeviceAuthorizationService {
     readonly profile: ProviderProfile;
     readonly applications: ApplicationRepository;
     readonly users: UserRepository;
-    readonly lifetimeSeconds?: number;
-    readonly intervalSeconds?: number;
   }) {
     this.#store = options.store;
     this.#clock = options.clock;
@@ -129,8 +134,6 @@ export class DeviceAuthorizationService {
     this.#profile = options.profile;
     this.#applications = options.applications;
     this.#users = options.users;
-    this.#lifetimeSeconds = options.lifetimeSeconds ?? 600;
-    this.#intervalSeconds = options.intervalSeconds ?? 5;
   }
 
   async create(
@@ -141,7 +144,8 @@ export class DeviceAuthorizationService {
     if (!scope) throw new DeviceAuthorizationError("invalid_scope");
     const deviceAuthorization = this.#profile.urls.deviceAuthorization;
     const activation = this.#profile.urls.activation;
-    if (!deviceAuthorization || !activation) {
+    const policy = this.#profile.deviceAuthorizationPolicy;
+    if (!deviceAuthorization || !activation || !policy) {
       throw new DeviceAuthorizationError("unsupported_grant_type");
     }
 
@@ -150,7 +154,7 @@ export class DeviceAuthorizationService {
       .map((byte) => userCodeAlphabet[byte % userCodeAlphabet.length])
       .join("");
     const now = this.#clock.now();
-    const expiresAt = new Date(now.getTime() + this.#lifetimeSeconds * 1_000);
+    const expiresAt = new Date(now.getTime() + policy.lifetimeSeconds * 1_000);
     this.#store.run(
       `INSERT INTO device_codes (
         code_hash, user_code, client_id, scope, status, issued_at, expires_at,
@@ -162,18 +166,28 @@ export class DeviceAuthorizationService {
       scope,
       now.toISOString(),
       expiresAt.toISOString(),
-      this.#intervalSeconds,
-      this.#intervalSeconds
+      policy.intervalSeconds,
+      policy.intervalSeconds
     );
-    const context = { issuerBase: input.issuerBase, tenantId: this.#tenantId };
+    const context = {
+      issuerBase: input.issuerBase,
+      directoryBaseUrl: input.directoryBaseUrl,
+      tenantId: this.#tenantId,
+    };
     const verificationUri = activation(context);
     return {
       deviceCode,
       userCode,
       verificationUri,
-      verificationUriComplete: `${verificationUri}?user_code=${encodeURIComponent(userCode)}`,
-      expiresIn: this.#lifetimeSeconds,
-      interval: this.#intervalSeconds,
+      ...(policy.includeVerificationUriComplete
+        ? {
+            verificationUriComplete: `${verificationUri}?user_code=${encodeURIComponent(
+              userCode
+            )}`,
+          }
+        : {}),
+      expiresIn: policy.lifetimeSeconds,
+      interval: policy.intervalSeconds,
     };
   }
 
@@ -207,7 +221,9 @@ export class DeviceAuthorizationService {
     if (result.changes !== 1) throw new DeviceAuthorizationError("invalid_grant");
   }
 
-  async poll(input: PollDeviceAuthorizationInput): Promise<DeviceAuthorizationGrant> {
+  async poll(
+    input: PollDeviceAuthorizationInput
+  ): Promise<PreparedDeviceAuthorizationGrant> {
     this.#requireDeviceClient(input.clientId);
     const codeHash = await hashSecret(input.deviceCode);
     const row = this.#store.get<DeviceCodeRow>(
@@ -264,27 +280,66 @@ export class DeviceAuthorizationService {
       );
     }
 
-    const consumed = this.#store.transaction(() =>
-      this.#store.run(
-        `UPDATE device_codes SET status = 'consumed', consumed_at = ?
-         WHERE code_hash = ? AND status = 'approved'`,
-        now.toISOString(),
-        codeHash
-      )
-    );
-    if (consumed.changes !== 1) {
-      throw new DeviceAuthorizationError("invalid_grant");
-    }
     return {
+      codeHash,
       clientId: row.client_id,
       userId: row.user_id,
       scope: row.scope,
     };
   }
 
+  /**
+   * Conditionally consumes an approved grant. OAuthService calls this inside
+   * the same store transaction that persists the prepared token grant.
+   */
+  commit(grant: PreparedDeviceAuthorizationGrant): DeviceAuthorizationCommitOutcome {
+    const row = this.#store.get<DeviceCodeRow>(
+      `${selectDeviceCode} WHERE code_hash = ?`,
+      grant.codeHash
+    );
+    if (
+      !row ||
+      row.client_id !== grant.clientId ||
+      row.user_id !== grant.userId ||
+      row.scope !== grant.scope ||
+      row.status !== "approved" ||
+      row.consumed_at
+    ) {
+      return "invalid";
+    }
+    const now = this.#clock.now();
+    if (new Date(row.expires_at).getTime() <= now.getTime()) {
+      this.#store.run(
+        `UPDATE device_codes SET status = 'expired'
+         WHERE code_hash = ? AND status = 'approved'`,
+        grant.codeHash
+      );
+      return "expired";
+    }
+    const consumed = this.#store.run(
+      `UPDATE device_codes SET status = 'consumed', consumed_at = ?
+       WHERE code_hash = ? AND client_id = ? AND user_id = ? AND scope = ?
+         AND status = 'approved' AND consumed_at IS NULL`,
+      now.toISOString(),
+      grant.codeHash,
+      grant.clientId,
+      grant.userId,
+      grant.scope
+    );
+    return consumed.changes === 1 ? "success" : "invalid";
+  }
+
   #requireDeviceClient(clientId: string): void {
     const application = this.#applications.findByClientId(clientId);
     if (!application) throw new DeviceAuthorizationError("invalid_client");
+    const policy = this.#profile.deviceAuthorizationPolicy;
+    if (!policy) throw new DeviceAuthorizationError("unsupported_grant_type");
+    if (!policy.allowedClientTypes.includes(application.clientType)) {
+      throw new DeviceAuthorizationError(
+        "invalid_client",
+        `${this.#profile.displayName} does not allow ${application.clientType} clients to use device authorization.`
+      );
+    }
     if (!application.grantTypes.includes(DEVICE_CODE_GRANT_TYPE)) {
       throw new DeviceAuthorizationError("unsupported_grant_type");
     }

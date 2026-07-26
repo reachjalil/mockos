@@ -15,6 +15,7 @@ const tokenResult = {
 const createFakeEngine = (): OktaHttpEngine => ({
   activateDeviceAuthorization: vi.fn(),
   authorize: vi.fn(() => ({ code: "authorization-code" })),
+  authorizeWithSessionToken: vi.fn(() => ({ code: "session-authorization-code" })),
   createDeviceAuthorization: vi.fn(() => ({
     deviceCode: "device-code",
     userCode: "ABCD2345",
@@ -175,6 +176,55 @@ describe("Okta HTTP adapter", () => {
     );
   });
 
+  it("exchanges one exact sessionToken authorization for a code redirect", async () => {
+    const app = createOktaHttpApp({ engine });
+    const params = authorizationParams();
+    params.set("sessionToken", "session_fixture_value");
+    const response = await app.request(
+      `https://do.internal/oauth2/default/v1/authorize?${params}`,
+      withIssuer({ redirect: "manual" })
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://client.example/callback?code=session-authorization-code&state=state-02"
+    );
+    expect(response.headers.get("location")).not.toContain("session_fixture_value");
+    expect(engine.authorizeWithSessionToken).toHaveBeenCalledWith({
+      clientId: "0oaMockClient",
+      redirectUri: "https://client.example/callback",
+      responseType: "code",
+      scope: "openid profile",
+      state: "state-02",
+      nonce: "nonce-02",
+      codeChallenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      codeChallengeMethod: "S256",
+      sessionToken: "session_fixture_value",
+    });
+    expect(engine.authorize).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed or repeated sessionToken parameters before authorization", async () => {
+    const app = createOktaHttpApp({ engine });
+    const malformed = authorizationParams();
+    malformed.set("sessionToken", "session value");
+    const malformedResponse = await app.request(
+      `https://do.internal/oauth2/default/v1/authorize?${malformed}`,
+      withIssuer()
+    );
+    expect(malformedResponse.status).toBe(400);
+
+    const repeated = authorizationParams();
+    repeated.append("sessionToken", "session_first");
+    repeated.append("sessionToken", "session_second");
+    const repeatedResponse = await app.request(
+      `https://do.internal/oauth2/default/v1/authorize?${repeated}`,
+      withIssuer()
+    );
+    expect(repeatedResponse.status).toBe(400);
+    expect(engine.authorizeWithSessionToken).not.toHaveBeenCalled();
+  });
+
   it("rejects authorization requests that do not use S256 PKCE", async () => {
     const app = createOktaHttpApp({ engine });
     const params = authorizationParams();
@@ -332,6 +382,7 @@ describe("Okta HTTP adapter", () => {
     });
     expect(engine.createDeviceAuthorization).toHaveBeenCalledWith({
       clientId: "0oaMockClient",
+      directoryBaseUrl: "https://id.mockos.test/e/acme",
       issuerBase: issuer,
       scope: "openid profile offline_access",
     });
@@ -401,6 +452,26 @@ describe("Okta HTTP adapter", () => {
       clientSecret: "okta-client-secret",
       token: "access-token",
       tokenTypeHint: "access_token",
+    });
+
+    const publicRevocation = await app.request(
+      "https://do.internal/oauth2/default/v1/revoke",
+      withIssuer({
+        method: "POST",
+        headers: {
+          authorization: `Basic ${btoa("0oaPublicClient")}`,
+        },
+        body: new URLSearchParams({
+          token: "public-refresh-token",
+          token_type_hint: "refresh_token",
+        }),
+      })
+    );
+    expect(publicRevocation.status).toBe(200);
+    expect(engine.revoke).toHaveBeenLastCalledWith({
+      clientId: "0oaPublicClient",
+      token: "public-refresh-token",
+      tokenTypeHint: "refresh_token",
     });
   });
 

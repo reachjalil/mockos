@@ -1,26 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
+  type ApplicationRegistration,
   applicationListPageSchema,
   applicationRegistrationSchema,
   applicationSummarySchema,
   assertionSpecSchema,
   assertRequestsToolInputSchema,
   brokenTokenVariantSchema,
+  type CreateApplicationInput,
+  type CreateApplicationToolInput,
   configureEnvironmentToolInputSchema,
+  createApplicationInputSchema,
+  createApplicationToolInputSchema,
+  deleteMockMcpServerToolInputSchema,
   environmentConfigSchema,
   getRequestLogToolInputSchema,
   identitySeedSchema,
   lifecycleResultSchema,
-  managementListQuerySchema,
   MAX_MANAGEMENT_LIST_PAGE_SIZE,
+  managementListQuerySchema,
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  putMockMcpServerToolInputSchema,
+  REQUEST_LOG_LLM_PENDING_DURATION_MS,
+  REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+  requestLogEntrySchema,
+  requestLogLlmFinalizationSchema,
+  resetMockMcpStateToolInputSchema,
   SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
-  scenarioSpecSchema,
   scenarioListPageSchema,
+  scenarioSpecSchema,
   scimUserInputSchema,
   scimWeakEtag,
   seedIdentitiesToolInputSchema,
@@ -28,6 +40,42 @@ import {
 } from "./index";
 
 describe("wire contracts", () => {
+  it("keeps application client variants statically exact", () => {
+    type PublicInput = Extract<CreateApplicationInput, { clientType: "public" }>;
+    type ConfidentialInput = Extract<
+      CreateApplicationInput,
+      { clientType?: "confidential" }
+    >;
+    type PublicToolInput = Extract<
+      CreateApplicationToolInput,
+      { clientType: "public" }
+    >;
+    type PublicRegistration = Extract<
+      ApplicationRegistration,
+      { clientType: "public" }
+    >;
+    type ConfidentialRegistration = Extract<
+      ApplicationRegistration,
+      { clientType: "confidential" }
+    >;
+
+    expectTypeOf<PublicInput>().not.toHaveProperty("clientSecret");
+    expectTypeOf<PublicToolInput>().not.toHaveProperty("clientSecret");
+    expectTypeOf<ConfidentialInput>()
+      .toHaveProperty("clientSecret")
+      .toEqualTypeOf<string | undefined>();
+    expectTypeOf<PublicRegistration>().not.toHaveProperty("clientSecret");
+    expectTypeOf<ConfidentialRegistration>()
+      .toHaveProperty("clientSecret")
+      .toEqualTypeOf<string>();
+    expectTypeOf<PublicRegistration>()
+      .toHaveProperty("appRoles")
+      .toEqualTypeOf<string[]>();
+    expectTypeOf<PublicRegistration>()
+      .toHaveProperty("groupClaimsMode")
+      .toEqualTypeOf<"none" | "security" | "all">();
+  });
+
   it("accepts the two locked provider identifiers", () => {
     expect(providerIdSchema.options).toEqual(["entra", "okta"]);
   });
@@ -90,6 +138,244 @@ describe("wire contracts", () => {
     expect(assertRequestsToolInputSchema.parse({}).count).toEqual({ atLeast: 1 });
   });
 
+  it("accepts only bounded JSON objects as MCP request arguments", () => {
+    const base = {
+      id: "request-1",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "mcp",
+      protocol: "mcp",
+      method: "POST",
+      path: "/mcp-mock/server",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: 200,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: 1,
+      correlationId: "correlation-1",
+      mcpMethod: "tools/call",
+      mcpTool: "lookup",
+    } as const;
+    expect(
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpArguments: { nested: { values: [null, true, 42, "text"] } },
+      }).mcpArguments
+    ).toEqual({ nested: { values: [null, true, 42, "text"] } });
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpArguments: { ["x".repeat(257)]: true },
+      })
+    ).toThrow();
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpArguments: { invalid: 1n },
+      })
+    ).toThrow();
+
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() =>
+      assertionSpecSchema.parse({
+        mcpArguments: cyclic,
+        count: { atLeast: 1 },
+      })
+    ).toThrow();
+  });
+
+  it("accepts the MCP request-cancelled error code in request logs", () => {
+    const base = {
+      id: "request-cancelled",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "mcp",
+      protocol: "mcp",
+      method: "POST",
+      path: "/mcp-mock/server",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: 200,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: 1,
+      correlationId: "correlation-cancelled",
+      mcpMethod: "tools/call",
+      mcpTool: "lookup",
+    } as const;
+
+    expect(
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpErrorCode: -32_800,
+      }).mcpErrorCode
+    ).toBe(-32_800);
+    expect(() =>
+      requestLogEntrySchema.parse({
+        ...base,
+        mcpErrorCode: -32_801,
+      })
+    ).toThrow();
+  });
+
+  it("accepts structured response and error LLM observations without bodies", () => {
+    const response = requestLogEntrySchema.parse({
+      id: "req_openai_1",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "openai",
+      protocol: "http",
+      method: "post",
+      path: "/llm-mock/assistant/v1/chat/completions",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+      correlationId: "req_openai_1",
+      llmDialect: "openai",
+      llmOperation: "chat.completions.create",
+      llmServerSlug: "assistant",
+      llmServerRevision: 1,
+      llmModel: "gpt-mock",
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmOutcome: "pending",
+      llmResponseId: "chatcmpl-response-1",
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmStopReason: "end_turn",
+      llmToolNames: [],
+    });
+    expect(response).toMatchObject({
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmToolNames: [],
+    });
+    const { llmResponseId: _responseId, ...responseWithoutId } = response;
+    const configuredErrorEntry = requestLogEntrySchema.parse({
+      ...responseWithoutId,
+      id: "req_anthropic_1",
+      provider: "anthropic",
+      path: "/llm-mock/assistant/v1/messages",
+      correlationId: "req_anthropic_1",
+      llmDialect: "anthropic",
+      llmOperation: "messages.create",
+      llmInputTokens: undefined,
+      llmOutputTokens: undefined,
+      llmStopReason: undefined,
+      llmToolNames: undefined,
+      llmErrorKind: "rate_limit",
+    });
+    expect(configuredErrorEntry.llmErrorKind).toBe("rate_limit");
+    expect(configuredErrorEntry).not.toHaveProperty("llmResponseId");
+    expect(
+      requestLogLlmFinalizationSchema.parse({
+        llmOutcome: "cancelled",
+        responseStatus: 200,
+        durationMs: 0,
+      })
+    ).toEqual({
+      llmOutcome: "cancelled",
+      responseStatus: 200,
+      durationMs: 0,
+    });
+  });
+
+  it("rejects incomplete, mixed, secret-bearing, or dialect-inconsistent LLM metadata", () => {
+    const base = {
+      id: "req_openai_invalid",
+      timestamp: "2026-07-23T12:00:00.000Z",
+      source: "inbound",
+      provider: "openai",
+      protocol: "http",
+      method: "POST",
+      path: "/llm-mock/assistant/v1/chat/completions",
+      requestHeaders: {},
+      requestBody: null,
+      responseStatus: REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+      responseHeaders: {},
+      responseBody: null,
+      durationMs: REQUEST_LOG_LLM_PENDING_DURATION_MS,
+      correlationId: "req_openai_invalid",
+      llmDialect: "openai",
+      llmOperation: "chat.completions.create",
+      llmServerSlug: "assistant",
+      llmServerRevision: 1,
+      llmModel: "gpt-mock",
+      llmStream: true,
+      llmTurnIndex: 0,
+      llmOutcome: "pending",
+      llmResponseId: "chatcmpl-response-invalid",
+      llmInputTokens: 1,
+      llmOutputTokens: 2,
+      llmStopReason: "end_turn",
+      llmToolNames: [],
+    } as const;
+
+    for (const invalid of [
+      { ...base, llmModel: undefined },
+      { ...base, provider: "anthropic" },
+      { ...base, llmOperation: "messages.create" },
+      { ...base, protocol: "mcp" },
+      { ...base, mcpMethod: "tools/call", mcpTool: "lookup" },
+      { ...base, llmErrorKind: "rate_limit" },
+      { ...base, llmResponseId: undefined },
+      { ...base, llmOutputTokens: undefined },
+      { ...base, responseStatus: 200 },
+      { ...base, durationMs: 1 },
+      { ...base, requestHeaders: { authorization: "secret" } },
+      { ...base, requestBody: '{"messages":["secret"]}' },
+      { ...base, responseBody: '{"answer":"secret"}' },
+    ]) {
+      expect(() => requestLogEntrySchema.parse(invalid)).toThrow();
+    }
+    expect(() =>
+      requestLogLlmFinalizationSchema.parse({
+        llmOutcome: "pending",
+        responseStatus: 200,
+        durationMs: 0,
+      })
+    ).toThrow();
+  });
+
+  it("preserves false and zero values in LLM query and assertion matchers", () => {
+    expect(
+      getRequestLogToolInputSchema.parse({
+        llmDialect: "openai",
+        llmStream: false,
+        llmTurnIndex: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+      })
+    ).toMatchObject({
+      llmDialect: "openai",
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+    });
+    expect(
+      assertionSpecSchema.parse({
+        llmStream: false,
+        llmTurnIndex: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        sequence: [{ llmOutcome: "completed" }, { llmToolNames: ["lookup", "finish"] }],
+      })
+    ).toMatchObject({
+      llmStream: false,
+      llmTurnIndex: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+    });
+  });
+
   it("bounds management pages and keeps application listings secret-free", () => {
     expect(managementListQuerySchema.parse({})).toEqual({
       limit: MAX_MANAGEMENT_LIST_PAGE_SIZE,
@@ -106,6 +392,7 @@ describe("wire contracts", () => {
       id: "app_12345678",
       name: "Console client",
       clientId: "client_123",
+      clientType: "confidential" as const,
       redirectUris: ["https://client.example/callback"],
       grantTypes: ["authorization_code" as const],
       appRoles: [],
@@ -125,6 +412,59 @@ describe("wire contracts", () => {
         clientSecret: "display-once-secret",
       })
     ).toMatchObject({ clientSecret: "display-once-secret" });
+    const publicRegistration = applicationRegistrationSchema.parse({
+      ...summary,
+      clientType: "public",
+    });
+    expect(publicRegistration).not.toHaveProperty("clientSecret");
+    expect(() =>
+      applicationRegistrationSchema.parse({
+        ...publicRegistration,
+        clientSecret: "must-not-exist",
+      })
+    ).toThrow();
+    expect(() =>
+      createApplicationToolInputSchema.parse({
+        name: "Invalid public service client",
+        clientType: "public",
+        redirectUris: ["https://client.example/callback"],
+        grantTypes: ["client_credentials"],
+      })
+    ).toThrow();
+    expect(() =>
+      createApplicationToolInputSchema.parse({
+        name: "Invalid public secret client",
+        clientType: "public",
+        clientSecret: "must-not-exist",
+        redirectUris: ["https://client.example/callback"],
+      })
+    ).toThrow();
+    expect(
+      createApplicationToolInputSchema.parse({
+        name: "Legacy confidential client",
+        redirectUris: ["https://client.example/callback"],
+      })
+    ).toEqual({
+      name: "Legacy confidential client",
+      clientType: "confidential",
+      redirectUris: ["https://client.example/callback"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      appRoles: [],
+      groupClaimsMode: "none",
+    });
+    expect(() =>
+      applicationSummarySchema.parse({
+        ...summary,
+        clientType: "public",
+        grantTypes: ["client_credentials"],
+      })
+    ).toThrow();
+    const { clientType: _clientType, ...missingClientType } = summary;
+    expect(() => applicationSummarySchema.parse(missingClientType)).toThrow();
+    const { appRoles: _appRoles, ...missingAppRoles } = summary;
+    expect(() => applicationSummarySchema.parse(missingAppRoles)).toThrow();
+    const { groupClaimsMode: _groupClaimsMode, ...missingGroupClaimsMode } = summary;
+    expect(() => applicationSummarySchema.parse(missingGroupClaimsMode)).toThrow();
     expect(() =>
       applicationListPageSchema.parse({
         applications: Array.from(
@@ -147,6 +487,140 @@ describe("wire contracts", () => {
         ),
       })
     ).toThrow();
+  });
+
+  it("allows empty redirects only for public device-only applications", () => {
+    const deviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
+    const redirectlessDeviceInput = {
+      name: "Redirectless public device client",
+      clientType: "public" as const,
+      redirectUris: [],
+      grantTypes: [deviceGrant, "refresh_token"] as const,
+    };
+    expect(createApplicationInputSchema.parse(redirectlessDeviceInput)).toMatchObject(
+      redirectlessDeviceInput
+    );
+    expect(
+      createApplicationToolInputSchema.parse({
+        ...redirectlessDeviceInput,
+        environmentId: "env_device",
+      })
+    ).toMatchObject({
+      ...redirectlessDeviceInput,
+      environmentId: "env_device",
+    });
+
+    for (const input of [
+      {
+        name: "Default confidential device client",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      },
+      {
+        name: "Explicit confidential device client",
+        clientType: "confidential",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      },
+      {
+        name: "Public authorization-code client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["authorization_code"],
+      },
+      {
+        name: "Public mixed code and device client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["authorization_code", deviceGrant, "refresh_token"],
+      },
+      {
+        name: "Public refresh-only client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["refresh_token"],
+      },
+    ]) {
+      const inputResult = createApplicationInputSchema.safeParse(input);
+      expect(inputResult.success).toBe(false);
+      if (inputResult.success) {
+        throw new Error("Invalid redirect policy unexpectedly passed input parsing.");
+      }
+      expect(inputResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["redirectUris"],
+            message: expect.stringMatching(/At least one redirect URI/),
+          }),
+        ])
+      );
+
+      const toolResult = createApplicationToolInputSchema.safeParse({
+        ...input,
+        environmentId: "env_device",
+      });
+      expect(toolResult.success).toBe(false);
+      if (toolResult.success) {
+        throw new Error("Invalid redirect policy unexpectedly passed tool parsing.");
+      }
+      expect(toolResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["redirectUris"],
+            message: expect.stringMatching(/At least one redirect URI/),
+          }),
+        ])
+      );
+    }
+
+    const publicDeviceRegistration = {
+      id: "app_device",
+      name: "Redirectless public device client",
+      clientId: "device-client",
+      clientType: "public" as const,
+      redirectUris: [],
+      grantTypes: [deviceGrant, "refresh_token"],
+      appRoles: [],
+      groupClaimsMode: "none" as const,
+      createdAt: "2026-07-26T12:00:00.000Z",
+    };
+    expect(applicationRegistrationSchema.parse(publicDeviceRegistration)).toEqual(
+      publicDeviceRegistration
+    );
+    expect(applicationSummarySchema.parse(publicDeviceRegistration)).toEqual(
+      publicDeviceRegistration
+    );
+    expect(
+      applicationListPageSchema.parse({
+        applications: [publicDeviceRegistration],
+      }).applications
+    ).toEqual([publicDeviceRegistration]);
+
+    expect(() =>
+      applicationRegistrationSchema.parse({
+        ...publicDeviceRegistration,
+        clientType: "confidential",
+        clientSecret: "display-once-secret",
+      })
+    ).toThrow(/At least one redirect URI/);
+    for (const grantTypes of [
+      ["authorization_code"],
+      ["authorization_code", deviceGrant],
+      ["refresh_token"],
+    ]) {
+      expect(() =>
+        applicationRegistrationSchema.parse({
+          ...publicDeviceRegistration,
+          grantTypes,
+        })
+      ).toThrow(/At least one redirect URI/);
+      expect(() =>
+        applicationSummarySchema.parse({
+          ...publicDeviceRegistration,
+          grantTypes,
+        })
+      ).toThrow(/At least one redirect URI/);
+    }
   });
 
   it("rejects ambiguous or empty assertion count contracts", () => {
@@ -315,7 +789,54 @@ describe("wire contracts", () => {
       "simulate_lifecycle",
       "get_wellknown_urls",
       "set_current_environment",
+      "put_mock_mcp_server",
+      "list_mock_mcp_servers",
+      "get_mock_mcp_server",
+      "delete_mock_mcp_server",
+      "reset_mock_mcp_state",
+      "list_mock_mcp_blueprints",
+      "get_mock_mcp_blueprint",
+      "install_mock_mcp_blueprint",
+      "put_mock_llm_server",
+      "list_mock_llm_servers",
+      "get_mock_llm_server",
+      "delete_mock_llm_server",
     ]);
+    expect(mockosMcpToolNames).toHaveLength(27);
+  });
+
+  it("locks mock-MCP mutation intent to create-or-current-revision CAS", () => {
+    const server = {
+      version: 1,
+      slug: "revisioned-server",
+      serverInfo: { name: "Revisioned server", version: "1" },
+    };
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: null,
+        server,
+      }).expectedRevision
+    ).toBeNull();
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: 3,
+        server,
+      }).expectedRevision
+    ).toBe(3);
+    expect(() => putMockMcpServerToolInputSchema.parse({ server })).toThrow();
+
+    for (const schema of [
+      deleteMockMcpServerToolInputSchema,
+      resetMockMcpStateToolInputSchema,
+    ]) {
+      expect(
+        schema.parse({ slug: "revisioned-server", expectedRevision: 3 })
+      ).toMatchObject({ expectedRevision: 3 });
+      expect(() => schema.parse({ slug: "revisioned-server" })).toThrow();
+      expect(() =>
+        schema.parse({ slug: "revisioned-server", expectedRevision: null })
+      ).toThrow();
+    }
   });
 
   it("locks M3 SCIM and lifecycle wire shapes", () => {

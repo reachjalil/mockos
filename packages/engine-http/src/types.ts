@@ -43,9 +43,39 @@ export type EntraRefreshTokenRequest = EntraTokenRequestBase & {
   scope?: string;
 };
 
+export type EntraDeviceCodeTokenRequest = EntraTokenRequestBase & {
+  deviceCode: string;
+  grantType: "urn:ietf:params:oauth:grant-type:device_code";
+};
+
 export type EntraTokenRequest =
   | EntraAuthorizationCodeTokenRequest
-  | EntraRefreshTokenRequest;
+  | EntraRefreshTokenRequest
+  | EntraDeviceCodeTokenRequest;
+
+export type EntraDeviceAuthorizationRequest = {
+  clientId: string;
+  directoryBaseUrl: string;
+  issuerBase: string;
+  scope: string;
+};
+
+export type EntraDeviceAuthorizationResult = {
+  deviceCode: string;
+  expiresIn: number;
+  interval: number;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+};
+
+export type EntraDeviceActivationRequest = {
+  password: string;
+  userCode: string;
+  username: string;
+};
+
+export type EntraDeviceDenialRequest = EntraDeviceActivationRequest;
 
 export type EntraTokenResult = {
   accessToken: string;
@@ -61,7 +91,12 @@ export type JsonWebKeySet = { readonly keys: readonly JsonWebKey[] };
 
 export interface EntraHttpEngine {
   readonly tenantId: string;
+  activateDeviceAuthorization(input: EntraDeviceActivationRequest): Awaitable<void>;
   authorize(input: EntraAuthorizationLogin): Awaitable<EntraAuthorizationResult>;
+  createDeviceAuthorization(
+    input: EntraDeviceAuthorizationRequest
+  ): Awaitable<EntraDeviceAuthorizationResult>;
+  denyDeviceAuthorization(input: EntraDeviceDenialRequest): Awaitable<void>;
   discovery(issuerBase: string): Awaitable<Record<string, unknown>>;
   jwks(): Awaitable<JsonWebKeySet>;
   token(input: EntraTokenRequest): Awaitable<EntraTokenResult>;
@@ -69,6 +104,7 @@ export interface EntraHttpEngine {
 }
 
 export type CreateEntraHttpAppOptions = {
+  directoryBaseHeader?: string;
   engine: EntraHttpEngine;
   graphBaseHeader?: string;
   issuerHeader?: string;
