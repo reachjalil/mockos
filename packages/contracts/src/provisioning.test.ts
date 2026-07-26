@@ -13,6 +13,23 @@ import {
 } from "./provisioning";
 
 describe("outbound provisioning contracts", () => {
+  it("accepts a bounded caller-owned idempotency key", () => {
+    expect(
+      runProvisioningCycleToolInputSchema.parse({
+        appId: "app_123",
+        idempotencyKey: "nightly-sync-2026-07-27",
+        target: { kind: "saved", targetRef: "target_123" },
+      }).idempotencyKey
+    ).toBe("nightly-sync-2026-07-27");
+    expect(() =>
+      runProvisioningCycleToolInputSchema.parse({
+        appId: "app_123",
+        idempotencyKey: "short",
+        target: { kind: "saved", targetRef: "target_123" },
+      })
+    ).toThrow();
+  });
+
   it("separates ingress credentials from persisted target metadata", () => {
     expect(
       provisioningTargetInputSchema.parse({

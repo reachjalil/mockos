@@ -308,6 +308,8 @@ describe("mockOS CLI", () => {
         "--target-token-file",
         "target-token.txt",
         "--save-target",
+        "--idempotency-key",
+        "provision-checkout-20260727",
       ],
       dependencies(client, test.io)
     );
@@ -320,6 +322,7 @@ describe("mockOS CLI", () => {
           environmentId: "env_12345678",
           appId: "app_12345678",
           mode: "full",
+          idempotencyKey: "provision-checkout-20260727",
           target: {
             kind: "inline",
             target: {

@@ -143,7 +143,9 @@ be sent to them.
 `run_provisioning_cycle`. It accepts either a previously saved `--target-ref`, or an
 inline `--target-url` with an optional synthetic Bearer value read only from
 `--target-token-file <path>` or `--target-token-file -` for standard input. There is no
-target-token argv option. `--save-target` retains the inline target in that environment
+target-token argv option. Pass a stable, non-secret `--idempotency-key` to make an exact
+transport retry resolve to the same run; hosted mockOS requires it. Reuse a key only
+for the same Environment, application, mode, and target. `--save-target` retains the inline target in that environment
 for subsequent cycles; omit it for run-scoped credentials. Platform `mk_` Access Keys
 and the exact active configured self-host Access Key are rejected as target credentials.
 The CLI uses a constant-time value comparison before the MCP call. This covers the

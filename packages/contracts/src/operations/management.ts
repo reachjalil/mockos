@@ -85,6 +85,11 @@ const outboundMutationAnnotations = {
   openWorldHint: true,
 } as const satisfies MockosToolAnnotations;
 
+const idempotentOutboundMutationAnnotations = {
+  ...outboundMutationAnnotations,
+  idempotentHint: true,
+} as const satisfies MockosToolAnnotations;
+
 const idempotentMutationAnnotations = {
   ...mutationAnnotations,
   idempotentHint: true,
@@ -278,16 +283,16 @@ export const mockosManagementOperations = {
     operationId: "run_provisioning_cycle",
     title: "Run outbound provisioning cycle",
     description:
-      "Starts a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target.",
+      "Starts or safely replays a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target. Supply idempotencyKey when a transport retry must return the same run.",
     requiredScopes: ["env:rw"],
     effect: "outbound",
-    retry: "never",
+    retry: "idempotent",
     requestSecrets: "redact",
     responseSecrets: "none",
     mcp: {
       inputSchema: runProvisioningCycleToolInputSchema,
       outputSchema: envelopeSchema(provisioningRunSchema),
-      annotations: outboundMutationAnnotations,
+      annotations: idempotentOutboundMutationAnnotations,
     },
   }),
   set_scenario: defineMockosManagementOperation({

@@ -1751,13 +1751,13 @@
         "title": "Mint identity token"
       },
       {
-        "description": "Starts a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target.",
+        "description": "Starts or safely replays a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target. Supply idempotencyKey when a transport retry must return the same run.",
         "effect": "outbound",
         "http": null,
         "mcp": {
           "annotations": {
             "destructiveHint": true,
-            "idempotentHint": false,
+            "idempotentHint": true,
             "openWorldHint": true,
             "readOnlyHint": false
           },
@@ -1774,6 +1774,12 @@
                 "maxLength": 64,
                 "minLength": 8,
                 "pattern": "^[a-z0-9][a-z0-9_-]+$",
+                "type": "string"
+              },
+              "idempotencyKey": {
+                "maxLength": 128,
+                "minLength": 8,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$",
                 "type": "string"
               },
               "mode": {
@@ -2031,7 +2037,7 @@
         "requiredScopes": [
           "env:rw"
         ],
-        "retry": "never",
+        "retry": "idempotent",
         "secrets": {
           "request": "redact",
           "response": "none"

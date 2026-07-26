@@ -1,7 +1,7 @@
 # Run a provisioning cycle
 
 Status: M5 accepted workflow recipe; verify the connected server advertises the tool
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-27
 
 This loop seeds a synthetic directory, runs the deterministic Entra- or Okta-shaped
 outbound SCIM planner, and proves the order and body shapes that the application under
@@ -21,6 +21,10 @@ node packages/cli/dist/bin.js mcp tools --profile local --json
 Stop if `run_provisioning_cycle`, `get_request_log`, and `assert_requests` are not
 advertised. A historical M3 deployment does not become M5-capable merely because the
 local CLI contains the command.
+
+Choose a stable, non-secret idempotency key for the logical cycle. Keep it with the
+test-run record and reuse it only when retrying that exact cycle. Hosted mockOS requires
+the key; self-hosted mockOS accepts it and otherwise creates a new cycle per call.
 
 The target must be a disposable SCIM receiver reachable from the Worker at a policy-
 accepted URL. HTTPS is required by default. The example in
@@ -125,6 +129,7 @@ node packages/cli/dist/bin.js provision run \
   --target-url https://target-app.example.net/scim/v2 \
   --target-token-file target-token.txt \
   --save-target \
+  --idempotency-key provisioning-demo-full-1 \
   --json
 ```
 
@@ -144,6 +149,7 @@ node packages/cli/dist/bin.js provision run \
   --app-id app_12345678 \
   --mode incremental \
   --target-ref target-app \
+  --idempotency-key provisioning-demo-incremental-1 \
   --json
 ```
 
@@ -158,12 +164,10 @@ complete at the platform layer while returning a failed or partial application r
 Require the Workflow output to contain the exact queued run ID with `status:
 "succeeded"`, and reject rollback-failure metadata if present.
 
-Retain the returned run ID. An exact same-input retry can recover an ambiguous start
-only while that run is still active. M5 does not accept a caller idempotency key and
-does not replay terminal start responses; retrying after the original run is terminal
-starts a new cycle and may repeat writes or consume another hosted quota unit. Resolve
-an ambiguous terminal outcome from the request log and controlled-target state instead
-of blindly retrying.
+Retain the returned run ID and idempotency key. Retrying with the same key resolves to
+the same run, including after terminal completion, and does not consume another hosted
+quota unit. Never reuse it for changed input. A call that omits the key on a self-hosted
+server starts a new cycle and may repeat writes.
 
 ## Assert order and shapes
 

@@ -425,11 +425,13 @@ headers, and credential redaction are described in
 self-hosted Worker performs this loop without a private service dependency. The hosted
 composition adds tenant-bound strong quota reservation before Workflow creation.
 
-Start reconciliation is fixed-ID and secret-safe while the exact run remains active.
-It is not request-level idempotency after terminal completion: M5 accepts no caller
-idempotency key, so a later call is a new cycle and may provision and consume quota
-again. Retain returned run IDs and do not blindly replay a whole cycle after an
-ambiguous terminal outcome; terminal response replay is deferred to F4.
+Supply `idempotencyKey` when a transport retry must resolve to the same run. Reuse the
+key only for the exact same Environment, application, mode, and target. The runtime
+derives an opaque fixed run ID from the Environment and key; the raw key does not enter
+Workflow parameters or results. A changed request under that run ID fails closed.
+Omitting the key preserves the self-hosted behavior of starting a new cycle. The hosted
+composition requires it so an ambiguous terminal response can be replayed without
+provisioning twice or consuming quota twice.
 
 ## Evidence
 

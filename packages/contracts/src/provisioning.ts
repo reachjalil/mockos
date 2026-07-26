@@ -155,10 +155,25 @@ const inlineProvisioningTargetSelectorSchema = z
   })
   .strict();
 
+export const provisioningIdempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(8)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]+$/);
+export type ProvisioningIdempotencyKey = z.infer<
+  typeof provisioningIdempotencyKeySchema
+>;
+
 export const runProvisioningCycleToolInputSchema = z
   .object({
     environmentId: provisioningEnvironmentIdSchema.optional(),
     appId: z.string().min(1).max(128),
+    /**
+     * A caller-owned retry key. Runtimes that support durable replay derive a
+     * stable run identity from this value and the selected Environment.
+     */
+    idempotencyKey: provisioningIdempotencyKeySchema.optional(),
     mode: provisioningModeSchema.default("incremental"),
     target: z.discriminatedUnion("kind", [
       savedProvisioningTargetSelectorSchema,

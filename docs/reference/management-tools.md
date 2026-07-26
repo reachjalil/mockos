@@ -34,7 +34,7 @@ invented HTTP path.
 | [`seed_identities`](#seed_identities) | mutation | never | request redact | `POST /__mockos/v1/environments/{environmentId}/identities:seed` |
 | [`create_application`](#create_application) | mutation | never | request redact; response display-once | `POST /__mockos/v1/environments/{environmentId}/applications` |
 | [`mint_token`](#mint_token) | mutation | never | response redact | MCP only |
-| [`run_provisioning_cycle`](#run_provisioning_cycle) | outbound | never | request redact | MCP only |
+| [`run_provisioning_cycle`](#run_provisioning_cycle) | outbound | idempotent | request redact | MCP only |
 | [`set_scenario`](#set_scenario) | mutation | idempotent | none | MCP only |
 | [`clear_scenario`](#clear_scenario) | mutation | idempotent | none | MCP only |
 | [`get_request_log`](#get_request_log) | read | safe | response redact | MCP only |
@@ -1370,14 +1370,14 @@ invented HTTP path.
 
 ### `run_provisioning_cycle`
 
-**Run outbound provisioning cycle.** Starts a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target.
+**Run outbound provisioning cycle.** Starts or safely replays a deterministic Entra or Okta-shaped SCIM provisioning cycle against a validated test target. Supply idempotencyKey when a transport retry must return the same run.
 
 - Scope metadata: `env:rw`
 - Effect: `outbound`
-- Retry policy: `never`
+- Retry policy: `idempotent`
 - Secret handling: request redact
 - HTTP: MCP only
-- MCP annotations: read-only `false`, destructive `true`, idempotent `false`, open-world `true`
+- MCP annotations: read-only `false`, destructive `true`, idempotent `true`, open-world `true`
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1396,6 +1396,12 @@ invented HTTP path.
       "maxLength": 64,
       "minLength": 8,
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
+      "type": "string"
+    },
+    "idempotencyKey": {
+      "maxLength": 128,
+      "minLength": 8,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$",
       "type": "string"
     },
     "mode": {

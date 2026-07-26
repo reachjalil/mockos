@@ -26,6 +26,7 @@ import { McpAgent } from "agents/mcp";
 import type { EnvironmentCatalogDurableObject } from "./environment-catalog";
 import type { EnvironmentDurableObject } from "./environment-do";
 import { queueAndCreateProvisioningWorkflowInstance } from "./provisioning-start";
+import { provisioningRunIdForRequest } from "./provisioning-idempotency";
 import { publicLocationForEnvironment } from "./public-location";
 
 export { publicLocationForEnvironment } from "./public-location";
@@ -373,7 +374,10 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
       },
       runProvisioningCycle: async (environmentId, input) => {
         await this.#requireEnvironment(environmentId);
-        const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+        const runId = await provisioningRunIdForRequest(
+          environmentId,
+          input.idempotencyKey
+        );
         const targetRef =
           input.target.kind === "saved"
             ? input.target.targetRef

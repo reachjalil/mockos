@@ -358,6 +358,7 @@ async function runConnectedCommand(
         "target-url",
         "target-token-file",
         "save-target",
+        "idempotency-key",
       ]);
       const environmentId = requiredOption(args, "env");
       const appId = requiredOption(args, "app-id");
@@ -404,6 +405,9 @@ async function runConnectedCommand(
           appId,
           mode,
           target,
+          ...(valueOption(args, "idempotency-key")
+            ? { idempotencyKey: valueOption(args, "idempotency-key") }
+            : {}),
         });
       } catch (error) {
         if (!bearerToken) throw error;

@@ -1212,7 +1212,7 @@ describe("registerMockosTools", () => {
     ).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: false,
+      idempotentHint: true,
       openWorldHint: true,
     });
 

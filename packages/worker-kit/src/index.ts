@@ -11,5 +11,6 @@ export * from "./provisioning-bounds";
 export * from "./provisioning-orchestrator";
 export * from "./provisioning-persistence";
 export * from "./provisioning-start";
+export * from "./provisioning-idempotency";
 export * from "./provisioning-workflow";
 export * from "./secure-fetch";
