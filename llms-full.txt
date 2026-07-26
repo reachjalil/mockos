@@ -16014,6 +16014,15 @@ comparison. The bounded MSAL Node and dedicated Okta Auth JS Classic factor-to-O
 slices are D/I/S/X/Q yes and H/V/P no. The bounded M6 slice has sampled H evidence,
 but no current fixture is V or P.
 
+- Live-provider parity has a complete comparison harness but **no evidence**. The
+  observation interceptor, normaliser, comparator, divergence ledger, scenario
+  matrix, and report generator are source-tested, and a mock-versus-mock self-test
+  proves the pipeline end to end without credentials. No real Entra or Okta tenant
+  has ever been contacted, so all 28 cases are `not-captured` and no fixture is
+  `verified-live`. The suite is advisory and never blocks a release. The
+  normaliser's volatile-field list is derived from reading mockOS, not from
+  observing a real provider, so the first capture should be expected to tune it.
+  See the [live-provider parity roadmap](docs/conformance/live-parity-roadmap.md).
 - The Entra OIDC corpus has 25 source-reviewed expectations marked `documented` and
   13 marked `implemented`. Five device fixtures execute through a core-backed HTTP
   executor; the mounted Worker covers creation, pending/slow-down, credential-gated
@@ -16585,6 +16594,7 @@ fixture or milestone is V or P.
 | workers.dev deployment | M6 manually rolled out and exact-version smoke accepted; guarded promotion unqualified | Exact public M6 source was manually deployed staging before production and confirmed 100% active. The existing standalone public Access Keys were preserved, and the source-locked GitHub smoke used their pre-existing masked secrets to exercise all six M6 slices plus accepted regressions on both exact serving versions. The separate guarded Cloudflare-credential deployment workflow was not executed or formally qualified. |
 | Custom `mockos.live` zone | Blocked on domain purchase | M8 cutover-only dependency. |
 | npm publishing | Blocked externally | The `@mockos` names remain the intended scope, but npm authentication is unavailable and the scope is not confirmed as registered. Source-build use remains the supported public path. |
+| Live-provider parity harness | Foundation source-complete; no live capture | The comparison machine is built and unit-tested: a client-side observation interceptor, a normaliser that replaces volatile values rather than deleting them and decodes JWTs so claim sets compare, a comparator that classifies every difference against a checked-in divergence ledger, a 28-case scenario matrix, and a drift-checked report generator. A mock-versus-mock self-test exercises the whole pipeline with no tenant, credential, or network. The ledger seeds 25 divergences from source review, 18 intentional and 7 tracked defects, including two conflicting Entra error catalogs that cannot both match real Entra. No real tenant has been contacted: all 28 cases are `not-captured`, no fixture is `verified-live`, and the suite is advisory so it never blocks a release. D/I/S only; X/Q/H/V/P unqualified. See the [roadmap](docs/conformance/live-parity-roadmap.md) |
 
 ## Milestone acceptance
 

@@ -14,6 +14,15 @@ comparison. The bounded MSAL Node and dedicated Okta Auth JS Classic factor-to-O
 slices are D/I/S/X/Q yes and H/V/P no. The bounded M6 slice has sampled H evidence,
 but no current fixture is V or P.
 
+- Live-provider parity has a complete comparison harness but **no evidence**. The
+  observation interceptor, normaliser, comparator, divergence ledger, scenario
+  matrix, and report generator are source-tested, and a mock-versus-mock self-test
+  proves the pipeline end to end without credentials. No real Entra or Okta tenant
+  has ever been contacted, so all 28 cases are `not-captured` and no fixture is
+  `verified-live`. The suite is advisory and never blocks a release. The
+  normaliser's volatile-field list is derived from reading mockOS, not from
+  observing a real provider, so the first capture should be expected to tune it.
+  See the [live-provider parity roadmap](./conformance/live-parity-roadmap.md).
 - The Entra OIDC corpus has 25 source-reviewed expectations marked `documented` and
   13 marked `implemented`. Five device fixtures execute through a core-backed HTTP
   executor; the mounted Worker covers creation, pending/slow-down, credential-gated

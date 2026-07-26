@@ -137,6 +137,8 @@ does not add a private runtime dependency to this repository.
 - [OpenAI SDK quickstart](./quickstarts/openai-sdk.md)
 - [Provider parity matrix](./conformance/parity-matrix.md)
 - [Generated M6 executable-evidence matrix](./conformance/m6-generated-parity.md)
+- [Live-provider parity report](./conformance/live-parity.md)
+- [Live-provider parity roadmap](./conformance/live-parity-roadmap.md)
 
 Provider endpoints are the synthetic dependencies used by an application under test.
 They have separate mock credential boundaries and must never receive the management
