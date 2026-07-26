@@ -1,14 +1,26 @@
 # 🥸 mockOS F-series roadmap
 
-Status: Approved target design; M2 gate satisfied, F0 may begin
-Last reviewed: 2026-07-22
+Status: Approved target design; F0/F1 local evidence and bounded OpenAI/Anthropic F2 source slice
+Last reviewed: 2026-07-25
 
 This document turns the approved F-series product direction into an executable
-roadmap. It is a target design, not implementation evidence. The current evidence
-ledger remains [Implementation status](./IMPLEMENTATION_STATUS.md): M0 through M2 pass
-locally and in hosted CI, and the exact M2 candidate passed staging and production
-workers.dev smoke. The M2 prerequisite is satisfied; every F-series runtime phase
-remains unimplemented and begins with F0.
+roadmap. Target sections are not implementation evidence; the current evidence ledger
+remains [Implementation status](./IMPLEMENTATION_STATUS.md). The exact M2 candidate
+passed local/hosted gates and staging/production workers.dev smoke, satisfying the F0
+entry gate. The revision carrying this document contains a locally green F0
+contract/client/OpenAPI foundation and the locally source-qualified bounded F1
+implementation described in the
+[F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
+CI/merge/deployment remain open. A
+[partial F2 slice](./f-series/f2-llm-kernel.md) now has strict definitions, four
+MCP-only operations, baseline schema persistence, and bounded OpenAI model/JSON-or-SSE Chat
+Completions plus Anthropic model/JSON-or-SSE Messages data planes that are
+source-qualified locally through official SDKs. Metadata-only request-log
+observation/query/assertion for successfully parsed/planned, response-preflighted
+provider POSTs is also source-qualified at the mounted Worker/MCP seam. Configured
+midstream errors, OpenAI Responses, Anthropic betas, conversation state,
+actual-network/hosted qualification, Cloud consumption, deployment, and every F3-F9
+phase remain open.
 
 ## Outcome
 
@@ -66,6 +78,21 @@ implementation interpretation.
 
 ### Mock MCP servers
 
+Current-source note: F1 now exposes eight MCP-only management operations: five
+server-definition/state operations plus built-in blueprint list/get/install. The
+management registry contains 27 tools while companion management HTTP remains five
+routes. The first preset, `salesforce/hosted-mcp/sobject-reads`, was derived from
+Salesforce Hosted MCP SObject Reads documentation reviewed on 2026-07-25 and installs
+six ordered deterministic tools: `getObjectSchema`, `soqlQuery`, `find`,
+`getUserInfo`, `listRecentSobjectRecords`, and `getRelatedRecords`. The mounted
+official MCP SDK `1.29.0` Worker seam qualifies this bounded local path through
+D/I/S/X/Q only. It is not actual-network, hosted, deployed, Cloud-pinned, verified
+live, production-ready, or evidence of Salesforce network, REST, OAuth, field-level
+security, sharing, or output-wire parity. The
+[task guide](./blueprints/salesforce-sobject-reads.md) and
+[machine catalog](./reference/mock-mcp-blueprints.v1.json) own the exact fixture and
+evidence boundary.
+
 - Host each mock inside its environment at
   `/e/{env}/mcp-mock/{slug}` in path mode and
   `{env}.id.mockos.live/mcp-mock/{slug}` in subdomain mode.
@@ -83,6 +110,34 @@ implementation interpretation.
   management tools.
 
 ### Mock LLM APIs
+
+Current-source note: the partial F2 slice freezes a neutral response-plan seam,
+behavior adapter, pure JSON/SSE-frame renderers, and official-SDK deserialization. It
+also source-implements strict server definitions, four MCP-only management
+operations, baseline environment persistence, mandatory changed-write revision CAS,
+atomic revision-bound delete, and safe write-only provider-key views. Changed
+full-definition writes must resupply or rotate every enabled strict key; safe-view
+markers are not write shapes.
+
+The source now serves exact OpenAI and Anthropic path/subdomain route prefixes. OpenAI
+requires Bearer and implements model list/retrieve plus JSON or bounded SSE Chat
+Completions. Anthropic requires `x-api-key` and exactly
+`anthropic-version: 2023-06-01`, rejects beta headers, and implements model
+list/retrieve plus JSON or named-event SSE Messages. Both bounded surfaces are
+source-qualified locally through pinned official SDKs. Their shared stream scheduler
+performs initial delay before headers, preflights the complete body against 2 MiB,
+paces payload deltas only, uses one absolute duration across initial wait, pacing, and
+backpressure, and truncates post-`200` cancellation/deadline without inventing
+success. Anthropic streams end with `message_stop`, report cumulative
+`message_delta` usage, and emit neither `[DONE]` nor mock `ping` (clients should still
+tolerate upstream `ping`). After response preflight, bounded provider POSTs attempt
+one metadata-only request-log reservation within a 50-millisecond fail-open budget;
+prospective metadata/credential collisions skip it. In-budget rows append-once
+finalize on the same sequence, and existing MCP log query/assertion tools exact-match
+their lifecycle fields.
+The broader bullets below remain the complete F2 target: configured midstream errors,
+conversation/sequence state, Wrangler/network qualification, deployment, and Cloud
+integration are still open.
 
 - Serve OpenAI-compatible `/v1/chat/completions` and model discovery plus Anthropic
   `/v1/messages` and model discovery under each environment's LLM route prefix.
@@ -170,12 +225,12 @@ the legacy transport.
 
 ### Code Mode and Dynamic Workers
 
-The reviewed package baseline on July 22, 2026 is:
+The reviewed package baseline on July 26, 2026 is:
 
 - `@cloudflare/codemode` `0.4.3` (experimental);
 - `agents` `0.17.4`;
 - `@modelcontextprotocol/sdk` `1.29.0`;
-- repository pin `wrangler` `4.112.0`, while `4.113.0` is published.
+- repository pin `wrangler` `4.114.0`.
 
 F0 records exact pins after M2. Upgrades require wrapper tests and a non-blocking
 canary before the catalog changes.
@@ -248,6 +303,26 @@ paid-account spike: beta entitlement, billing identity, hard limits, and product
 egress behavior need live evidence.
 
 ### LLM planning and streaming
+
+This section describes the complete target. The current
+[F2 kernel](./f-series/f2-llm-kernel.md) instantiates a bounded stateless subset:
+`EnvironmentDO` resolves a definition and immutable response plan, and the edge
+validates the Bearer envelope and renders OpenAI JSON or bounded SSE with abort-aware
+pre-header initial delay; the corresponding exact Anthropic boundary uses
+`x-api-key` plus the stable version header and renders JSON or named-event SSE. The
+Environment Durable Object applies the current
+`accept_any` or strict-verifier policy, rechecks the definition revision, and invokes
+the plan commit before returning to the edge. Current turn selection remains
+stateless, so its synthetic state adapter discards the staged write. The slice
+implements payload-only pacing for both dialects and one absolute
+initial/pacing/backpressure duration, but not stateful conversation, configured
+midstream errors, completion telemetry, or observation steps below.
+
+Current shared preflight derives payload frame count from Unicode code-point chunks
+of text and canonical provider tool arguments/input JSON, then requires
+`initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`
+to be strictly less than `maximumDurationMilliseconds`. Equality is rejected to avoid
+a deadline race.
 
 The EnvironmentDO remains the source of deterministic behavior and state, but it does
 not stay active to pace a stream for up to 60 seconds.
@@ -349,6 +424,12 @@ issuer-specific trust rule. Exchange processing must:
 
 ### Public blueprints and hosted gallery
 
+The current built-in, secret-free mock-MCP server-definition presets are an F1
+convenience and are not completion of this F5 portable system. In particular,
+`list_mock_mcp_blueprints`, `get_mock_mcp_blueprint`, and
+`install_mock_mcp_blueprint` do not export, import, apply, hash, submit, moderate, or
+publish portable blueprints.
+
 The public `mockos` repository owns the portable blueprint system: schema,
 canonicalization and content hashing, no-secrets validation, semantic validation,
 export, import planning, CLI validation/apply commands, fixtures, and tests. Script
@@ -367,8 +448,8 @@ the open-core package.
 | Design-0 | This roadmap, ADRs, sourced fixture research, spike plans | Current M0-M2 candidate | Docs checks pass; no F-series runtime or dependency change is merged. |
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
-| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Official SDK client passes in-process and Worker tests; July 28 version checkpoint recorded. |
-| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, edge streaming, tools and errors | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
+| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures, and built-in secret-free server-definition presets | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, complete repository gates, and the bounded Salesforce preset exercise/observe/assert loop are green. The Salesforce provider network and output-wire parity, July 28 version checkpoint, actual-network qualification, and all hosted/deployed/Cloud-pin/live-provider/production evidence remain open. |
+| F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The current source slice includes MCP-managed definitions, bounded model discovery, and OpenAI/Anthropic JSON/SSE Chat Completions/Messages; the rest remains open. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
 | F5 | Public blueprint core, export/import planner, hosted install integration | F1/F2 schema freeze; hosted apply also gates on F4 slugs/idempotency | Public no-secrets and deterministic hash corpus passes; hosted installs are idempotent and scripts remain disabled. |
@@ -380,6 +461,24 @@ the open-core package.
 F1, F2, and F3 may run in parallel after F0. F4 may run in the private cloud lane
 after M4. Per-area contract files, append-only migration ownership, and table-driven
 route registration remain the merge choke-point rules.
+
+The current source covers the six-variant `BehaviorSpec`, an exhaustive 27-operation
+management registry consumed by MCP, deterministic OpenAPI and client
+artifacts for the five HTTP routes that actually exist, a validated fetch client, and
+default-off Code Mode/sandbox wrappers with exact dependency guards. The full local
+F0 repository gate is green. F1 locally qualifies only the bounded
+environment-hosted mock-MCP runtime and eight MCP-only management operations: five
+definition/state operations plus built-in blueprint list/get/install. The built-in
+catalog is not the portable F5 export/import/apply/gallery system. F1 does not add HTTP
+management routes or activate Code Mode, scripts, or proxy. The partial
+F2 adds neutral schemas, behavior adaptation, MCP-only persisted definitions, and
+user-operable bounded OpenAI/Anthropic provider routes for model discovery and
+OpenAI JSON/SSE Chat Completions plus Anthropic JSON/SSE Messages. Local
+official-SDK evidence plus mounted Worker/MCP metadata observation assertions are
+source-qualified, not actual-network, hosted, deployed, Cloud-integrated, or proof of
+configured midstream errors, conversation state, or audit-complete observation.
+Hosted CI, merge, package publication, private Cloud consumption, and deployment
+remain separate.
 
 ### July 28 MCP checkpoint
 
@@ -419,9 +518,10 @@ held back for hosted governance.
 
 ### Merge and compatibility
 
-- The M2 prerequisite review proves no F-series package, migration, catalog pin,
-  route, or runtime flag landed. Design documents identify themselves as target
-  design. The linked hosted CI and deployed-smoke evidence satisfy the F0 entry gate.
+- The M2 prerequisite review proved that no F-series package, migration, catalog pin,
+  route, or runtime flag had landed at the entry point. The linked hosted CI and
+  deployed-smoke evidence satisfied the F0 entry gate. F0 subsequently remains
+  additive: no migration or experimental runtime flag/binding is introduced.
 - Every phase starts with an additive contract freeze and ends with existing M tests,
   format, types, tests, builds, Wrangler dry-run, and documentation honesty gates
   green.
@@ -441,6 +541,16 @@ held back for hosted governance.
   selected transport supports them.
 
 ### Mock LLM
+
+The current F2 source satisfies the configuration prerequisite and bounded local
+OpenAI and Anthropic JSON/SSE runtime subsets. Its pinned official SDK tests
+consume pure JSON/SSE projections and local Worker routes through injected Fetch;
+edge-stream package tests separately qualify shared pacing, deadline, backpressure,
+and cancellation mechanics. Mounted Worker tests query/assert completed and
+configured-error observation rows through the official MCP client; direct edge tests
+own persisted cancellation proof because the Worker-pool binding does not propagate
+reader cancellation. They do not run against Wrangler, a network endpoint, or the
+deployed exit gates below.
 
 - Real `openai` and `@anthropic-ai/sdk` clients run against `wrangler dev` and deployed
   staging for non-streaming, streaming, tool calls, provider errors, and cancellation.

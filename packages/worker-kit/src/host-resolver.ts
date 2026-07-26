@@ -1,4 +1,8 @@
-import { environmentIdSchema } from "@mockos/contracts";
+import {
+  environmentIdSchema,
+  mockLlmSlugSchema,
+  mockMcpSlugSchema,
+} from "@mockos/contracts";
 
 export type HostingMode = "path" | "subdomain";
 
@@ -13,7 +17,9 @@ export type EnvironmentLocator =
   | { environmentId: string; type: "environment" }
   | { tenantId: string; type: "tenant" };
 
-export type ResolvedEnvironmentRequest = {
+export type ResolvedIdentityRequest = {
+  kind: "identity";
+  directoryBaseUrl?: string;
   environmentId?: string;
   forwardedPath: string;
   graphBaseUrl?: string;
@@ -23,6 +29,31 @@ export type ResolvedEnvironmentRequest = {
   publicBase: string;
   tenantId?: string;
 };
+
+export type ResolvedMockMcpRequest = {
+  kind: "mock-mcp";
+  environmentId: string;
+  forwardedPath: string;
+  locator: Extract<EnvironmentLocator, { type: "environment" }>;
+  publicBase: string;
+  slug: string;
+};
+
+export type ResolvedMockLlmRequest = {
+  kind: "mock-llm";
+  dialect: "anthropic" | "openai";
+  environmentId: string;
+  forwardedPath: string;
+  locator: Extract<EnvironmentLocator, { type: "environment" }>;
+  providerPath: string;
+  publicBase: string;
+  slug: string;
+};
+
+export type ResolvedEnvironmentRequest =
+  | ResolvedIdentityRequest
+  | ResolvedMockMcpRequest
+  | ResolvedMockLlmRequest;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,6 +72,9 @@ const classifyPath = (pathname: string) => {
   if (first && UUID_PATTERN.test(first)) {
     return { provider: "entra" as const, tenantId: first.toLowerCase() };
   }
+  if (pathname === "/devicelogin") {
+    return { provider: "entra" as const, tenantId: undefined };
+  }
   if (
     pathname === "/activate" ||
     pathname.startsWith("/oauth2/") ||
@@ -58,6 +92,43 @@ const classifyPath = (pathname: string) => {
   return undefined;
 };
 
+const mockMcpSlugFromPath = (pathname: string): string | undefined => {
+  const match = /^\/mcp-mock\/([^/]+)$/.exec(pathname);
+  if (!match?.[1]) return undefined;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
+  })();
+  return decoded && mockMcpSlugSchema.safeParse(decoded).success ? decoded : undefined;
+};
+
+const mockLlmFromPath = (
+  pathname: string
+): Pick<ResolvedMockLlmRequest, "dialect" | "providerPath" | "slug"> | undefined => {
+  const openAiMatch = /^\/llm-mock\/([^/]+)\/openai\/v1(\/.*)?$/.exec(pathname);
+  const anthropicMatch = /^\/llm-mock\/([^/]+)\/anthropic(\/v1(?:\/.*)?)$/.exec(
+    pathname
+  );
+  const match = openAiMatch ?? anthropicMatch;
+  if (!match?.[1]) return undefined;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
+  })();
+  if (!decoded || !mockLlmSlugSchema.safeParse(decoded).success) return undefined;
+  return {
+    dialect: openAiMatch ? "openai" : "anthropic",
+    providerPath: match[2] || "/",
+    slug: decoded,
+  };
+};
+
 const pathModeResolution = (
   url: URL,
   config: HostResolverConfig
@@ -70,16 +141,42 @@ const pathModeResolution = (
   const environmentId = rest.slice(0, slash);
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
   const forwardedPath = rest.slice(slash) || "/";
+  const mockMcpSlug = mockMcpSlugFromPath(forwardedPath);
+  const mockLlm = mockLlmFromPath(forwardedPath);
+  const publicBase = `${url.origin}${prefix}/${environmentId}`;
+  if (mockMcpSlug) {
+    return {
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath,
+      locator: { type: "environment", environmentId },
+      publicBase,
+      slug: mockMcpSlug,
+    };
+  }
+  if (mockLlm) {
+    return {
+      kind: "mock-llm",
+      environmentId,
+      forwardedPath,
+      locator: { type: "environment", environmentId },
+      publicBase,
+      ...mockLlm,
+    };
+  }
   const classification = classifyPath(forwardedPath);
   if (!classification) return undefined;
-  const publicBase = `${url.origin}${prefix}/${environmentId}`;
   const issuerBase =
     classification.provider === "entra"
-      ? `${publicBase}/${classification.tenantId}/v2.0`
+      ? classification.tenantId
+        ? `${publicBase}/${classification.tenantId}/v2.0`
+        : publicBase
       : classification.provider === "okta"
         ? `${publicBase}/oauth2/default`
         : publicBase;
   return {
+    kind: "identity",
+    directoryBaseUrl: publicBase,
     environmentId,
     forwardedPath,
     ...(classification.provider === "entra"
@@ -105,8 +202,11 @@ const subdomainModeResolution = (
   const entraHost = normalizeHost(config.entraHost ?? `login.${baseDomain}`);
   const classification = classifyPath(url.pathname);
   if (hostname === entraHost) {
-    if (classification?.provider !== "entra") return undefined;
+    if (classification?.provider !== "entra" || !classification.tenantId) {
+      return undefined;
+    }
     return {
+      kind: "identity",
       forwardedPath: url.pathname,
       issuerBase: `${url.origin}/${classification.tenantId}/v2.0`,
       locator: { type: "tenant", tenantId: classification.tenantId },
@@ -119,8 +219,37 @@ const subdomainModeResolution = (
   if (!hostname.endsWith(suffix)) return undefined;
   const environmentId = hostname.slice(0, -suffix.length);
   if (!environmentIdSchema.safeParse(environmentId).success) return undefined;
-  if (!classification || classification.provider === "entra") return undefined;
+  const mockMcpSlug = mockMcpSlugFromPath(url.pathname);
+  const mockLlm = mockLlmFromPath(url.pathname);
+  if (mockMcpSlug) {
+    return {
+      kind: "mock-mcp",
+      environmentId,
+      forwardedPath: url.pathname,
+      locator: { type: "environment", environmentId },
+      publicBase: url.origin,
+      slug: mockMcpSlug,
+    };
+  }
+  if (mockLlm) {
+    return {
+      kind: "mock-llm",
+      environmentId,
+      forwardedPath: url.pathname,
+      locator: { type: "environment", environmentId },
+      publicBase: url.origin,
+      ...mockLlm,
+    };
+  }
+  if (
+    !classification ||
+    (classification.provider === "entra" && classification.tenantId)
+  ) {
+    return undefined;
+  }
   return {
+    kind: "identity",
+    directoryBaseUrl: url.origin,
     environmentId,
     forwardedPath: url.pathname,
     issuerBase:
@@ -156,6 +285,7 @@ export const graphBaseUrlForEnvironment = (
   environmentId: string,
   config: HostResolverConfig
 ): string | undefined => {
+  if (resolution.kind !== "identity") return undefined;
   if (resolution.provider !== "entra") return undefined;
   if (!environmentIdSchema.safeParse(environmentId).success) {
     throw new Error("A valid environment ID is required for the Graph base URL.");
@@ -170,6 +300,25 @@ export const graphBaseUrlForEnvironment = (
   return `${new URL(resolution.issuerBase).protocol}//${environmentId}.${baseDomain}/graph/v1.0`;
 };
 
+export const directoryBaseUrlForEnvironment = (
+  resolution: ResolvedEnvironmentRequest,
+  environmentId: string,
+  config: HostResolverConfig
+): string | undefined => {
+  if (resolution.kind !== "identity") return undefined;
+  if (!environmentIdSchema.safeParse(environmentId).success) {
+    throw new Error("A valid environment ID is required for the directory base URL.");
+  }
+  if (config.hostingMode === "path") {
+    return resolution.directoryBaseUrl ?? resolution.publicBase;
+  }
+  const baseDomain = config.baseDomain && normalizeHost(config.baseDomain);
+  if (!baseDomain) {
+    throw new Error("baseDomain is required in subdomain hosting mode.");
+  }
+  return `${new URL(resolution.issuerBase).protocol}//${environmentId}.${baseDomain}`;
+};
+
 export const forwardEnvironmentRequest = (
   request: Request,
   resolution: ResolvedEnvironmentRequest,
@@ -181,10 +330,21 @@ export const forwardEnvironmentRequest = (
   for (const name of [...headers.keys()]) {
     if (name.toLowerCase().startsWith("x-mockos-")) headers.delete(name);
   }
-  headers.set("x-mockos-issuer-base", resolution.issuerBase);
+  headers.set("x-mockos-route-kind", resolution.kind);
   headers.set("x-mockos-public-path", new URL(request.url).pathname);
-  if (resolution.graphBaseUrl) {
-    headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
+  if (resolution.kind === "identity") {
+    headers.set("x-mockos-issuer-base", resolution.issuerBase);
+    if (resolution.directoryBaseUrl) {
+      headers.set("x-mockos-directory-base", resolution.directoryBaseUrl);
+    }
+    if (resolution.graphBaseUrl) {
+      headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
+    }
+  } else if (resolution.kind === "mock-mcp") {
+    headers.set("x-mockos-mcp-slug", resolution.slug);
+  } else {
+    headers.set("x-mockos-llm-dialect", resolution.dialect);
+    headers.set("x-mockos-llm-slug", resolution.slug);
   }
   if (resolution.environmentId) {
     headers.set("x-mockos-env", resolution.environmentId);
@@ -192,10 +352,13 @@ export const forwardEnvironmentRequest = (
   if (options.redactAuthorization) {
     headers.set("x-mockos-redact-authorization", "true");
   }
-  return new Request(url, {
+  const init: RequestInit & { duplex?: "half" } = {
     body: request.body,
     headers,
     method: request.method,
     redirect: request.redirect,
-  });
+    signal: request.signal,
+  };
+  if (request.body) init.duplex = "half";
+  return new Request(url, init);
 };

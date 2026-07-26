@@ -5,7 +5,14 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./behavior": "./src/behavior.ts",
+    "./features": "./src/features.ts",
+    "./mock-llm": "./src/mock-llm.ts",
+    "./mock-llm-server": "./src/mock-llm-server.ts",
+    "./mock-mcp-blueprint": "./src/mock-mcp-blueprint.ts",
+    "./mock-mcp": "./src/mock-mcp.ts",
+    "./operations": "./src/operations/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

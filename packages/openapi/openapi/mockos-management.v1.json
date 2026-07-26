@@ -1,0 +1,1245 @@
+{
+  "components": {
+    "schemas": {
+      "GetEnvironmentDiscoveryResponse200Definition1": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/GetEnvironmentDiscoveryResponse200Definition1"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GetEnvironmentDiscoveryResponse200Definition1"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "Problem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "requestId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "maximum": 599,
+            "minimum": 400,
+            "type": "integer"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "requestId"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "accessKey": {
+        "bearerFormat": "mockOS Access Key",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Authenticated self-hosted management operations currently implemented by the mockOS Worker.",
+    "title": "mockOS management API",
+    "version": "0.1.0"
+  },
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "openapi": "3.1.0",
+  "paths": {
+    "/environments/{environmentId}": {
+      "delete": {
+        "description": "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.",
+        "operationId": "delete_environment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 8,
+              "pattern": "^[a-z0-9][a-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The operation completed successfully."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A mockOS RFC 7807 problem response."
+          }
+        },
+        "security": [
+          {
+            "accessKey": []
+          }
+        ],
+        "summary": "Delete mock identity environment",
+        "tags": [
+          "Management"
+        ],
+        "x-mockos-effect": "destructive",
+        "x-mockos-retry": "idempotent",
+        "x-mockos-scopes": [
+          "env:rw"
+        ]
+      },
+      "put": {
+        "description": "Updates mutable environment settings through MCP or configures the complete environment document through the self-hosted HTTP control route.",
+        "operationId": "configure_environment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 8,
+              "pattern": "^[a-z0-9][a-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "createdAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "id": {
+                    "maxLength": 64,
+                    "minLength": 8,
+                    "pattern": "^[a-z0-9][a-z0-9_-]+$",
+                    "type": "string"
+                  },
+                  "idleTtlHours": {
+                    "default": 168,
+                    "maximum": 8760,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "name": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "entra",
+                      "okta"
+                    ],
+                    "type": "string"
+                  },
+                  "requestLogLimit": {
+                    "default": 10000,
+                    "maximum": 100000,
+                    "minimum": 100,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "tenantId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "provider",
+                  "seed",
+                  "tenantId",
+                  "createdAt"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 64,
+                          "minLength": 8,
+                          "pattern": "^[a-z0-9][a-z0-9_-]+$",
+                          "type": "string"
+                        },
+                        "idleTtlHours": {
+                          "default": 168,
+                          "maximum": 8760,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "name": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "provider": {
+                          "enum": [
+                            "entra",
+                            "okta"
+                          ],
+                          "type": "string"
+                        },
+                        "requestLogLimit": {
+                          "default": 10000,
+                          "maximum": 100000,
+                          "minimum": 100,
+                          "type": "integer"
+                        },
+                        "seed": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "tenantId": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "provider",
+                        "seed",
+                        "tenantId",
+                        "createdAt",
+                        "idleTtlHours",
+                        "requestLogLimit"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation completed successfully."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A mockOS RFC 7807 problem response."
+          }
+        },
+        "security": [
+          {
+            "accessKey": []
+          }
+        ],
+        "summary": "Configure mock identity environment",
+        "tags": [
+          "Management"
+        ],
+        "x-mockos-effect": "mutation",
+        "x-mockos-retry": "idempotent",
+        "x-mockos-scopes": [
+          "env:rw"
+        ]
+      }
+    },
+    "/environments/{environmentId}/applications": {
+      "post": {
+        "description": "Registers an OAuth/OIDC client in an explicit or session-selected environment.",
+        "operationId": "create_application",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 8,
+              "pattern": "^[a-z0-9][a-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "clientType": {
+                          "const": "public"
+                        }
+                      },
+                      "required": [
+                        "clientType"
+                      ]
+                    },
+                    "then": {
+                      "not": {
+                        "required": [
+                          "clientSecret"
+                        ]
+                      },
+                      "properties": {
+                        "grantTypes": {
+                          "items": {
+                            "enum": [
+                              "authorization_code",
+                              "refresh_token",
+                              "urn:ietf:params:oauth:grant-type:device_code"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "else": {
+                      "properties": {
+                        "redirectUris": {
+                          "minItems": 1
+                        }
+                      }
+                    },
+                    "if": {
+                      "properties": {
+                        "clientType": {
+                          "const": "public"
+                        },
+                        "grantTypes": {
+                          "allOf": [
+                            {
+                              "contains": {
+                                "const": "urn:ietf:params:oauth:grant-type:device_code"
+                              }
+                            },
+                            {
+                              "not": {
+                                "contains": {
+                                  "const": "authorization_code"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "clientType",
+                        "grantTypes"
+                      ]
+                    }
+                  }
+                ],
+                "properties": {
+                  "appRoles": {
+                    "default": [],
+                    "items": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "type": "array"
+                  },
+                  "clientId": {
+                    "maxLength": 256,
+                    "minLength": 3,
+                    "type": "string"
+                  },
+                  "clientSecret": {
+                    "maxLength": 1024,
+                    "minLength": 8,
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "default": "confidential",
+                    "enum": [
+                      "confidential",
+                      "public"
+                    ],
+                    "type": "string"
+                  },
+                  "grantTypes": {
+                    "default": [
+                      "authorization_code",
+                      "refresh_token"
+                    ],
+                    "items": {
+                      "enum": [
+                        "authorization_code",
+                        "refresh_token",
+                        "client_credentials",
+                        "urn:ietf:params:oauth:grant-type:device_code"
+                      ],
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "groupClaimsMode": {
+                    "default": "none",
+                    "enum": [
+                      "none",
+                      "security",
+                      "all"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "name",
+                  "redirectUris"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "else": {
+                            "properties": {
+                              "redirectUris": {
+                                "minItems": 1
+                              }
+                            }
+                          },
+                          "if": {
+                            "properties": {
+                              "clientType": {
+                                "const": "public"
+                              },
+                              "grantTypes": {
+                                "allOf": [
+                                  {
+                                    "contains": {
+                                      "const": "urn:ietf:params:oauth:grant-type:device_code"
+                                    }
+                                  },
+                                  {
+                                    "not": {
+                                      "contains": {
+                                        "const": "authorization_code"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "clientType",
+                              "grantTypes"
+                            ]
+                          }
+                        }
+                      ],
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "appRoles": {
+                              "items": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 100,
+                              "type": "array"
+                            },
+                            "clientId": {
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "clientSecret": {
+                              "minLength": 8,
+                              "type": "string"
+                            },
+                            "clientType": {
+                              "const": "confidential",
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                              "type": "string"
+                            },
+                            "grantTypes": {
+                              "items": {
+                                "enum": [
+                                  "authorization_code",
+                                  "refresh_token",
+                                  "client_credentials",
+                                  "urn:ietf:params:oauth:grant-type:device_code"
+                                ],
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "groupClaimsMode": {
+                              "enum": [
+                                "none",
+                                "security",
+                                "all"
+                              ],
+                              "type": "string"
+                            },
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "redirectUris": {
+                              "items": {
+                                "format": "uri",
+                                "type": "string"
+                              },
+                              "maxItems": 50,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "id",
+                            "clientId",
+                            "redirectUris",
+                            "appRoles",
+                            "groupClaimsMode",
+                            "createdAt",
+                            "clientType",
+                            "clientSecret",
+                            "grantTypes"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "appRoles": {
+                              "items": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 100,
+                              "type": "array"
+                            },
+                            "clientId": {
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "clientType": {
+                              "const": "public",
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                              "type": "string"
+                            },
+                            "grantTypes": {
+                              "items": {
+                                "enum": [
+                                  "authorization_code",
+                                  "refresh_token",
+                                  "urn:ietf:params:oauth:grant-type:device_code"
+                                ],
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "groupClaimsMode": {
+                              "enum": [
+                                "none",
+                                "security",
+                                "all"
+                              ],
+                              "type": "string"
+                            },
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "redirectUris": {
+                              "items": {
+                                "format": "uri",
+                                "type": "string"
+                              },
+                              "maxItems": 50,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "id",
+                            "clientId",
+                            "redirectUris",
+                            "appRoles",
+                            "groupClaimsMode",
+                            "createdAt",
+                            "clientType",
+                            "grantTypes"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation completed successfully."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A mockOS RFC 7807 problem response."
+          }
+        },
+        "security": [
+          {
+            "accessKey": []
+          }
+        ],
+        "summary": "Create application registration",
+        "tags": [
+          "Management"
+        ],
+        "x-mockos-effect": "mutation",
+        "x-mockos-retry": "never",
+        "x-mockos-scopes": [
+          "env:rw"
+        ]
+      }
+    },
+    "/environments/{environmentId}/identities:seed": {
+      "post": {
+        "description": "Creates users and groups in an environment. MCP may use the session cursor; HTTP always requires an explicit environment.",
+        "operationId": "seed_identities",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 8,
+              "pattern": "^[a-z0-9][a-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "groups": {
+                    "default": [],
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "externalId": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "members": {
+                          "default": [],
+                          "items": {
+                            "maxLength": 320,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "maxItems": 10000,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "displayName"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 10000,
+                    "type": "array"
+                  },
+                  "users": {
+                    "default": [],
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "active": {
+                          "default": true,
+                          "type": "boolean"
+                        },
+                        "displayName": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "externalId": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "familyName": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "givenName": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mfaState": {
+                          "default": "none",
+                          "enum": [
+                            "none",
+                            "enrolled",
+                            "required"
+                          ],
+                          "type": "string"
+                        },
+                        "password": {
+                          "default": "Passw0rd!",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "passwordState": {
+                          "default": "valid",
+                          "enum": [
+                            "valid",
+                            "expired",
+                            "reset_required"
+                          ],
+                          "type": "string"
+                        },
+                        "roles": {
+                          "default": [],
+                          "items": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        },
+                        "userName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userName",
+                        "displayName"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 10000,
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "groups": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "displayName": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "displayName"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "users": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "userName": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "userName"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "users",
+                        "groups"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation completed successfully."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A mockOS RFC 7807 problem response."
+          }
+        },
+        "security": [
+          {
+            "accessKey": []
+          }
+        ],
+        "summary": "Seed users and groups",
+        "tags": [
+          "Management"
+        ],
+        "x-mockos-effect": "mutation",
+        "x-mockos-retry": "never",
+        "x-mockos-scopes": [
+          "env:rw"
+        ]
+      }
+    },
+    "/environments/{environmentId}/well-known": {
+      "get": {
+        "description": "Returns the provider-shaped OIDC discovery document produced for an explicit issuer base.",
+        "operationId": "get_environment_discovery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 8,
+              "pattern": "^[a-z0-9][a-z0-9_-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issuer_base",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/GetEnvironmentDiscoveryResponse200Definition1"
+                      },
+                      "properties": {
+                        "authorization_endpoint": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "claims_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "code_challenge_methods_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "grant_types_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "id_token_signing_alg_values_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "issuer": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "jwks_uri": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "response_modes_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "response_types_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "scopes_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "subject_types_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "token_endpoint": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "token_endpoint_auth_methods_supported": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "userinfo_endpoint": {
+                          "format": "uri",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "issuer",
+                        "authorization_endpoint",
+                        "token_endpoint",
+                        "jwks_uri",
+                        "response_types_supported",
+                        "response_modes_supported",
+                        "subject_types_supported",
+                        "id_token_signing_alg_values_supported",
+                        "scopes_supported",
+                        "token_endpoint_auth_methods_supported",
+                        "claims_supported",
+                        "grant_types_supported",
+                        "code_challenge_methods_supported"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation completed successfully."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A mockOS RFC 7807 problem response."
+          }
+        },
+        "security": [
+          {
+            "accessKey": []
+          }
+        ],
+        "summary": "Get environment OIDC discovery document",
+        "tags": [
+          "Management"
+        ],
+        "x-mockos-effect": "read",
+        "x-mockos-retry": "safe",
+        "x-mockos-scopes": [
+          "env:ro"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/__mockos/v1"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Management"
+    }
+  ]
+}

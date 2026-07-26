@@ -1,0 +1,38 @@
+{
+  "name": "okta-authn-factor-verify-success",
+  "description": "A valid synthetic software-factor passcode consumes an MFA_REQUIRED transaction and returns SUCCESS with a one-time session token.",
+  "provider": "okta",
+  "area": "authn",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/authn/factors/{factorId}/verify",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "stateToken": "{stateToken}",
+      "passCode": "000000"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "bodyContains": {
+      "status": "SUCCESS",
+      "_embedded": {
+        "user": {
+          "profile": {
+            "login": "mfa.authn@example.test"
+          }
+        }
+      }
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#verify-totp-factor",
+  "lastVerified": "2026-07-26",
+  "status": "implemented",
+  "notes": "The fixture runner replaces factorId and stateToken from a fresh MFA_REQUIRED response. mockOS accepts the deterministic synthetic code 000000; this is not an RFC 6238 secret, clock-window, enrollment, or TOTP-generation claim."
+}

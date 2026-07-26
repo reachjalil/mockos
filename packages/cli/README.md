@@ -4,8 +4,25 @@ The `mockos` command manages mockOS through its authenticated remote MCP interfa
 is designed for local development, deterministic integration tests, and
 Access-Key-authenticated CI.
 
-Status: M5 command source is locally qualified; exact hosted/deployed evidence remains pending; npm package unpublished
-Last reviewed: 2026-07-22
+Status: Source 0.1.0 is locally qualified; registry 0.0.1 has no executable and the usable npm release remains pending
+Last reviewed: 2026-07-26
+
+## npm installation boundary
+
+The registry currently contains historical `@mockos/cli@0.0.1`, but that package
+does not publish `bin.mockos`. It is not an installable product command.
+
+After the release workflow publishes 0.1.0, verify and install the exact executable:
+
+```bash
+npm view @mockos/cli@0.1.0 version bin engines --json
+pnpm add --global @mockos/cli@0.1.0
+mockos --help
+```
+
+Until then, use the source build below. The shorter
+[CLI quickstart](../../docs/getting-started/cli.md) covers the Cloud profile and
+create/inspect/delete loop.
 
 ## Build and run from source
 
@@ -52,7 +69,7 @@ and use a separate key for each deployment target.
 ## Identity and provisioning loop
 
 The examples below deliberately invoke the built source file against a `local` profile
-pointing at the source Worker because `@mockos/cli` is not published. Replace the
+pointing at the source Worker because the usable executable is not published. Replace the
 sample environment and User IDs with values returned by `env create` and `seed`.
 
 ```bash
@@ -148,17 +165,9 @@ message until the governance and blueprint phases provide those capabilities.
 `blueprint validate` is local-only. This capability negotiation keeps the source CLI
 stable without claiming that unavailable server features work.
 
-## Future npm usage
+## Release verification
 
-The `@mockos/cli` package has not been published and the `@mockos` scope is not
-confirmed registered. The following is the intended post-publication workflow, not a
-command that works today:
-
-```bash
-# Future only, after an announced npm release:
-pnpm add --global @mockos/cli
-mockos doctor --profile staging
-```
-
-Until that release, build and run `node packages/cli/dist/bin.js` from a source
-checkout as shown above.
+Do not infer a usable release from package-name availability. The release is ready for
+installation only when npm reports version 0.1.0 or newer, `bin.mockos` equals
+`dist/bin.js`, and `mockos --help` starts on Node.js 22.12 or newer. The checked-in
+release workflow enforces the metadata step after a successful publish.

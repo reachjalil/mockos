@@ -219,7 +219,11 @@ describe("hosted OAuth lifecycle cascade", () => {
         code_verifier: verifier,
       });
       expect(issuedResponse.status, await issuedResponse.clone().text()).toBe(200);
-      const issued = await issuedResponse.json<{ refresh_token: string }>();
+      const issued = await issuedResponse.json<{
+        access_token: string;
+        id_token: string;
+        refresh_token: string;
+      }>();
       expect(issued.refresh_token).toBeTruthy();
 
       const lifecycle = await callTool<{
@@ -260,6 +264,10 @@ describe("hosted OAuth lifecycle cascade", () => {
         entries: Array<{
           method: string;
           path: string;
+          requestBody: string | null;
+          requestHeaders: Record<string, string>;
+          responseBody: string | null;
+          responseHeaders: Record<string, string>;
           responseStatus: number;
         }>;
       }>(sessionId, "get_request_log", {
@@ -288,6 +296,98 @@ describe("hosted OAuth lifecycle cascade", () => {
           }),
         ])
       );
+      const serializedLog = JSON.stringify(requestLog.entries);
+      for (const secret of [
+        password,
+        clientSecret,
+        code,
+        verifier,
+        issued.access_token,
+        issued.id_token,
+        issued.refresh_token,
+      ]) {
+        if (secret) expect(serializedLog).not.toContain(secret);
+      }
+      const authorizationLog = requestLog.entries.find(
+        (entry) =>
+          entry.method === "POST" &&
+          entry.path === authorizePath &&
+          entry.responseStatus === 302
+      );
+      expect(authorizationLog?.requestBody).toContain("password=%5BREDACTED%5D");
+      expect(authorizationLog?.responseHeaders.location).toContain(
+        "code=%5BREDACTED%5D"
+      );
+      const issuedLog = requestLog.entries.find(
+        (entry) =>
+          entry.method === "POST" &&
+          entry.path === tokenPath &&
+          entry.responseStatus === 200
+      );
+      expect(issuedLog?.requestBody).toContain("client_secret=%5BREDACTED%5D");
+      expect(issuedLog?.requestBody).toContain("code=%5BREDACTED%5D");
+      expect(issuedLog?.requestBody).toContain("code_verifier=%5BREDACTED%5D");
+      expect(JSON.parse(issuedLog?.responseBody ?? "{}")).toMatchObject({
+        access_token: "[REDACTED]",
+        id_token: "[REDACTED]",
+        refresh_token: "[REDACTED]",
+      });
+
+      const malformedCredential = "credential-shaped-json-primitive";
+      const malformedCredentialResponse = await worker.fetch(urls.tokenEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(malformedCredential),
+      });
+      expect(malformedCredentialResponse.status).toBe(400);
+      const logAfterMalformedCredential = await callTool<{
+        entries: Array<{ path: string; requestBody: string | null }>;
+      }>(sessionId, "get_request_log", {
+        environmentId,
+        source: "inbound",
+        provider: "entra",
+        method: "POST",
+        limit: 20,
+      });
+      expect(JSON.stringify(logAfterMalformedCredential.entries)).not.toContain(
+        malformedCredential
+      );
+      expect(logAfterMalformedCredential.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: tokenPath,
+            requestBody: "[REDACTED authentication body]",
+          }),
+        ])
+      );
+
+      const malformedFormSecret = "credential-shaped-malformed-form";
+      const malformedFormResponse = await worker.fetch(urls.tokenEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: `grant_type=authorization_code&client%_secret=${malformedFormSecret}`,
+      });
+      expect(malformedFormResponse.status).toBeGreaterThanOrEqual(400);
+      const logAfterMalformedForm = await callTool<{
+        entries: Array<{ path: string; requestBody: string | null }>;
+      }>(sessionId, "get_request_log", {
+        environmentId,
+        source: "inbound",
+        provider: "entra",
+        method: "POST",
+        limit: 20,
+      });
+      expect(JSON.stringify(logAfterMalformedForm.entries)).not.toContain(
+        malformedFormSecret
+      );
+      expect(logAfterMalformedForm.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: tokenPath,
+            requestBody: "[REDACTED malformed form body]",
+          }),
+        ])
+      );
 
       await expect(
         callTool<{ matched: number; pass: boolean }>(sessionId, "assert_requests", {
@@ -310,6 +410,91 @@ describe("hosted OAuth lifecycle cascade", () => {
           count: { exactly: 1 },
         })
       ).resolves.toMatchObject({ pass: true, matched: 1 });
+
+      await callTool(sessionId, "simulate_lifecycle", {
+        environmentId,
+        userId,
+        action: "reactivate",
+      });
+      const malformedRedirectUri = "https://client.example/lifecycle-%ZZ-callback";
+      const malformedLocationClientId = "malformed-location-client";
+      await callTool(sessionId, "create_application", {
+        environmentId,
+        name: "Malformed redirect evidence client",
+        clientId: malformedLocationClientId,
+        clientSecret: "malformed-location-client-secret",
+        redirectUris: [malformedRedirectUri],
+        grantTypes: ["authorization_code"],
+        appRoles: [],
+        groupClaimsMode: "none",
+      });
+      const malformedLocationAuthorizeUrl = new URL(urls.authorizationEndpoint);
+      malformedLocationAuthorizeUrl.search = new URLSearchParams({
+        client_id: malformedLocationClientId,
+        redirect_uri: malformedRedirectUri,
+        response_type: "code",
+        response_mode: "query",
+        scope: "openid profile",
+        state: "malformed-location-state",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        login_hint: userName,
+      }).toString();
+      const malformedLocationPage = await worker.fetch(malformedLocationAuthorizeUrl);
+      expect(malformedLocationPage.status).toBe(200);
+      const malformedLocationAction = /<form method="post" action="([^"]+)">/.exec(
+        await malformedLocationPage.text()
+      )?.[1];
+      expect(malformedLocationAction).toBeTruthy();
+      const malformedLocationLogin = await formRequest(
+        new URL(malformedLocationAction ?? "", publicOrigin).href,
+        {
+          client_id: malformedLocationClientId,
+          redirect_uri: malformedRedirectUri,
+          response_type: "code",
+          response_mode: "query",
+          scope: "openid profile",
+          state: "malformed-location-state",
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          username: userName,
+          password,
+        }
+      );
+      expect(malformedLocationLogin.status).toBe(302);
+      const malformedLocationValue =
+        malformedLocationLogin.headers.get("location") ?? "";
+      expect(malformedLocationValue).toContain("%ZZ");
+      const malformedLocationCode = new URL(malformedLocationValue).searchParams.get(
+        "code"
+      );
+      expect(malformedLocationCode).toBeTruthy();
+      const malformedLocationLog = await callTool<{
+        entries: Array<{
+          path: string;
+          responseHeaders: Record<string, string>;
+        }>;
+      }>(sessionId, "get_request_log", {
+        environmentId,
+        source: "inbound",
+        provider: "entra",
+        method: "POST",
+        path: authorizePath,
+        limit: 20,
+      });
+      expect(JSON.stringify(malformedLocationLog.entries)).not.toContain(
+        malformedLocationCode
+      );
+      expect(malformedLocationLog.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: authorizePath,
+            responseHeaders: expect.objectContaining({
+              location: "[REDACTED location]",
+            }),
+          }),
+        ])
+      );
     } finally {
       if (environmentId) {
         const deleted = await callTool<{

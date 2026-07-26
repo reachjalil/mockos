@@ -8,7 +8,9 @@
       "!!**/.turbo",
       "!!**/.wrangler",
       "!!**/coverage",
-      "!!apps/worker/worker-configuration.d.ts"
+      "!!apps/worker/worker-configuration.d.ts",
+      "!!packages/openapi/openapi/mockos-management.v1.json",
+      "!!docs/reference/management-operations.v1.json"
     ]
   },
   "formatter": {

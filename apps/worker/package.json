@@ -18,9 +18,13 @@
     "hono": "catalog:"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@mockos/client": "workspace:*",
     "@mockos/testkit": "workspace:*",
+    "openai": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:"

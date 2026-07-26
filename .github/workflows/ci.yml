@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - dev
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -38,6 +39,10 @@ jobs:
         run: node scripts/check-doc-status.mjs
       - name: Verify generated M6 parity evidence
         run: pnpm m6:parity:check
+      - name: Verify generated F0 API and client artifacts
+        run: pnpm f0:drift:check
+      - name: Verify F0 pins and disabled runtime boundaries
+        run: pnpm f0:guards:check
       - name: Verify brand asset manifest
         run: pnpm brand:check
       - name: Enforce public dependency direction
@@ -90,6 +95,40 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm e2e:provisioning
+
+  entra-msal-e2e:
+    name: Entra MSAL Node wrangler-dev E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm e2e:entra-msal
+      - run: pnpm e2e:entra-msal-cleanup
+
+  okta-authjs-e2e:
+    name: Okta Auth JS wrangler-dev E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm e2e:okta-authjs
+      - run: pnpm e2e:okta-authjs-cleanup
 
   build:
     name: Build

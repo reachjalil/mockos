@@ -1,0 +1,88 @@
+# mockOS
+
+> MCP-first deterministic Entra ID, Okta, and agent-dependency test
+> infrastructure. Agents and automation control synthetic environments through
+> management MCP; applications under test call the returned identity or mock-MCP
+> and mock-LLM data planes.
+
+## Start
+
+- [Documentation index](docs/README.md): task-oriented map for humans and agents.
+- [MCP-first quickstart](docs/getting-started/mcp-first.md): connect, discover,
+  create, test, assert, and clean up.
+- [Interface model](docs/concepts/interface-model.md): management MCP versus
+  provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.
+- [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
+  resources, resource templates, and prompts from an agent under test.
+- [Salesforce SObject Reads blueprint](docs/blueprints/salesforce-sobject-reads.md):
+  install and call the built-in six-tool, secret-free synthetic fixture.
+- [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call
+  its bounded streaming OpenAI or Anthropic provider data plane.
+- [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,
+  probe models, call Chat Completions, test failures, and clean up safely.
+- [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md): create through
+  MCP, probe models, call Messages, test version/auth failures, and clean up safely.
+- [Management tool reference](docs/reference/management-tools.md): generated
+  reference for all 27 current MCP tools.
+- [Machine operation catalog](docs/reference/management-operations.v1.json):
+  generated schemas and capability metadata.
+- [Machine mock-MCP blueprint catalog](docs/reference/mock-mcp-blueprints.v1.json):
+  generated full built-in definitions, provenance, fidelity, and evidence limits.
+- [Machine product capability index](docs/reference/product-capabilities.v1.json):
+  generated non-exhaustive F0-F2 support slice, executable provenance, exact
+  specifications, anchored limitations, and independent evidence dimensions.
+- [Mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json):
+  generated route, auth, request-limit, planning, and evidence contract.
+- [Mock Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json):
+  generated route, version-header, auth, request-limit, planning, and evidence
+  contract.
+- [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated
+  reference for the 5 implemented HTTP routes.
+
+## Current capability boundary
+
+- Management MCP: implemented at `/mcp` with
+  27 tools over Streamable HTTP.
+- Tested MCP revision: `2025-11-25`;
+  standalone GET streaming is unsupported.
+- Self-hosted management HTTP: 5 implemented
+  routes under `/__mockos/v1`.
+- `env:ro` and `env:rw`: metadata only, not enforced scoped-key permissions.
+- F1 mock MCP servers: source-qualified locally at
+  `/e/{environmentId}/mcp-mock/{slug}` or
+  `https://{environmentId}.{baseDomain}/mcp-mock/{slug}`; deployed acceptance is
+  `unqualified`.
+- F1 mock MCP definition mutations are MCP-only atomic CAS operations:
+  `put` requires null-create or positive-current-replace intent, canonical replay
+  precedes CAS, and reset/delete require the positive current revision.
+- F1 includes one built-in, secret-free Salesforce SObject Reads server-definition
+  preset with six deterministic read tools. It is documentation-derived, makes no
+  provider network or REST call, claims no provider output-wire parity, and is not
+  the F5 portable blueprint/export/import/gallery system.
+- F2 mock LLM definitions: four MCP-only operations are source-implemented with
+  baseline environment persistence and write-only provider Mock Credentials.
+- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic
+  Messages/model subsets, including SSE and metadata-only request-log
+  observation/query/assert/sequence support, are source-qualified locally;
+  state/reset, Anthropic betas, configured midstream errors, actual-network
+  qualification, Cloud pinning, and deployment remain unavailable or unqualified.
+- F3 script execution: unavailable; `NoSandbox` fails closed.
+- F6 Code Mode `search` and `execute`: unavailable and disabled.
+- CLI and typed client: unpublished.
+
+## Safety and evidence
+
+- [Known limitations](docs/known-limitations.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Threat model](docs/security/threat-model.md)
+- [Requirements traceability](docs/requirements-traceability.md)
+- Never put management keys, real identities, real provider tokens, or customer
+  data in fixtures, logs, examples, or reports.
+- Source, deployed mock acceptance, and verified-live provider evidence are
+  independent claims. No current fixture is verified-live.
+
+## More context
+
+- [Curated full agent context](llms-full.txt)
+- [Public repository README](README.md)
+- [Testing skill](skills/mockos-testing/SKILL.md)

@@ -1,0 +1,33 @@
+{
+  "name": "okta-authn-factor-verify-invalid-passcode",
+  "description": "An invalid synthetic software-factor passcode returns the bounded Okta E0000068 error without completing the transaction.",
+  "provider": "okta",
+  "area": "authn",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/authn/factors/{factorId}/verify",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "stateToken": "{stateToken}",
+      "passCode": "111111"
+    }
+  },
+  "expected": {
+    "status": 403,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "bodyContains": {
+      "errorCode": "E0000068",
+      "errorSummary": "Invalid Passcode/Answer",
+      "errorLink": "E0000068"
+    }
+  },
+  "provenance": "official-docs",
+  "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#verify-totp-factor",
+  "lastVerified": "2026-07-26",
+  "status": "implemented",
+  "notes": "The fixture runner replaces factorId and stateToken from a fresh MFA_REQUIRED response. Focused core tests prove that an invalid passcode does not consume the transaction."
+}

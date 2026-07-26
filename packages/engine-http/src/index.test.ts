@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
+import { DeviceAuthorizationError } from "@mockos/core";
 import { createEntraHttpApp, type EntraHttpEngine, OAuthProtocolError } from "./index";
 
 const tenantId = "0f6f4756-741d-4a4b-83b2-5f2e37ec621d";
 
 const engine: EntraHttpEngine = {
   tenantId,
+  activateDeviceAuthorization: () => undefined,
   authorize: () => ({ code: "unused" }),
+  createDeviceAuthorization: (input) => ({
+    deviceCode: "device-code",
+    userCode: "ABCD2345",
+    verificationUri: `${input.directoryBaseUrl}/devicelogin`,
+    expiresIn: 900,
+    interval: 5,
+  }),
+  denyDeviceAuthorization: () => undefined,
   discovery: (issuer) => ({ issuer }),
   jwks: () => ({ keys: [] }),
   token: () => ({ accessToken: "unused", expiresIn: 3600 }),
@@ -255,6 +265,201 @@ describe("Entra token grants", () => {
       error: "invalid_grant",
       error_codes: [50057],
       error_description: expect.stringContaining("AADSTS50057"),
+    });
+  });
+
+  it.each(["device_code", "urn:ietf:params:oauth:grant-type:device_code"])(
+    "normalizes the %s device grant and propagates trusted Graph routing",
+    async (grantType) => {
+      const token = vi.fn(() => ({
+        accessToken: "device-access-token",
+        expiresIn: 3_600,
+        scope: "openid offline_access",
+      }));
+      const response = await createEntraHttpApp({
+        engine: { ...engine, token },
+      }).request(
+        tokenPath,
+        withIssuer(
+          new URLSearchParams({
+            grant_type: grantType,
+            client_id: "public-client",
+            device_code: "device-code",
+          })
+        )
+      );
+
+      expect(response.status).toBe(200);
+      expect(token).toHaveBeenCalledWith({
+        grantType: "urn:ietf:params:oauth:grant-type:device_code",
+        graphBaseUrl,
+        issuerBase: issuer,
+        clientId: "public-client",
+        deviceCode: "device-code",
+      });
+    }
+  );
+
+  it.each([
+    ["authorization_pending", "authorization_pending"],
+    ["access_denied", "authorization_declined"],
+    ["invalid_grant", "bad_verification_code"],
+    ["expired_token", "expired_token"],
+    ["slow_down", "slow_down"],
+  ] as const)(
+    "renders device error %s as %s without Retry-After",
+    async (coreError, wireError) => {
+      const response = await createEntraHttpApp({
+        engine: {
+          ...engine,
+          token: () => {
+            throw new DeviceAuthorizationError(coreError);
+          },
+        },
+      }).request(
+        tokenPath,
+        withIssuer(
+          new URLSearchParams({
+            grant_type: "device_code",
+            client_id: "public-client",
+            device_code: "device-code",
+          })
+        )
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("retry-after")).toBeNull();
+      expect(await response.json()).toMatchObject({ error: wireError });
+    }
+  );
+});
+
+describe("Entra device authorization", () => {
+  const issuer = `https://login.mockos.test/${tenantId}/v2.0`;
+  const directoryBaseUrl = "https://environment.id.mockos.test";
+  const devicePath = `https://do.internal/${tenantId}/oauth2/v2.0/devicecode`;
+
+  it("creates an exact 900/5 Microsoft response without a complete URI", async () => {
+    const createDeviceAuthorization = vi.fn(engine.createDeviceAuthorization);
+    const response = await createEntraHttpApp({
+      engine: { ...engine, createDeviceAuthorization },
+    }).request(devicePath, {
+      method: "POST",
+      headers: {
+        "x-mockos-directory-base": directoryBaseUrl,
+        "x-mockos-issuer-base": issuer,
+      },
+      body: new URLSearchParams({
+        client_id: "public-client",
+        scope: "openid profile offline_access",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      device_code: "device-code",
+      user_code: "ABCD2345",
+      verification_uri: `${directoryBaseUrl}/devicelogin`,
+      expires_in: 900,
+      interval: 5,
+      message:
+        `To sign in, use a web browser to open the page ${directoryBaseUrl}/devicelogin ` +
+        "and enter the code ABCD2345 to authenticate.",
+    });
+    expect(createDeviceAuthorization).toHaveBeenCalledWith({
+      clientId: "public-client",
+      directoryBaseUrl,
+      issuerBase: issuer,
+      scope: "openid profile offline_access",
+    });
+  });
+
+  it("requires trusted issuer and directory routing metadata", async () => {
+    const createDeviceAuthorization = vi.fn(engine.createDeviceAuthorization);
+    const response = await createEntraHttpApp({
+      engine: { ...engine, createDeviceAuthorization },
+    }).request(devicePath, {
+      method: "POST",
+      headers: { "x-mockos-issuer-base": issuer },
+      body: new URLSearchParams({
+        client_id: "public-client",
+        scope: "openid",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(createDeviceAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("renders activation and dispatches explicit approve and deny decisions", async () => {
+    const activateDeviceAuthorization = vi.fn();
+    const denyDeviceAuthorization = vi.fn();
+    const app = createEntraHttpApp({
+      engine: {
+        ...engine,
+        activateDeviceAuthorization,
+        denyDeviceAuthorization,
+      },
+    });
+
+    const page = await app.request(
+      "https://do.internal/devicelogin?user_code=ABCD2345",
+      {
+        headers: { "x-mockos-public-path": "/e/test-env/devicelogin" },
+      }
+    );
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("Sign in on this device");
+    expect(html).toContain('action="/e/test-env/devicelogin"');
+    expect(html).toContain('value="ABCD2345"');
+    expect(html).toContain('name="decision" value="approve"');
+    expect(html).toContain('name="decision" value="deny"');
+
+    const approved = await app.request("https://do.internal/devicelogin", {
+      method: "POST",
+      headers: { "x-mockos-public-path": "/e/test-env/devicelogin" },
+      body: new URLSearchParams({
+        user_code: "ABCD2345",
+        username: "ada@example.test",
+        password: "Passw0rd!",
+        decision: "approve",
+      }),
+    });
+    expect(approved.status).toBe(200);
+    expect(await approved.text()).toContain("Device authorized");
+    expect(activateDeviceAuthorization).toHaveBeenCalledWith({
+      userCode: "ABCD2345",
+      username: "ada@example.test",
+      password: "Passw0rd!",
+    });
+
+    const unauthenticatedDenial = await app.request("https://do.internal/devicelogin", {
+      method: "POST",
+      body: new URLSearchParams({
+        user_code: "EFGH6789",
+        decision: "deny",
+      }),
+    });
+    expect(unauthenticatedDenial.status).toBe(400);
+    expect(denyDeviceAuthorization).not.toHaveBeenCalled();
+
+    const denied = await app.request("https://do.internal/devicelogin", {
+      method: "POST",
+      body: new URLSearchParams({
+        user_code: "EFGH6789",
+        username: "ada@example.test",
+        password: "Passw0rd!",
+        decision: "deny",
+      }),
+    });
+    expect(denied.status).toBe(200);
+    expect(await denied.text()).toContain("Device authorization declined");
+    expect(denyDeviceAuthorization).toHaveBeenCalledWith({
+      userCode: "EFGH6789",
+      username: "ada@example.test",
+      password: "Passw0rd!",
     });
   });
 });

@@ -1,171 +1,148 @@
 <p align="center">
-  <img src="./assets/brand/mockos-mark.svg" width="112" alt="">
+  <img src="./assets/brand/mockos-mark.svg" width="96" alt="">
 </p>
 
-<h1 align="center"><span aria-hidden="true">🥸</span> mockOS</h1>
+<h1 align="center">mockOS</h1>
 
-<p align="center"><strong>Mock identity infrastructure for integration tests.</strong></p>
+<p align="center"><strong>Mock identity, MCP, and LLM infrastructure for integration tests.</strong></p>
 
-<p align="center">Deterministic Entra ID and Okta protocol surfaces for testing real integrations.</p>
+<p align="center">Give applications and agents realistic dependencies without creating real tenants, accounts, or production data.</p>
 
-> **Project status:** M0 through M3 are accepted at exact revision
-> `8645f405d5e3b922c30d51339b8b27f9fe30d93e`. M5 outbound provisioning is manually
-> accepted for exact public runtime revision
-> `ac8d6d1b29003b7e9a9087d33c3dc2c4c3d55a93`: local/full gates, hosted CI, manual
-> staging-before-production rollout, and source-paired controlled-target Workflow
-> acceptance are green. The bounded M6 slice is accepted at exact public revision
-> `a01fb6abbaf85e2cd98b42a3839bebe7451cf8da`: the full local gate, hosted CI, manual
-> staging-before-production rollout, and exact-version smoke of Classic Authn, SCIM
-> edges, signing-key rotation, token skew/broken tokens, and 200/201 group overage are
-> green. This is sampled deployed mock evidence, not corpus-wide or verified-live
-> parity. The guarded GitHub promotion workflows remain unqualified. This is not yet a
-> stable npm release or a production-SLA service. See the
-> [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
+<p align="center">
+  <a href="https://github.com/reachjalil/mockos/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/reachjalil/mockos/ci.yml?branch=main&amp;label=CI"></a>
+  <a href="https://github.com/reachjalil/mockos/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/reachjalil/mockos?include_prereleases&amp;sort=semver"></a>
+  <a href="./LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/github/license/reachjalil/mockos"></a>
+</p>
 
-mockOS is an Apache-2.0 open-core project for testing OIDC/OAuth 2.0, SCIM 2.0,
-directory lifecycle, RBAC, and failure handling without depending on a real enterprise
-tenant. Provider expectations live as source-attributed fixtures; deterministic clock,
-randomness, and SQLite seams make failures reproducible.
+<p align="center">
+  <a href="./docs/getting-started/mcp-first.md">Get started</a>
+  ·
+  <a href="./docs/README.md">Documentation</a>
+  ·
+  <a href="./CHANGELOG.md">Changelog</a>
+  ·
+  <a href="https://github.com/reachjalil/mockos/releases">Releases</a>
+  ·
+  <a href="./CONTRIBUTING.md">Contributing</a>
+</p>
 
-The target deployment is Cloudflare-forward: Workers, SQLite Durable Objects,
-Workflows, Queues, KV, and an Agents SDK MCP server. This public repository contains
-the portable engine and a self-hostable Worker. Operated-service code lives separately
-and may consume explicit public seams; this repository does not import or require that
-private control plane, licensing, billing, or a hosted mockOS account.
+mockOS creates isolated, deterministic test environments for Entra ID, Okta, SCIM,
+MCP, and bounded OpenAI- and Anthropic-shaped APIs. Configure an environment through
+MCP, point the system under test at the returned endpoints, exercise the flow, and
+assert exactly what happened.
 
-## What exists now
+It is built for repeatable integration testing:
 
-- Workspace and package scaffolding
-- Runtime-independent contracts, append-only migrations, versioned User/Group and
-  application repositories, SCIM filter/PATCH behavior, and provider lifecycle policy
-- An Okta OIDC profile covering discovery, hosted authorization code + S256 PKCE,
-  refresh exchange, token introspection and revocation, and RFC 8628 device
-  authorization in local tests
-- Entra and Okta refresh-token rotation with scope narrowing, replay-family
-  invalidation, and lifecycle-driven access/refresh revocation
-- An accepted SCIM 2.0 Users/Groups surface at `/scim/v2`, bounded
-  Microsoft Graph reads at `/graph/v1.0`, and an Okta Users/Groups lifecycle API at
-  `/api/v1`
-- A synchronous `node:sqlite` test store
-- Deterministic test clock and RNG, persisted deterministic scenarios, bounded request
-  logs, and request assertions
-- Fixture schema, loader, and runner; 38 source-reviewed Entra OIDC fixtures (30
-  documented and eight implemented M6 cases that execute through the local Worker);
-  22 documented Okta OIDC fixtures; and a locally and hosted-CI green 113-case
-  RFC/Entra/Okta SCIM corpus
-- A bounded M6 implementation for deterministic signing-key rotation/JWKS overlap,
-  plus/minus token-claim clock skew, five explicit broken-token variants, and Entra
-  group claims inline through 200 with a trusted same-environment Graph fallback at
-  201 and a 1,000-ID response ceiling
-- A bounded M6 implementation for injection-locked SCIM `409` conflict and
-  soft-delete race behavior plus two case-specific malformed-PATCH tolerances; strict
-  parsing remains the default and unrelated defects are not repaired
-- A bounded M6 Okta Classic Authn implementation for `SUCCESS`, `MFA_REQUIRED`,
-  `PASSWORD_EXPIRED`, and explicit `LOCKED_OUT`, with state retrieval/cancellation and
-  one-time session capabilities. State retrieval slides the five-minute state expiry;
-  session expiry stays fixed at five minutes. Each table is capped at 10,000 retained
-  rows, each User at 32 rows per capability kind, oldest-expiring rows are evicted, and each
-  issuance prunes at most 256 expired rows per table through schema-v5-compatible
-  operational indexes
-- Same-origin Classic Authn CORS that allows only `POST` with `accept` and/or
-  `content-type`, never enables credentialed CORS, and rejects cross-origin requests
-  with `403`; provider-shaped responses use the singular `_embedded.factor` array and
-  omit `passwordChanged`. Lifecycle and SCIM password changes revoke pending state and
-  session capabilities, while Authn body fields and sensitive headers are recursively
-  redacted from request logs
-- Cloudflare path routing and a SQLite Durable Object integration that completes hosted
-  login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
-  claims, and JWKS signature verification in focused local suites
-- An accepted authenticated Agents SDK MCP server whose M5 registry adds
-  `run_provisioning_cycle` as tool 15
-- The unpublished `@mockos/cli` 0.1.0 source command surface, including
-  `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
-  negotiation
-- A tested M5 implementation for deterministic Entra/Okta outbound SCIM planning and
-  interpretation, batched Cloudflare Workflow execution, bounded/redacted HTTP
-  capture, SSRF policy enforcement, and environment-scoped target credentials; the
-  current local Worker, worker-kit, repository, and two-process e2e gates are green
-- A local target-app example for exercising outbound SCIM sequences, plus ordered
-  request assertions that count non-overlapping matches and can check response shapes
-- Accepted M3 staging and production Worker deployments with exact-revision evidence,
-  repeatable smoke, CI, documentation, and a repository testing skill
+- **Deterministic by default.** Stable seeds, an injectable clock, controlled
+  randomness, and explicit failure scenarios make bugs reproducible.
+- **Made for agents and automation.** MCP is the primary management interface, so a
+  test runner or coding agent can create, inspect, reset, and remove its own
+  environment.
+- **Protocol-shaped.** Applications use familiar OIDC, OAuth, SCIM, Graph-shaped,
+  Okta-shaped, MCP, OpenAI, and Anthropic endpoints.
+- **Observable.** Request logs and exact assertions make failures easier to diagnose
+  without relying on screenshots or manual tenant inspection.
+- **Safe to run locally.** The public repository is Apache-2.0 licensed and includes
+  a self-hostable Cloudflare Worker. Test data must always be synthetic.
 
-Management and protocol credentials are deliberately separate: MCP requires the
-configured Access Key, while SCIM/Graph accept non-empty synthetic Bearer values and
-the Okta API accepts a non-empty synthetic SSWS value. Those directory checks are mock
-scheme/presence boundaries, not production authorization; never forward the management
-key to them.
+## What can you test?
 
-Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
-token/key/overage fixtures are `implemented` and execute through an authenticated local
-Worker fixture runner. No OIDC fixture is `verified-live`. The 113 accepted SCIM
-fixtures and the separate M6 SCIM-edge corpus record source-implemented behavior; none
-is `verified-live`.
-The accepted M3 and M5 records remain distinct. M5 passed its
-[local full and two-process source gates](./docs/evidence/m5-local-source-qualification.md)
-and [exact-pair manual deployment/hosted acceptance](./docs/evidence/m5-workers-dev-smoke.md).
-That evidence does not qualify guarded promotion, standalone public Access-Key smoke,
-npm publication, or live-provider parity. M6 has a separate
-[sampled exact-version workers.dev acceptance](./docs/evidence/m6-workers-dev-smoke.md)
-for all six bounded slices. It does not promote the generated case index or fixture
-corpora to corpus-wide deployed or verified-live parity.
+| Area | Available surface |
+| --- | --- |
+| Identity | Entra ID- and Okta-shaped OIDC/OAuth flows, discovery, tokens, lifecycle, and selected failure cases |
+| Directory | SCIM 2.0, bounded Microsoft Graph reads, Okta-shaped user and group APIs, and outbound SCIM provisioning |
+| MCP clients and agents | Deterministic tools, resources, resource templates, and prompts on environment-hosted MCP servers |
+| LLM integrations | Bounded OpenAI Chat Completions and Anthropic Messages behavior, including JSON and streaming responses |
+| Test control | MCP-managed setup, scenarios, traffic inspection, assertions, and cleanup |
 
-## Evidence tiers
+Support is intentionally explicit rather than implied. Check the
+[implementation status](./docs/IMPLEMENTATION_STATUS.md) and
+[known limitations](./docs/known-limitations.md) before depending on a specific
+provider behavior or SDK path.
 
-- **Source** means an exact revision has linked automated local and/or hosted-CI
-  evidence. Hosted CI is still source evidence.
-- **Deployed** means an exact source revision and exact mockOS deployment/version have
-  a recorded smoke or acceptance run.
-- **Verified-live** is reserved for sanitized, independently reviewed comparison with
-  a real Entra ID tenant or Okta organization. No current fixture or milestone has
-  `verified-live` status.
+## How it works
 
-Source, deployed, and verified-live are independent claims; evidence at one tier never
-silently promotes another.
+1. A test runner, agent, or developer creates an isolated environment through
+   management MCP.
+2. mockOS returns provider-shaped endpoints and synthetic credentials for that
+   environment.
+3. The application or agent under test talks to those endpoints as if they were its
+   external dependencies.
+4. The test inspects captured traffic, asserts the expected behavior, and deletes the
+   environment.
 
-## Local verification
+Management credentials never belong on provider endpoints. The
+[interface model](./docs/concepts/interface-model.md) explains the separation between
+the management plane and each synthetic data plane.
 
-Requires Node 22.12+ and pnpm 10.30.2.
+## Run from source
+
+Requires Node.js 22.12 or newer and pnpm 10.30.2.
 
 ```sh
+git clone https://github.com/reachjalil/mockos.git
+cd mockos
+corepack enable
 pnpm install --frozen-lockfile
 pnpm check
 ```
 
-The concrete [local curl walkthrough](./docs/quickstarts/curl.md) uses the implemented
-control and protocol routes. Read [self-hosting](./docs/self-hosting.md) before trying
-Wrangler and [known limitations](./docs/known-limitations.md) before choosing an SDK.
-The sanitized [M6 workers.dev smoke evidence](./docs/evidence/m6-workers-dev-smoke.md)
-records the latest exact accepted candidate, version IDs, exercised flow, and cleanup result for
-[staging](https://mockos-staging.workspaceagent.workers.dev) and
-[production](https://mockos.workspaceagent.workers.dev).
+To run the Worker locally, add a development-only `API_KEY` to the ignored
+`apps/worker/.dev.vars` file, then start it:
 
-## Architecture
-
-```text
-contracts <- core <- engine-http <- worker-kit <- apps/worker
-                  \                  ^
-                   \---- testkit     |
-contracts ---------------- mcp ------+
+```dotenv
+API_KEY=choose-a-local-only-key
 ```
 
-The engine uses a synchronous `SqlStore` so SQLite Durable Objects and
-`node:sqlite` tests can share logic. Provider profiles adapt URLs, claims, errors, and
-dialects instead of forking the engine. Absolute issuer URLs must be derived per request
-and never persisted.
+```sh
+pnpm dev
+```
 
-## Documentation
+The local management endpoint is `http://127.0.0.1:8787/mcp`. Continue with the
+[MCP-first quickstart](./docs/getting-started/mcp-first.md) or the complete
+[self-hosting guide](./docs/self-hosting.md).
 
-Start at the [documentation index](./docs/README.md), then use
-[requirements traceability](./docs/requirements-traceability.md) and the
-[parity matrix](./docs/conformance/parity-matrix.md) to distinguish targets from
-evidence. The [brand guide](./docs/brand.md) defines the restrained use of 🥸 and the
-original vector assets.
+## Choose a guide
 
-## Contributing and security
+| Goal | Guide |
+| --- | --- |
+| Create and manage a test environment through MCP | [MCP-first quickstart](./docs/getting-started/mcp-first.md) |
+| Use the source-built command line | [CLI quickstart](./docs/getting-started/cli.md) |
+| Test an MCP client or agent | [Mock MCP guide](./docs/mock-mcp.md) |
+| Test an OpenAI SDK integration | [OpenAI SDK quickstart](./docs/quickstarts/openai-sdk.md) |
+| Test an Anthropic SDK integration | [Anthropic SDK quickstart](./docs/quickstarts/anthropic-sdk.md) |
+| Run an identity flow | [Entra SSO](./docs/quickstarts/entra-sso.md), [MSAL Node](./docs/quickstarts/entra-msal-node.md), or [Okta Auth JS](./docs/quickstarts/okta-auth-js-node.md) |
+| Exercise outbound provisioning | [Provisioning guide](./docs/quickstarts/provisioning-cycle.md) |
+| Deploy your own Worker | [Self-hosting](./docs/self-hosting.md) |
 
-Contributions are welcome under [CONTRIBUTING.md](./CONTRIBUTING.md). Do not use real
-identities, passwords, production access tokens, or platform credentials in fixtures.
-Report vulnerabilities through [SECURITY.md](./SECURITY.md).
+The [documentation index](./docs/README.md) contains the complete map, including
+security guidance, generated interface references, provider conformance, and detailed
+evidence.
 
-Licensed under the Apache License 2.0.
+## Project status
+
+mockOS is in active pre-1.0 development. The repository contains substantial tested
+behavior, but package publication, broad provider parity, and production-SLA support
+are not complete. Detailed qualification and deployment evidence lives in the
+[implementation status ledger](./docs/IMPLEMENTATION_STATUS.md), not in this welcome
+page. Review the [known limitations](./docs/known-limitations.md) before choosing a
+provider surface or client SDK.
+
+## Releases
+
+Versioned source releases are published on
+[GitHub Releases](https://github.com/reachjalil/mockos/releases) and summarized in the
+[changelog](./CHANGELOG.md). `v0.1.0-rc.1` is the first tagged source preview.
+
+There is no stable npm release yet. Until a release explicitly confirms registry
+publication, clone the repository and run mockOS from source. Prerelease tags describe
+the exact source they contain; they do not imply complete provider parity or a
+production SLA.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a
+pull request, and use only synthetic identities and credentials. Security issues
+should be reported privately as described in [SECURITY.md](./SECURITY.md).
+
+Licensed under the [Apache License 2.0](./LICENSE).

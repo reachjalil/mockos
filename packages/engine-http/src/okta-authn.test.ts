@@ -44,6 +44,7 @@ const createEngine = (): OktaAuthnEngine => ({
   authenticate: vi.fn(async () => success),
   getTransaction: vi.fn(async () => mfa),
   cancel: vi.fn(async () => undefined),
+  verifyFactor: vi.fn(async () => success),
 });
 
 const jsonRequest = (body: unknown, headers: Record<string, string> = {}) => ({
@@ -140,27 +141,102 @@ describe("Okta Classic Authn HTTP adapter", () => {
     });
 
     const expiredResponse = await request("expired-password");
-    expect(await expiredResponse.json()).toMatchObject({
+    const expiredBody = await expiredResponse.json();
+    expect(expiredBody).toMatchObject({
       status: "PASSWORD_EXPIRED",
       _links: {
-        next: {
-          name: "changePassword",
-          href: "https://do.internal/e/env_authn/api/v1/authn/credentials/change_password",
-        },
-      },
-    });
-
-    const lockedResponse = await request("locked-password");
-    expect(await lockedResponse.json()).toEqual({
-      status: "LOCKED_OUT",
-      _links: {
-        next: {
-          name: "unlock",
-          href: "https://do.internal/e/env_authn/api/v1/authn/recovery/unlock",
+        cancel: {
+          href: "https://do.internal/e/env_authn/api/v1/authn/cancel",
           hints: { allow: ["POST"] },
         },
       },
     });
+    expect(expiredBody).not.toHaveProperty("_links.next");
+
+    const lockedResponse = await request("locked-password");
+    expect(await lockedResponse.json()).toEqual({ status: "LOCKED_OUT" });
+  });
+
+  it("mounts every emitted MFA action and verifies the exact factor transaction", async () => {
+    vi.mocked(engine.authenticate).mockResolvedValue(mfa);
+    const app = createOktaAuthnApi({ engine });
+    const primary = await app.request(
+      "https://do.internal/api/v1/authn",
+      jsonRequest(
+        { username: user.userName, password: "SyntheticPassw0rd!" },
+        { "x-mockos-public-path": "/e/env_authn/api/v1/authn" }
+      )
+    );
+    const body = (await primary.json()) as {
+      stateToken: string;
+      _embedded: {
+        factor: Array<{
+          id: string;
+          _links: { verify: { href: string; hints: { allow: string[] } } };
+        }>;
+      };
+      _links: { cancel: { href: string; hints: { allow: string[] } } };
+    };
+    const factor = body._embedded.factor[0];
+    expect(factor).toBeDefined();
+    expect(factor?._links.verify.hints.allow).toEqual(["POST"]);
+    expect(body._links.cancel.hints.allow).toEqual(["POST"]);
+
+    const verifyPublicPath = new URL(factor?._links.verify.href ?? "").pathname;
+    const verify = await app.request(
+      `https://do.internal/api/v1/authn/factors/${factor?.id}/verify`,
+      jsonRequest(
+        { stateToken: body.stateToken, passCode: "000000" },
+        { "x-mockos-public-path": verifyPublicPath }
+      )
+    );
+    expect(verify.status).toBe(200);
+    expect(await verify.json()).toMatchObject({
+      status: "SUCCESS",
+      sessionToken: "session_fixture_value",
+    });
+    expect(engine.verifyFactor).toHaveBeenCalledWith({
+      factorId: factor?.id,
+      passCode: "000000",
+      stateToken: body.stateToken,
+    });
+
+    const cancelPublicPath = new URL(body._links.cancel.href).pathname;
+    const cancel = await app.request("https://do.internal/api/v1/authn/cancel", {
+      ...jsonRequest({ stateToken: body.stateToken }),
+      headers: {
+        "content-type": "application/json",
+        "x-mockos-public-path": cancelPublicPath,
+      },
+    });
+    expect(cancel.status).toBe(200);
+  });
+
+  it("renders the exact invalid-passcode error without reflecting the passcode", async () => {
+    vi.mocked(engine.verifyFactor).mockRejectedValue(
+      new OktaAuthnError("INVALID_PASSCODE")
+    );
+    const app = createOktaAuthnApi({
+      engine,
+      requestId: () => "req_invalid_passcode",
+    });
+    const response = await app.request(
+      `https://do.internal/api/v1/authn/factors/mfa_${user.id}/verify`,
+      jsonRequest({
+        stateToken: "state_fixture_value",
+        passCode: "111111",
+      })
+    );
+    expect(response.status).toBe(403);
+    const responseText = await response.text();
+    expect(JSON.parse(responseText)).toEqual({
+      errorCode: "E0000068",
+      errorSummary: "Invalid Passcode/Answer",
+      errorLink: "E0000068",
+      errorId: "req_invalid_passcode",
+      errorCauses: [],
+    });
+    expect(responseText).not.toContain("111111");
   });
 
   it("retrieves and cancels an exact state token", async () => {
@@ -337,6 +413,20 @@ describe("Okta Classic Authn HTTP adapter", () => {
     const method = await app.request("https://do.internal/api/v1/authn");
     expect(method.status).toBe(405);
     expect(method.headers.get("allow")).toBe("POST");
+    const invalidPasscode = await app.request(
+      `https://do.internal/api/v1/authn/factors/mfa_${user.id}/verify`,
+      jsonRequest({
+        stateToken: "state_fixture_value",
+        passCode: "not-six-digits",
+      })
+    );
+    expect(invalidPasscode.status).toBe(400);
+    const factorMethod = await app.request(
+      `https://do.internal/api/v1/authn/factors/mfa_${user.id}/verify`
+    );
+    expect(factorMethod.status).toBe(405);
+    expect(factorMethod.headers.get("allow")).toBe("POST");
     expect(engine.authenticate).not.toHaveBeenCalled();
+    expect(engine.verifyFactor).not.toHaveBeenCalled();
   });
 });

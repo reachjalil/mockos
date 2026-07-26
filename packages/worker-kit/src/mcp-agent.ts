@@ -1,9 +1,21 @@
 import type {
   EnvironmentConfig,
+  MockLlmServerView,
+  MockMcpServerView,
   ProviderId,
   ProvisioningWorkflowParams,
 } from "@mockos/contracts";
-import { createTenantId } from "@mockos/core";
+import {
+  mockLlmServerListSchema,
+  mockLlmServerViewSchema,
+  mockMcpServerListSchema,
+  mockMcpServerViewSchema,
+} from "@mockos/contracts";
+import {
+  createTenantId,
+  listMockMcpBlueprints,
+  requireMockMcpBlueprint,
+} from "@mockos/core";
 import {
   type MockosToolDependencies,
   MockosToolError,
@@ -34,6 +46,21 @@ export type MockosMcpBindings = {
   PROVISIONING_WORKFLOW: Workflow<ProvisioningWorkflowParams>;
   PUBLIC_ORIGIN: string;
   TID_INDEX?: KVNamespace;
+};
+
+type MockMcpEnvironmentRpc = {
+  putMockMcpServer(input: unknown, expectedRevision: number | null): Promise<unknown>;
+  listMockMcpServers(): Promise<unknown>;
+  getMockMcpServer(slug: string): Promise<unknown>;
+  deleteMockMcpServer(slug: string, expectedRevision: number): Promise<true>;
+  resetMockMcpState(slug: string, expectedRevision: number): Promise<number>;
+};
+
+type MockLlmEnvironmentRpc = {
+  putMockLlmServer(input: unknown, expectedRevision: number | null): Promise<unknown>;
+  listMockLlmServers(): Promise<unknown>;
+  getMockLlmServer(slug: string): Promise<unknown>;
+  deleteMockLlmServer(slug: string, expectedRevision: number): Promise<boolean>;
 };
 
 const newEnvironmentConfig = (
@@ -102,6 +129,142 @@ const provisioningToolError = (error: unknown): MockosToolError | undefined => {
   return undefined;
 };
 
+const missingMockMcpServer = (slug: string): MockosToolError =>
+  new MockosToolError({
+    type: "https://mockos.live/problems/mock-mcp-server-not-found",
+    title: "Mock MCP server not found",
+    status: 404,
+    detail: `Mock MCP server '${slug}' is not available in the selected environment.`,
+    code: "MOCK_MCP_SERVER_NOT_FOUND",
+  });
+
+const missingMockMcpBlueprint = (blueprintId: string): MockosToolError =>
+  new MockosToolError({
+    type: "https://mockos.live/problems/mock-mcp-blueprint-not-found",
+    title: "Mock MCP blueprint not found",
+    status: 404,
+    detail: `Mock MCP blueprint '${blueprintId}' is not available.`,
+    code: "MOCK_MCP_BLUEPRINT_NOT_FOUND",
+  });
+
+const requireBlueprint = (blueprintId: string) => {
+  try {
+    return requireMockMcpBlueprint(blueprintId);
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? Reflect.get(error, "code")
+        : undefined;
+    if (code === "blueprint_not_found") {
+      throw missingMockMcpBlueprint(blueprintId);
+    }
+    throw error;
+  }
+};
+
+const mockMcpToolError = (
+  error: unknown,
+  slug: string
+): MockosToolError | undefined => {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? Reflect.get(error, "code")
+      : undefined;
+  if (code === "server_not_found") return missingMockMcpServer(slug);
+  if (code === "server_revision_mismatch") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+      title: "Mock MCP server revision conflict",
+      status: 409,
+      detail:
+        "Read the current mock MCP server revision and retry the mutation against that revision.",
+      code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+    });
+  }
+  if (code === "server_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-limit",
+      title: "Mock MCP server limit reached",
+      status: 409,
+      detail:
+        "Delete an existing mock MCP server before creating another in this environment.",
+      code: "MOCK_MCP_SERVER_LIMIT",
+    });
+  }
+  if (code === "server_revision_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-revision-limit",
+      title: "Mock MCP server revision capacity reached",
+      status: 409,
+      detail:
+        "This environment cannot safely allocate another mock MCP server revision.",
+      code: "MOCK_MCP_SERVER_REVISION_LIMIT",
+    });
+  }
+  if (code === "invalid_expected_revision") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-expected-revision-invalid",
+      title: "Mock MCP expected revision is invalid",
+      status: 400,
+      detail:
+        "Expected revision must be a positive safe integer; put accepts null only when creating a server.",
+      code: "MOCK_MCP_EXPECTED_REVISION_INVALID",
+    });
+  }
+  return undefined;
+};
+
+const missingMockLlmServer = (slug: string): MockosToolError =>
+  new MockosToolError({
+    type: "https://mockos.live/problems/mock-llm-server-not-found",
+    title: "Mock LLM server not found",
+    status: 404,
+    detail: `Mock LLM server '${slug}' is not available in the selected environment.`,
+    code: "MOCK_LLM_SERVER_NOT_FOUND",
+  });
+
+const mockLlmToolError = (
+  error: unknown,
+  slug: string
+): MockosToolError | undefined => {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? Reflect.get(error, "code")
+      : undefined;
+  if (code === "server_not_found") return missingMockLlmServer(slug);
+  if (code === "server_revision_mismatch") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-llm-server-revision-conflict",
+      title: "Mock LLM server revision conflict",
+      status: 409,
+      detail:
+        "Read the current mock LLM server revision and retry the mutation against that revision.",
+      code: "MOCK_LLM_SERVER_REVISION_CONFLICT",
+    });
+  }
+  if (code === "server_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-llm-server-limit",
+      title: "Mock LLM server limit reached",
+      status: 409,
+      detail:
+        "Delete an existing mock LLM server before creating another in this environment.",
+      code: "MOCK_LLM_SERVER_LIMIT",
+    });
+  }
+  if (code === "server_revision_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-llm-server-revision-limit",
+      title: "Mock LLM server revision capacity reached",
+      status: 409,
+      detail:
+        "This environment cannot safely allocate another mock LLM server revision.",
+      code: "MOCK_LLM_SERVER_REVISION_LIMIT",
+    });
+  }
+  return undefined;
+};
+
 /** Stateful, authenticated management MCP. Each transport session owns its cursor. */
 export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> {
   server = new McpServer({ name: "mockOS", version: "0.1.0" });
@@ -118,6 +281,19 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
 
   #environment(environmentId: string) {
     return this.env.ENVIRONMENTS.get(this.env.ENVIRONMENTS.idFromName(environmentId));
+  }
+
+  #mockMcpEnvironment(environmentId: string): MockMcpEnvironmentRpc {
+    // Cloudflare's RPC serializer type recurses through the complete mock server
+    // schema. Keep that framework boundary structural and validate every complex
+    // result immediately after it crosses back into the management agent.
+    return this.#environment(environmentId) as unknown as MockMcpEnvironmentRpc;
+  }
+
+  #mockLlmEnvironment(environmentId: string): MockLlmEnvironmentRpc {
+    // Keep the Cloudflare RPC boundary structural and validate every complex
+    // safe-read result before returning it through management MCP.
+    return this.#environment(environmentId) as unknown as MockLlmEnvironmentRpc;
   }
 
   async #requireEnvironment(environmentId: string) {
@@ -260,6 +436,93 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
           issuerBase: location.issuerBase,
           ...(location.graphBaseUrl ? { graphBaseUrl: location.graphBaseUrl } : {}),
         });
+      },
+      putMockMcpServer: async (environmentId, server, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return mockMcpServerViewSchema.parse(
+            await this.#mockMcpEnvironment(environmentId).putMockMcpServer(
+              server,
+              expectedRevision
+            )
+          );
+        } catch (error) {
+          throw mockMcpToolError(error, server.slug) ?? error;
+        }
+      },
+      listMockMcpServers: async (environmentId) => {
+        await this.#requireEnvironment(environmentId);
+        return mockMcpServerListSchema.parse({
+          servers: await this.#mockMcpEnvironment(environmentId).listMockMcpServers(),
+        }).servers;
+      },
+      getMockMcpServer: async (environmentId, slug) => {
+        await this.#requireEnvironment(environmentId);
+        const raw =
+          await this.#mockMcpEnvironment(environmentId).getMockMcpServer(slug);
+        if (!raw) throw missingMockMcpServer(slug);
+        return mockMcpServerViewSchema.parse(raw) as MockMcpServerView;
+      },
+      deleteMockMcpServer: async (environmentId, slug, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return await this.#mockMcpEnvironment(environmentId).deleteMockMcpServer(
+            slug,
+            expectedRevision
+          );
+        } catch (error) {
+          throw mockMcpToolError(error, slug) ?? error;
+        }
+      },
+      resetMockMcpState: async (environmentId, slug, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return await this.#mockMcpEnvironment(environmentId).resetMockMcpState(
+            slug,
+            expectedRevision
+          );
+        } catch (error) {
+          throw mockMcpToolError(error, slug) ?? error;
+        }
+      },
+      listMockMcpBlueprints: async () => listMockMcpBlueprints(),
+      getMockMcpBlueprint: async (blueprintId) => requireBlueprint(blueprintId),
+      putMockLlmServer: async (environmentId, server, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return mockLlmServerViewSchema.parse(
+            await this.#mockLlmEnvironment(environmentId).putMockLlmServer(
+              server,
+              expectedRevision
+            )
+          );
+        } catch (error) {
+          throw mockLlmToolError(error, server.slug) ?? error;
+        }
+      },
+      listMockLlmServers: async (environmentId) => {
+        await this.#requireEnvironment(environmentId);
+        return mockLlmServerListSchema.parse({
+          servers: await this.#mockLlmEnvironment(environmentId).listMockLlmServers(),
+        }).servers;
+      },
+      getMockLlmServer: async (environmentId, slug) => {
+        await this.#requireEnvironment(environmentId);
+        const raw =
+          await this.#mockLlmEnvironment(environmentId).getMockLlmServer(slug);
+        if (!raw) throw missingMockLlmServer(slug);
+        return mockLlmServerViewSchema.parse(raw) as MockLlmServerView;
+      },
+      deleteMockLlmServer: async (environmentId, slug, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return await this.#mockLlmEnvironment(environmentId).deleteMockLlmServer(
+            slug,
+            expectedRevision
+          );
+        } catch (error) {
+          throw mockLlmToolError(error, slug) ?? error;
+        }
       },
       getCurrentEnvironmentId: async () => {
         const currentEnvironmentId = this.state.currentEnvironmentId;

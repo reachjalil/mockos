@@ -1,0 +1,855 @@
+#!/usr/bin/env tsx
+
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, posix, resolve } from "node:path";
+import {
+  listMockMcpBlueprints,
+  requireMockMcpBlueprint,
+} from "../packages/core/src/mock-mcp/blueprints";
+import {
+  generateMockLlmAnthropicProviderDocumentation,
+  generateMockLlmOpenAiProviderDocumentation,
+  generateMockosHttpOperationManifest,
+  generateMockosManagementDocumentationCatalog,
+  generateMockosManagementOpenApi,
+  generateMockosProductCapabilityIndex,
+  type MockosManagementDocumentationCatalog,
+  type MockosManagementDocumentationTool,
+} from "../packages/openapi/src/index";
+
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+type Artifact = {
+  path: string;
+  contents: string;
+};
+
+const DOCUMENTATION_LAST_REVIEWED = "2026-07-25";
+
+const canonicalize = (value: unknown): JsonValue => {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    typeof value === "string"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (typeof value !== "object") {
+    throw new Error(`Cannot canonicalize ${typeof value}.`);
+  }
+  const object: Record<string, JsonValue> = {};
+  for (const key of Object.keys(value).sort()) {
+    object[key] = canonicalize(Reflect.get(value, key));
+  }
+  return object;
+};
+
+const stableJson = (value: unknown): string =>
+  `${JSON.stringify(canonicalize(value), null, 2)}\n`;
+
+const generatedMockLlmProviderJson = (provider: {
+  readonly request: { readonly messageRoles: readonly string[] };
+}): string => {
+  const contents = stableJson(provider);
+  const roles = provider.request.messageRoles;
+  const expandedRoles = [
+    '    "messageRoles": [',
+    ...roles.map(
+      (role, index) =>
+        `      ${JSON.stringify(role)}${index === roles.length - 1 ? "" : ","}`
+    ),
+    "    ],",
+  ].join("\n");
+  if (!contents.includes(expandedRoles)) {
+    throw new Error("The generated mock-LLM role array shape changed.");
+  }
+  return contents.replace(
+    expandedRoles,
+    `    "messageRoles": [${roles.map((role) => JSON.stringify(role)).join(", ")}],`
+  );
+};
+
+const generatedMockLlmOpenAiProviderJson = (): string =>
+  compactShortStringArrays(
+    generatedMockLlmProviderJson(generateMockLlmOpenAiProviderDocumentation())
+  );
+
+const generatedMockLlmAnthropicProviderJson = (): string =>
+  compactShortStringArrays(
+    generatedMockLlmProviderJson(generateMockLlmAnthropicProviderDocumentation())
+  );
+
+const compactShortStringArrays = (contents: string): string =>
+  contents.replace(
+    /^(\s*)"([^"\n]+)": \[\n((?:[ \t]+"(?:[^"\\]|\\.)*"(?:,)?\n)+)[ \t]*\]/gmu,
+    (expanded, indentation: string, key: string, body: string) => {
+      const values = JSON.parse(`[${body}]`) as string[];
+      const compactValues = values.map((value) => JSON.stringify(value)).join(", ");
+      const compact = `${indentation}${JSON.stringify(key)}: [${compactValues}]`;
+      return compact.length <= 80 ? compact : expanded;
+    }
+  );
+
+const generatedProductCapabilityIndexJson = (): string => {
+  const index = generateMockosProductCapabilityIndex();
+  const contents = stableJson(index);
+  const expandedTiers = [
+    '    "tiers": [',
+    ...index.evidenceModel.tiers.map(
+      (tier, position) =>
+        `      ${JSON.stringify(tier)}${position === index.evidenceModel.tiers.length - 1 ? "" : ","}`
+    ),
+    "    ]",
+  ].join("\n");
+  if (!contents.includes(expandedTiers)) {
+    throw new Error("The generated product capability evidence-tier shape changed.");
+  }
+  return compactShortStringArrays(contents);
+};
+
+const generatedMockMcpBlueprintCatalogJson = (): string => {
+  const catalog = listMockMcpBlueprints();
+  return compactShortStringArrays(
+    stableJson({
+      schemaVersion: catalog.schemaVersion,
+      generatedFrom: {
+        path: "packages/core/src/mock-mcp/blueprints.ts",
+        listExport: "listMockMcpBlueprints",
+        getExport: "requireMockMcpBlueprint",
+      },
+      status: "source-qualified-local",
+      boundaries: {
+        catalogScope: "built-in-secret-free-server-definition-presets",
+        providerNetwork: false,
+        providerRestAdapter: "none",
+        liveProviderQualification: "unqualified",
+        outputWireParity: "unqualified",
+        portableBlueprintSystem: "not-f5-export-import-apply-or-gallery",
+      },
+      evidence: {
+        designed: "qualified",
+        implemented: "qualified",
+        sourceTested: "qualified",
+        integrationTested: "qualified-mounted-worker",
+        sdkClientQualified: "qualified-mcp-sdk-1.29.0-mounted-worker",
+        actualNetwork: "unqualified",
+        hostedSmoke: "unqualified",
+        verifiedLive: "unqualified",
+        productionReady: "unqualified",
+      },
+      trademarks: {
+        salesforce:
+          "Salesforce is a trademark of Salesforce, Inc. Names are used only for compatibility identification.",
+        relationship:
+          "mockOS is independent and is not affiliated with, sponsored by, or endorsed by Salesforce, Inc.",
+      },
+      blueprints: catalog.blueprints.map(({ id }) => requireMockMcpBlueprint(id)),
+    })
+  );
+};
+
+const generatedClientManifest = (): string => {
+  const manifest = generateMockosHttpOperationManifest();
+  const lines = [
+    "// Generated by scripts/generate-f0-artifacts.ts. Do not edit.",
+    "export const generatedMockosHttpOperations = {",
+  ];
+  for (const [operationId, operation] of Object.entries(manifest).sort(
+    ([left], [right]) => left.localeCompare(right)
+  )) {
+    lines.push(
+      `  ${operationId}: {`,
+      `    method: ${JSON.stringify(operation.method)},`,
+      `    operationId: ${JSON.stringify(operation.operationId)},`,
+      `    path: ${JSON.stringify(operation.path)},`,
+      `    requiredScopes: ${JSON.stringify(operation.requiredScopes)},`,
+      `    retry: ${JSON.stringify(operation.retry)},`,
+      `    successStatus: ${operation.successStatus},`,
+      "  },"
+    );
+  }
+  lines.push(
+    "} as const;",
+    "",
+    "export type GeneratedMockosHttpOperationId = keyof typeof generatedMockosHttpOperations;",
+    ""
+  );
+  return lines.join("\n");
+};
+
+const tableCell = (value: string): string =>
+  value.replaceAll("|", "\\|").replaceAll("\n", " ");
+
+const secretPolicy = (tool: MockosManagementDocumentationTool): string => {
+  const policies = [
+    tool.secrets.request === "none" ? null : `request ${tool.secrets.request}`,
+    tool.secrets.response === "none" ? null : `response ${tool.secrets.response}`,
+  ].filter((value): value is string => value !== null);
+  return policies.length === 0 ? "none" : policies.join("; ");
+};
+
+const httpSummary = (tool: MockosManagementDocumentationTool): string =>
+  tool.http ? `\`${tool.http.method} /__mockos/v1${tool.http.path}\`` : "MCP only";
+
+const renderManagementTools = (
+  catalog: MockosManagementDocumentationCatalog
+): string => {
+  const lines = [
+    "# Management MCP tool reference",
+    "",
+    `Status: Generated from the implemented ${catalog.managementMcp.toolCount}-tool management registry; F1 mock MCP and bounded streaming OpenAI/Anthropic data planes are source-qualified locally`,
+    `Last reviewed: ${DOCUMENTATION_LAST_REVIEWED}`,
+    "",
+    "<!-- Generated by scripts/generate-f0-artifacts.ts. Do not edit. -->",
+    "",
+    "This reference is generated from",
+    "[`packages/contracts/src/operations/management.ts`](../../packages/contracts/src/operations/management.ts).",
+    "Change the canonical schemas or metadata, run `pnpm f0:generate`, and commit the",
+    "result. The [machine-readable catalog](./management-operations.v1.json) contains",
+    "the same metadata and JSON Schemas.",
+    "The generated [product capability index](./product-capabilities.v1.json) joins",
+    "each interface included in its explicitly partial F0-F2 slice to executable",
+    "authorities, an exact specification, documentation, anchored limitations, and",
+    "independent source/hosted-CI/Cloud-pin/deployed/verified-live evidence claims.",
+    "",
+    `The current management MCP server exposes **${catalog.managementMcp.toolCount} tools**.`,
+    `Exactly **${catalog.selfHostedHttp.routeCount}** of those operations also have an`,
+    "implemented self-hosted HTTP route. An MCP-only tool must not be called through an",
+    "invented HTTP path.",
+    "",
+    "> `env:ro` and `env:rw` are contract metadata, not enforced scoped-key permissions.",
+    "> F4 owns shared scope enforcement and its security evidence.",
+    "",
+    "## Catalog",
+    "",
+    "| Tool | Effect | Retry | Secret handling | HTTP availability |",
+    "| --- | --- | --- | --- | --- |",
+  ];
+
+  for (const tool of catalog.managementMcp.tools) {
+    lines.push(
+      `| [\`${tool.operationId}\`](#${tool.operationId}) | ${tool.effect} | ${tool.retry} | ${tableCell(secretPolicy(tool))} | ${httpSummary(tool)} |`
+    );
+  }
+
+  lines.push(
+    "",
+    "## Transport and result contract",
+    "",
+    "- Transport: Streamable HTTP at `/mcp`.",
+    `- Tested protocol revision: \`${catalog.managementMcp.testedProtocolVersion}\`.`,
+    "- Standalone GET stream: unsupported; `GET /mcp` returns `405`.",
+    "- Successful tools return text content plus structured content shaped as",
+    "  `{ data, meta: { requestId } }`.",
+    "- Handler failures return an MCP error result containing an RFC 7807 problem.",
+    "- SDK input-schema failures happen before handler entry and use the SDK validation",
+    "  error shape.",
+    "- Saved automation should pass an explicit `environmentId`; the current-environment",
+    "  cursor is transport-session-local.",
+    "",
+    "## Tools",
+    ""
+  );
+
+  for (const tool of catalog.managementMcp.tools) {
+    const annotations = tool.mcp.annotations;
+    lines.push(
+      `<a id="${tool.operationId}"></a>`,
+      "",
+      `### \`${tool.operationId}\``,
+      "",
+      `**${tool.title}.** ${tool.description}`,
+      "",
+      `- Scope metadata: ${tool.requiredScopes.map((scope) => `\`${scope}\``).join(", ")}`,
+      `- Effect: \`${tool.effect}\``,
+      `- Retry policy: \`${tool.retry}\``,
+      `- Secret handling: ${secretPolicy(tool)}`,
+      `- HTTP: ${httpSummary(tool)}`,
+      `- MCP annotations: read-only \`${annotations.readOnlyHint}\`, destructive \`${annotations.destructiveHint}\`, idempotent \`${annotations.idempotentHint}\`, open-world \`${annotations.openWorldHint}\``,
+      "",
+      "<details>",
+      "<summary>Input JSON Schema</summary>",
+      "",
+      "```json",
+      stableJson(tool.mcp.inputSchema).trimEnd(),
+      "```",
+      "",
+      "</details>",
+      "",
+      "<details>",
+      "<summary>Structured result JSON Schema</summary>",
+      "",
+      "```json",
+      stableJson(tool.mcp.outputSchema).trimEnd(),
+      "```",
+      "",
+      "</details>",
+      ""
+    );
+  }
+
+  lines.push(
+    "## Environment-hosted mock MCP",
+    "",
+    "- Eight F1 management operations configure source-qualified mock MCP servers and",
+    "  inspect or install built-in server-definition presets. They are MCP-only and add",
+    "  no self-hosted HTTP route.",
+    "- Every F1 mutation carries explicit revision intent: create with",
+    "  `expectedRevision: null`; replace, reset, or delete with the positive current",
+    "  revision. Canonically identical put or install replay succeeds before CAS",
+    "  validation, including convergence on an identical delete/recreate generation.",
+    "- Replacement is a complete definition write. A bearer Mock Credential must be",
+    "  resupplied or rotated because the safe `{ configured: true }` read marker is",
+    "  not a valid replacement input. The raw credential is rejected if it appears in",
+    "  any other definition key or string value, and MCP fails closed if a dependency",
+    "  reflects it in a purported safe result.",
+    "- `list_mock_mcp_blueprints` and `get_mock_mcp_blueprint` expose versioned catalog",
+    "  provenance and fidelity. `install_mock_mcp_blueprint` accepts no credential and",
+    "  validates the complete installed public specification before returning success.",
+    "- A changed put or blueprint install is destructive: it deletes prior application",
+    "  state and terminates revision-bound sessions. Changed-definition stale or ABA",
+    "  intent returns typed `409`; canonically identical convergence does not mutate.",
+    "- Reset atomically clears application state while preserving the definition,",
+    "  revision, and sessions. Delete atomically removes definition, state, and",
+    "  sessions. Missing servers return typed 404 errors; stale or ABA revisions",
+    "  return typed 409 conflicts.",
+    `- The mock data plane implements protocol \`${catalog.future.mockMcpServers.testedProtocolVersion}\``,
+    "  over POST-only Streamable HTTP. Path and subdomain endpoint templates are",
+    `  \`${catalog.future.mockMcpServers.pathEndpoint}\` and`,
+    `  \`${catalog.future.mockMcpServers.subdomainEndpoint}\`.`,
+    "- Use [the mock MCP guide](../mock-mcp.md) for the wire sequence, server contract,",
+    "  behavior semantics, security boundary, and current limitations.",
+    "- Use the [Salesforce SObject Reads blueprint guide](../blueprints/salesforce-sobject-reads.md)",
+    "  for the built-in secret-free fixture, exact six-tool input contract, and explicit",
+    "  no-provider-network/no-output-wire-parity boundary.",
+    `- Deployed acceptance is \`${catalog.future.mockMcpServers.deployedAcceptance}\`;`,
+    "  this generated source catalog is not hosted evidence.",
+    "",
+    "## Mock LLM servers: MCP management, provider-shaped data plane",
+    "",
+    "- Four F2 source operations create, list, inspect, and delete environment-local",
+    "  mock-LLM definitions: `put_mock_llm_server`, `list_mock_llm_servers`,",
+    "  `get_mock_llm_server`, and `delete_mock_llm_server`.",
+    "- These operations are MCP-only. They add no self-hosted HTTP management route;",
+    `  the HTTP projection remains exactly ${catalog.selfHostedHttp.routeCount} routes.`,
+    "- `put_mock_llm_server` requires `expectedRevision`: use `null` for create-only",
+    "  intent or the current positive revision for a changed replacement. A canonical",
+    "  replay is idempotent even when that expectation has become stale.",
+    "- Strict OpenAI and Anthropic Mock Credentials are provider-scoped, write-only",
+    "  inputs. Source persistence stores SHA-256 verifiers; safe reads return only",
+    "  `configured: true`.",
+    "- A replacement is a full-definition write. `configured: true` is not a write",
+    "  shape: reconstruct the desired definition and resupply or rotate the key for",
+    "  every enabled strict provider from caller-owned secret storage.",
+    "- `delete_mock_llm_server` requires the current positive `expectedRevision` and",
+    "  deletes atomically only when it still matches. A mismatch is a typed `409`; a",
+    "  missing or retried delete returns `deleted: false`.",
+    "- Static behaviors pass bounded neutral-plan validation before persistence.",
+    "  Unknown top-level put arguments fail with a secret-safe generic issue, and any",
+    "  definition JSON key or string value containing the platform Access Key as a",
+    "  substring is rejected at both Worker ingress and the Environment Durable Object.",
+    "- The baseline environment schema is applied on open. A runtime refuses any",
+    "  store whose recorded version is newer than the baseline it knows.",
+    "- MCP is the only current configuration interface. Applications under test call",
+    "  the separate provider-shaped environment data plane; those provider operations",
+    "  never enter the five-route management OpenAPI projection.",
+    "- The bounded OpenAI data plane is source-qualified locally at",
+    `  \`${catalog.future.mockLlmApis.providerDataPlane.openAi.routeBases.pathMode}\` or`,
+    `  \`${catalog.future.mockLlmApis.providerDataPlane.openAi.routeBases.subdomainMode}\`.`,
+    "- It implements `GET /models`, `GET /models/{model}`, and bounded JSON or SSE",
+    "  `POST /chat/completions`. OpenAI streaming accepts only boolean",
+    "  `include_usage` and `include_obfuscation` options while `stream: true`; use",
+    "  `GET /models` as the non-mutating capability probe.",
+    "- Stream preflight requires",
+    "  `initialDelayMilliseconds + Math.max(payloadFrameCount - 1, 0) * chunkDelayMilliseconds`",
+    "  to be strictly less than `maximumDurationMilliseconds`; payload frames are",
+    "  Unicode code-point chunks of text and canonical tool arguments.",
+    "- Both `accept_any` and `strict` require a syntactically valid provider-scoped",
+    "  Bearer Mock Credential. Strict mode verifies the current SHA-256 verifier;",
+    "  platform management keys and alternate provider headers are rejected.",
+    "- The bounded Anthropic data plane is source-qualified locally at",
+    `  \`${catalog.future.mockLlmApis.providerDataPlane.anthropic.routeBases.pathMode}\` or`,
+    `  \`${catalog.future.mockLlmApis.providerDataPlane.anthropic.routeBases.subdomainMode}\`.`,
+    "- It implements `GET /v1/models`, `GET /v1/models/{model}`, and bounded JSON or",
+    "  named-event SSE `POST /v1/messages`. Use authenticated `GET /v1/models` as the",
+    "  capability probe;",
+    "  the four management tools alone do not prove that either provider route exists.",
+    "- Anthropic requires a provider-scoped `x-api-key` Mock Credential and the exact",
+    "  `anthropic-version: 2023-06-01`; authorization aliases and every beta header are",
+    "  rejected. The official `@anthropic-ai/sdk` 0.115.0 local Worker flow is qualified.",
+    "- Anthropic `stream: true` emits named `message_start`, content-block,",
+    "  `message_delta`, and `message_stop` events with JSON `data`; it has no `[DONE]`",
+    "  sentinel. `message_delta` reports cumulative usage. mockOS emits no `ping`,",
+    "  although clients should tolerate that upstream event. Only `text_delta` and",
+    "  `input_json_delta` payload frames are paced; each content block can contain zero",
+    "  or more payload events.",
+    "- Both provider streams precompute and cap the complete UTF-8 SSE body at",
+    "  2,097,152 bytes, perform initial delay before headers, and apply one absolute",
+    "  maximum duration across initial wait, payload pacing, and backpressure. A",
+    "  preflight failure is generic JSON before `200`; cancellation or deadline after",
+    "  `200` truncates without fabricating provider success.",
+    "- Configured errors remain provider JSON before `200`, even for a stream request;",
+    "  configured mid-stream error events are unsupported.",
+    "- The current stateless planner rechecks the definition revision and commits the",
+    "  selected plan in the Environment Durable Object before returning it to the edge.",
+    "  Persisted conversation/evaluator state and abort-aware state rollback remain",
+    "  unimplemented and require a separately qualified state design.",
+    "- Successfully parsed and planned Chat Completions and Messages POSTs that pass",
+    "  response serialization/SSE preflight reserve one metadata-only request-log row",
+    "  as `pending` before provider delay or response headers. Terminal finalization",
+    "  overlays that same logical row as `completed`, `cancelled`,",
+    "  `deadline_exceeded`, or `failed` without changing append order.",
+    "- Actual delivered `responseStatus` and `durationMs` are written only by terminal",
+    "  finalization. Pending reads expose `102` and `0` compatibility sentinels for",
+    "  legacy non-null columns; those values are not delivery metadata.",
+    "- Existing `get_request_log` and `assert_requests` inputs accept exact LLM",
+    "  dialect, operation, slug, selected server revision, model, stream, turn,",
+    "  outcome, response ID, usage, stop reason, ordered tool-name, and error-kind",
+    "  matchers. Ordered sequence assertions retain their greedy-earliest,",
+    "  non-overlapping append-order semantics.",
+    "- LLM observations store empty request/response headers and null bodies. They",
+    "  never persist prompts, outputs, credentials, headers, tool inputs, `planId`, or",
+    "  `requestHash`. Stream frame and byte counts are internal test accounting only;",
+    "  they are not persisted, returned, queryable, or assertable metadata.",
+    "- Reservation and finalization are fail-open best-effort evidence. A storage",
+    "  failure never changes a valid provider response, so a row can be absent or",
+    "  remain `pending`; this is not a complete audit guarantee.",
+    "- Beta APIs, OpenAI Responses, durable conversation state, configured mid-stream",
+    "  errors, actual-network qualification, Cloud pinning, hosted deployment, and",
+    "  live-provider parity remain unqualified or unavailable.",
+    `- Deployed acceptance remains \`${catalog.future.mockLlmApis.deployedAcceptance}\`.`,
+    "- Use [the mock LLM guide](../mock-llm.md) for the exact definition, revision,",
+    "  provider request, credential, schema-migration, cleanup, evidence, and unsupported",
+    "  boundaries. The [OpenAI](./mock-llm-openai.v1.json) and",
+    "  [Anthropic](./mock-llm-anthropic.v1.json) provider manifests are generated from",
+    "  executable limits and operation metadata.",
+    "",
+    "## Unavailable F2 surfaces",
+    "",
+    "- OpenAI Responses, Anthropic betas, durable conversations, and dedicated new",
+    "  LLM-only management tools remain unavailable. Bounded LLM observation uses the",
+    "  existing `get_request_log` and `assert_requests` management tools.",
+    "- Code Mode `search` and `execute` are planned for F6 and remain disabled.",
+    "",
+    "Use [implementation status](../IMPLEMENTATION_STATUS.md) for evidence and the",
+    "[interface model](../concepts/interface-model.md) for the distinction between",
+    "management MCP and environment-hosted mock MCP workloads.",
+    ""
+  );
+
+  return lines.join("\n");
+};
+
+const renderSelfHostedHttp = (
+  catalog: MockosManagementDocumentationCatalog
+): string => {
+  const lines = [
+    "# Self-hosted management HTTP reference",
+    "",
+    "Status: Generated reference for the five implemented public Worker management routes",
+    `Last reviewed: ${DOCUMENTATION_LAST_REVIEWED}`,
+    "",
+    "<!-- Generated by scripts/generate-f0-artifacts.ts. Do not edit. -->",
+    "",
+    "The public Worker exposes a deliberately narrow management HTTP surface under",
+    `\`${catalog.selfHostedHttp.basePath}\`. It is a supporting interface, not an HTTP`,
+    `copy of the ${catalog.managementMcp.toolCount}-tool management MCP server.`,
+    "",
+    `Exactly **${catalog.selfHostedHttp.routeCount} routes** are implemented:`,
+    "",
+    "| Operation ID | Management operation | Method and path | Success |",
+    "| --- | --- | --- | --- |",
+  ];
+
+  for (const operation of catalog.selfHostedHttp.operations) {
+    lines.push(
+      `| \`${operation.operationId}\` | \`${operation.managementOperationId}\` | \`${operation.method} ${catalog.selfHostedHttp.basePath}${operation.path}\` | \`${operation.successStatus}\` |`
+    );
+  }
+
+  lines.push(
+    "",
+    "The deterministic",
+    "[OpenAPI 3.1 document](../../packages/openapi/openapi/mockos-management.v1.json)",
+    "contains the exact request, response, path, and query schemas. The generated",
+    "`@mockos/client` skeleton authorizes only this operation map.",
+    "",
+    "## Authentication",
+    "",
+    "Self-hosting requires the Worker `API_KEY` secret. Missing server configuration",
+    "fails closed with `503 CONTROL_API_UNAVAILABLE`; a missing or incorrect presented",
+    "key returns `401 UNAUTHORIZED`.",
+    "",
+    "Use an inert environment-variable reference rather than a literal key:",
+    "",
+    "```sh",
+    "curl --fail-with-body \\",
+    '  --header "Authorization: Bearer $MOCKOS_API_KEY" \\',
+    '  "$MOCKOS_ORIGIN/__mockos/v1/environments/$MOCKOS_ENVIRONMENT_ID/well-known?issuer_base=$MOCKOS_ORIGIN"',
+    "```",
+    "",
+    "`X-API-Key` is accepted by the direct public Worker, but an operated service may",
+    "require Bearer authentication and a different account-key format. Follow the",
+    "operator's exact endpoint and authentication contract.",
+    "",
+    "Management keys never belong on SCIM, Graph-shaped, Okta directory-shaped, Authn,",
+    "environment-hosted mock MCP, or outbound target requests.",
+    "",
+    "## Deliberate limits",
+    "",
+    "- There is no direct HTTP route for listing environments, minting tokens, running",
+    "  provisioning, setting scenarios, inspecting/asserting logs, simulating lifecycle,",
+    "  or selecting a session cursor.",
+    "- The eight F1 mock-MCP definition/state/catalog/install operations are MCP-only.",
+    "  The configured environment endpoint is a data plane, not an HTTP management",
+    "  route.",
+    "- The four F2 mock-LLM definition operations are also MCP-only. They persist",
+    "  configuration for the separate environment data plane and add no management",
+    "  HTTP route. The bounded OpenAI and Anthropic provider operations are not",
+    "  management HTTP routes.",
+    "- The HTTP `get_environment_discovery` operation returns an OIDC discovery document;",
+    "  the MCP `get_wellknown_urls` tool returns a broader endpoint summary.",
+    "- HTTP routes always require an explicit environment ID.",
+    "- `env:ro` and `env:rw` remain metadata until F4; they are not currently enforced",
+    "  key scopes.",
+    "- The client and OpenAPI packages are not distribution-qualified or published.",
+    "",
+    "Use the [management MCP reference](./management-tools.md) when the workflow needs",
+    "the complete current management surface.",
+    ""
+  );
+
+  return lines.join("\n");
+};
+
+const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string =>
+  [
+    "# mockOS",
+    "",
+    "> MCP-first deterministic Entra ID, Okta, and agent-dependency test",
+    "> infrastructure. Agents and automation control synthetic environments through",
+    "> management MCP; applications under test call the returned identity or mock-MCP",
+    "> and mock-LLM data planes.",
+    "",
+    "## Start",
+    "",
+    "- [Documentation index](docs/README.md): task-oriented map for humans and agents.",
+    "- [MCP-first quickstart](docs/getting-started/mcp-first.md): connect, discover,",
+    "  create, test, assert, and clean up.",
+    "- [Interface model](docs/concepts/interface-model.md): management MCP versus",
+    "  provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.",
+    "- [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,",
+    "  resources, resource templates, and prompts from an agent under test.",
+    "- [Salesforce SObject Reads blueprint](docs/blueprints/salesforce-sobject-reads.md):",
+    "  install and call the built-in six-tool, secret-free synthetic fixture.",
+    "- [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call",
+    "  its bounded streaming OpenAI or Anthropic provider data plane.",
+    "- [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,",
+    "  probe models, call Chat Completions, test failures, and clean up safely.",
+    "- [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md): create through",
+    "  MCP, probe models, call Messages, test version/auth failures, and clean up safely.",
+    "- [Management tool reference](docs/reference/management-tools.md): generated",
+    `  reference for all ${catalog.managementMcp.toolCount} current MCP tools.`,
+    "- [Machine operation catalog](docs/reference/management-operations.v1.json):",
+    "  generated schemas and capability metadata.",
+    "- [Machine mock-MCP blueprint catalog](docs/reference/mock-mcp-blueprints.v1.json):",
+    "  generated full built-in definitions, provenance, fidelity, and evidence limits.",
+    "- [Machine product capability index](docs/reference/product-capabilities.v1.json):",
+    "  generated non-exhaustive F0-F2 support slice, executable provenance, exact",
+    "  specifications, anchored limitations, and independent evidence dimensions.",
+    "- [Mock OpenAI provider manifest](docs/reference/mock-llm-openai.v1.json):",
+    "  generated route, auth, request-limit, planning, and evidence contract.",
+    "- [Mock Anthropic provider manifest](docs/reference/mock-llm-anthropic.v1.json):",
+    "  generated route, version-header, auth, request-limit, planning, and evidence",
+    "  contract.",
+    "- [Self-hosted HTTP reference](docs/reference/self-hosted-http.md): generated",
+    `  reference for the ${catalog.selfHostedHttp.routeCount} implemented HTTP routes.`,
+    "",
+    "## Current capability boundary",
+    "",
+    `- Management MCP: implemented at \`${catalog.managementMcp.path}\` with`,
+    `  ${catalog.managementMcp.toolCount} tools over ${catalog.managementMcp.transport}.`,
+    `- Tested MCP revision: \`${catalog.managementMcp.testedProtocolVersion}\`;`,
+    "  standalone GET streaming is unsupported.",
+    `- Self-hosted management HTTP: ${catalog.selfHostedHttp.routeCount} implemented`,
+    `  routes under \`${catalog.selfHostedHttp.basePath}\`.`,
+    "- `env:ro` and `env:rw`: metadata only, not enforced scoped-key permissions.",
+    "- F1 mock MCP servers: source-qualified locally at",
+    `  \`${catalog.future.mockMcpServers.pathEndpoint}\` or`,
+    `  \`${catalog.future.mockMcpServers.subdomainEndpoint}\`; deployed acceptance is`,
+    `  \`${catalog.future.mockMcpServers.deployedAcceptance}\`.`,
+    "- F1 mock MCP definition mutations are MCP-only atomic CAS operations:",
+    "  `put` requires null-create or positive-current-replace intent, canonical replay",
+    "  precedes CAS, and reset/delete require the positive current revision.",
+    "- F1 includes one built-in, secret-free Salesforce SObject Reads server-definition",
+    "  preset with six deterministic read tools. It is documentation-derived, makes no",
+    "  provider network or REST call, claims no provider output-wire parity, and is not",
+    "  the F5 portable blueprint/export/import/gallery system.",
+    "- F2 mock LLM definitions: four MCP-only operations are source-implemented with",
+    "  baseline environment persistence and write-only provider Mock Credentials.",
+    "- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic",
+    "  Messages/model subsets, including SSE and metadata-only request-log",
+    "  observation/query/assert/sequence support, are source-qualified locally;",
+    "  state/reset, Anthropic betas, configured midstream errors, actual-network",
+    "  qualification, Cloud pinning, and deployment remain unavailable or unqualified.",
+    "- F3 script execution: unavailable; `NoSandbox` fails closed.",
+    "- F6 Code Mode `search` and `execute`: unavailable and disabled.",
+    "- CLI and typed client: unpublished.",
+    "",
+    "## Safety and evidence",
+    "",
+    "- [Known limitations](docs/known-limitations.md)",
+    "- [Implementation status](docs/IMPLEMENTATION_STATUS.md)",
+    "- [Threat model](docs/security/threat-model.md)",
+    "- [Requirements traceability](docs/requirements-traceability.md)",
+    "- Never put management keys, real identities, real provider tokens, or customer",
+    "  data in fixtures, logs, examples, or reports.",
+    "- Source, deployed mock acceptance, and verified-live provider evidence are",
+    "  independent claims. No current fixture is verified-live.",
+    "",
+    "## More context",
+    "",
+    "- [Curated full agent context](llms-full.txt)",
+    "- [Public repository README](README.md)",
+    "- [Testing skill](skills/mockos-testing/SKILL.md)",
+    "",
+  ].join("\n");
+
+const rewriteRelativeMarkdownLinksForRoot = (
+  contents: string,
+  sourcePath: string
+): string =>
+  contents.replace(
+    /(\]\()((?!https?:\/\/|mailto:|#|\/)[^)\s]+)(\))/g,
+    (_match, prefix: string, target: string, suffix: string) => {
+      const hashIndex = target.indexOf("#");
+      const path = hashIndex === -1 ? target : target.slice(0, hashIndex);
+      const hash = hashIndex === -1 ? "" : target.slice(hashIndex);
+      const rooted = posix.normalize(posix.join(posix.dirname(sourcePath), path));
+      return `${prefix}${rooted}${hash}${suffix}`;
+    }
+  );
+
+const renderLlmsFull = async (generated: {
+  managementTools: string;
+  selfHostedHttp: string;
+}): Promise<string> => {
+  const sources = [
+    { title: "Project README", path: "README.md" },
+    {
+      title: "MCP-first quickstart",
+      path: "docs/getting-started/mcp-first.md",
+    },
+    {
+      title: "Interface model",
+      path: "docs/concepts/interface-model.md",
+    },
+    {
+      title: "Management MCP behavior",
+      path: "docs/mcp.md",
+    },
+    {
+      title: "Environment-hosted mock MCP",
+      path: "docs/mock-mcp.md",
+    },
+    {
+      title: "Salesforce SObject Reads built-in blueprint",
+      path: "docs/blueprints/salesforce-sobject-reads.md",
+    },
+    {
+      title: "Mock LLM management definitions",
+      path: "docs/mock-llm.md",
+    },
+    {
+      title: "OpenAI SDK quickstart",
+      path: "docs/quickstarts/openai-sdk.md",
+    },
+    {
+      title: "Anthropic SDK quickstart",
+      path: "docs/quickstarts/anthropic-sdk.md",
+    },
+    {
+      title: "Known limitations",
+      path: "docs/known-limitations.md",
+    },
+    {
+      title: "Implementation status",
+      path: "docs/IMPLEMENTATION_STATUS.md",
+    },
+    {
+      title: "Threat model",
+      path: "docs/security/threat-model.md",
+    },
+  ];
+
+  const sections = await Promise.all(
+    sources.map(async ({ title, path }) => {
+      const contents = await readFile(resolve(process.cwd(), path), "utf8");
+      return [
+        `# Source: ${title}`,
+        "",
+        `Repository path: \`${path}\``,
+        "",
+        rewriteRelativeMarkdownLinksForRoot(contents.trim(), path),
+      ].join("\n");
+    })
+  );
+
+  sections.splice(
+    3,
+    0,
+    [
+      "# Source: Generated management MCP tool reference",
+      "",
+      "Repository path: `docs/reference/management-tools.md`",
+      "",
+      rewriteRelativeMarkdownLinksForRoot(
+        generated.managementTools.trim(),
+        "docs/reference/management-tools.md"
+      ),
+    ].join("\n"),
+    [
+      "# Source: Generated self-hosted HTTP reference",
+      "",
+      "Repository path: `docs/reference/self-hosted-http.md`",
+      "",
+      rewriteRelativeMarkdownLinksForRoot(
+        generated.selfHostedHttp.trim(),
+        "docs/reference/self-hosted-http.md"
+      ),
+    ].join("\n")
+  );
+
+  return [
+    "# mockOS curated full agent context",
+    "",
+    "Generated by `scripts/generate-f0-artifacts.ts`. This file combines public,",
+    "reviewed product guidance. It does not add capabilities, deployment evidence,",
+    "credentials, private operated-service material, or verified-live provider claims.",
+    "",
+    "Start with `llms.txt` when the compact map is sufficient.",
+    "",
+    ...sections.flatMap((section) => ["---", "", section, ""]),
+  ].join("\n");
+};
+
+const openApiPath = resolve(
+  process.cwd(),
+  "packages/openapi/openapi/mockos-management.v1.json"
+);
+const clientManifestPath = resolve(process.cwd(), "packages/client/src/generated.ts");
+const documentationCatalogPath = resolve(
+  process.cwd(),
+  "docs/reference/management-operations.v1.json"
+);
+const productCapabilityIndexPath = resolve(
+  process.cwd(),
+  "docs/reference/product-capabilities.v1.json"
+);
+const mockMcpBlueprintCatalogPath = resolve(
+  process.cwd(),
+  "docs/reference/mock-mcp-blueprints.v1.json"
+);
+const mockLlmOpenAiProviderPath = resolve(
+  process.cwd(),
+  "docs/reference/mock-llm-openai.v1.json"
+);
+const mockLlmAnthropicProviderPath = resolve(
+  process.cwd(),
+  "docs/reference/mock-llm-anthropic.v1.json"
+);
+const managementToolsPath = resolve(
+  process.cwd(),
+  "docs/reference/management-tools.md"
+);
+const selfHostedHttpPath = resolve(process.cwd(), "docs/reference/self-hosted-http.md");
+const llmsPath = resolve(process.cwd(), "llms.txt");
+const llmsFullPath = resolve(process.cwd(), "llms-full.txt");
+
+const documentationCatalog = generateMockosManagementDocumentationCatalog();
+const managementToolsContents = renderManagementTools(documentationCatalog);
+const selfHostedHttpContents = renderSelfHostedHttp(documentationCatalog);
+
+const artifacts: Artifact[] = [
+  {
+    path: openApiPath,
+    contents: stableJson(generateMockosManagementOpenApi()),
+  },
+  {
+    path: clientManifestPath,
+    contents: generatedClientManifest(),
+  },
+  {
+    path: documentationCatalogPath,
+    contents: stableJson(documentationCatalog),
+  },
+  {
+    path: productCapabilityIndexPath,
+    contents: generatedProductCapabilityIndexJson(),
+  },
+  {
+    path: mockMcpBlueprintCatalogPath,
+    contents: generatedMockMcpBlueprintCatalogJson(),
+  },
+  {
+    path: mockLlmOpenAiProviderPath,
+    contents: generatedMockLlmOpenAiProviderJson(),
+  },
+  {
+    path: mockLlmAnthropicProviderPath,
+    contents: generatedMockLlmAnthropicProviderJson(),
+  },
+  {
+    path: managementToolsPath,
+    contents: managementToolsContents,
+  },
+  {
+    path: selfHostedHttpPath,
+    contents: selfHostedHttpContents,
+  },
+  {
+    path: llmsPath,
+    contents: renderLlmsIndex(documentationCatalog),
+  },
+  {
+    path: llmsFullPath,
+    contents: await renderLlmsFull({
+      managementTools: managementToolsContents,
+      selfHostedHttp: selfHostedHttpContents,
+    }),
+  },
+];
+
+if (process.argv.includes("--check")) {
+  const drift: string[] = [];
+  for (const artifact of artifacts) {
+    const current = await readFile(artifact.path, "utf8").catch(() => "");
+    if (current !== artifact.contents) {
+      drift.push(artifact.path.slice(process.cwd().length + 1));
+    }
+  }
+  if (drift.length > 0) {
+    throw new Error(
+      `F0 generated artifacts are stale: ${drift.join(", ")}. Run pnpm f0:generate.`
+    );
+  }
+  process.stdout.write(
+    "PASS  F0 OpenAPI, client, and MCP-first documentation artifacts match the operation registry\n"
+  );
+} else {
+  for (const artifact of artifacts) {
+    await mkdir(dirname(artifact.path), { recursive: true });
+    await writeFile(artifact.path, artifact.contents);
+  }
+  process.stdout.write(
+    "WROTE F0 OpenAPI, client, and MCP-first documentation artifacts\n"
+  );
+}

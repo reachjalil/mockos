@@ -12,12 +12,18 @@ type ManagementEnvironmentStub = {
   clearScenario(scenarioId?: string): Promise<{ cleared: number }>;
   configure(input: Record<string, unknown>): Promise<unknown>;
   createApplication(input: Record<string, unknown>): Promise<ApplicationRegistration>;
+  getMockMcpServer(slug: string): Promise<unknown>;
   listApplications(input: {
     limit: number;
     cursor?: string;
   }): Promise<ApplicationListPage>;
+  listMockMcpServers(): Promise<unknown>;
   listScenarios(input: { limit: number; cursor?: string }): Promise<ScenarioListPage>;
   purge(): Promise<void>;
+  putMockMcpServer(
+    input: Record<string, unknown>,
+    expectedRevision: number | null
+  ): Promise<unknown>;
   setScenario(input: ScenarioSpec): Promise<ScenarioSpec>;
 };
 
@@ -29,7 +35,116 @@ const environment = (environmentId: string): ManagementEnvironmentStub => {
   return namespace.get(namespace.idFromName(environmentId));
 };
 
+const sha256Hex = async (value: string): Promise<string> =>
+  [
+    ...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+    ),
+  ]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
 describe("management Durable Object reads", () => {
+  it("rejects cross-field mock-MCP bearer reuse before persistence", async () => {
+    const environmentId = "management-mcp-secret-test-01";
+    const target = environment(environmentId);
+    const token = "mockos_worker_cross_field_token_12345";
+    const verifier = await sha256Hex(token);
+    await target.purge();
+    try {
+      await target.configure({
+        id: environmentId,
+        name: "Mock MCP credential containment",
+        provider: "entra",
+        seed: "mock-mcp-credential-containment",
+        tenantId: "969d3f18-e7f7-5d29-8b11-94d08a547796",
+        createdAt: "2026-07-22T12:00:00.000Z",
+        idleTtlHours: 168,
+        requestLogLimit: 10_000,
+      });
+
+      let rejection: unknown;
+      try {
+        await target.putMockMcpServer(
+          {
+            version: 1,
+            slug: "credential-containment",
+            serverInfo: { name: "Credential containment", version: "1.0.0" },
+            instructions: `Persisting ${token} here must fail.`,
+            authentication: { mode: "bearer", token },
+          },
+          null
+        );
+      } catch (error) {
+        rejection = error;
+      }
+
+      expect(rejection).toBeDefined();
+      const serializedRejection =
+        rejection instanceof Error
+          ? `${rejection.name}: ${rejection.message}`
+          : JSON.stringify(rejection);
+      expect(serializedRejection).not.toContain(token);
+      await expect(target.listMockMcpServers()).resolves.toEqual([]);
+      await expect(
+        target.getMockMcpServer("credential-containment")
+      ).resolves.toBeUndefined();
+
+      let verifierRejection: unknown;
+      try {
+        await target.putMockMcpServer(
+          {
+            version: 1,
+            slug: "credential-containment",
+            serverInfo: { name: "Credential containment", version: "1.0.0" },
+            instructions: `Persisting ${verifier} here must fail.`,
+            authentication: { mode: "bearer", token },
+          },
+          null
+        );
+      } catch (error) {
+        verifierRejection = error;
+      }
+
+      expect(verifierRejection).toBeDefined();
+      const serializedVerifierRejection =
+        verifierRejection instanceof Error
+          ? `${verifierRejection.name}: ${verifierRejection.message}`
+          : JSON.stringify(verifierRejection);
+      expect(serializedVerifierRejection).not.toContain(token);
+      expect(serializedVerifierRejection).not.toContain(verifier);
+      await expect(target.listMockMcpServers()).resolves.toEqual([]);
+      await expect(
+        target.getMockMcpServer("credential-containment")
+      ).resolves.toBeUndefined();
+
+      const created = await target.putMockMcpServer(
+        {
+          version: 1,
+          slug: "credential-containment",
+          serverInfo: { name: "Credential containment", version: "1.0.0" },
+          instructions: "This definition contains no credential material.",
+          authentication: { mode: "none" },
+        },
+        null
+      );
+      expect(created).toMatchObject({
+        revision: 1,
+        spec: {
+          slug: "credential-containment",
+          authentication: { mode: "none" },
+        },
+      });
+      expect(JSON.stringify(created)).not.toContain(token);
+      expect(JSON.stringify(created)).not.toContain(verifier);
+      expect(
+        JSON.stringify(await target.getMockMcpServer("credential-containment"))
+      ).not.toContain(token);
+    } finally {
+      await target.purge();
+    }
+  });
+
   it("pages applications without replaying secrets and manages scenario snapshots", async () => {
     const environmentId = "management-rpc-test-01";
     const target = environment(environmentId);
@@ -64,6 +179,14 @@ describe("management Durable Object reads", () => {
         appRoles: ["Reader"],
         groupClaimsMode: "security",
       });
+      expect(firstCreated.clientType).toBe("confidential");
+      expect(secondCreated.clientType).toBe("confidential");
+      if (
+        firstCreated.clientType !== "confidential" ||
+        secondCreated.clientType !== "confidential"
+      ) {
+        throw new Error("Legacy application creation must default to confidential.");
+      }
       expect(firstCreated.clientSecret).toBe("display-once-secret-a");
       expect(secondCreated.clientSecret).toBe("display-once-secret-b");
 

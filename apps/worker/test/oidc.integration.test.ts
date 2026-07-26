@@ -1,4 +1,5 @@
 import { env, exports } from "cloudflare:workers";
+import { MockosClient } from "@mockos/client";
 import { describe, expect, it } from "vitest";
 
 const apiKey = "mockos-integration-test-key";
@@ -132,6 +133,23 @@ describe("Entra authorization-code flow", () => {
     expect(application.status).toBe(201);
 
     const issuer = `${origin}/e/${environmentId}/${tenantId}/v2.0`;
+    const managementClient = new MockosClient({
+      endpoint: `${origin}/__mockos/v1`,
+      accessKey: apiKey,
+      fetch: (input, init) => worker.fetch(new Request(input, init)),
+    });
+    const managementDiscovery = await managementClient.getEnvironmentDiscovery(
+      environmentId,
+      issuer
+    );
+    expect(managementDiscovery.data).toMatchObject({
+      issuer,
+      authorization_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/authorize`,
+      token_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
+      jwks_uri: `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`,
+    });
+    expect(managementDiscovery.data).not.toHaveProperty("userinfo_endpoint");
+
     const discoveryResponse = await worker.fetch(
       `${issuer}/.well-known/openid-configuration`
     );
@@ -143,6 +161,7 @@ describe("Entra authorization-code flow", () => {
       token_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
       jwks_uri: `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`,
     });
+    expect(discovery).not.toHaveProperty("userinfo_endpoint");
     const jwksUrl = `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`;
     const beforeRotation = await (await worker.fetch(jwksUrl)).json<{
       keys: Array<JsonWebKey & { kid?: string }>;

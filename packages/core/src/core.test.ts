@@ -5,13 +5,14 @@ import {
   CORE_MIGRATIONS,
   createTenantId,
   decodeJwt,
-  encodeManagementListCursor,
   Engine,
   type EngineConfig,
+  encodeManagementListCursor,
   FixedClock,
   generateSigningKey,
   getSchemaVersion,
   pkceS256,
+  RequestLogService,
   SeededRng,
   type SqlRow,
   type SqlRunResult,
@@ -84,126 +85,103 @@ afterEach(() => {
 });
 
 describe("core substrate", () => {
-  it("applies ordered PRAGMA user_version migrations idempotently", () => {
+  it("applies the baseline schema idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(5);
-    expect(getSchemaVersion(store)).toBe(5);
-    expect(applyMigrations(store)).toBe(5);
-    expect(
-      store.get<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"
-      )?.name
-    ).toBe("oauth_codes");
+    expect(applyMigrations(store)).toBe(1);
+    expect(getSchemaVersion(store)).toBe(1);
+    expect(applyMigrations(store)).toBe(1);
+
     expect(
       store
         .all<{ name: string }>(
           `SELECT name FROM sqlite_master
-           WHERE type = 'table' AND name LIKE 'provisioning_%'
+           WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
            ORDER BY name`
         )
         .map(({ name }) => name)
     ).toEqual([
+      "applications",
+      "authn_transactions",
+      "device_codes",
+      "group_members",
+      "groups",
+      "meta",
+      "mock_llm_revision_allocator",
+      "mock_llm_servers",
+      "mock_mcp_revision_allocator",
+      "mock_mcp_servers",
+      "mock_mcp_sessions",
+      "mock_state",
+      "oauth_access_tokens",
+      "oauth_codes",
       "provisioning_run_targets",
       "provisioning_runs",
       "provisioning_steps",
       "provisioning_targets",
       "provisioning_watermarks",
+      "refresh_tokens",
+      "request_log",
+      "request_log_llm_terminal",
+      "role_assignments",
+      "scenarios",
+      "signing_keys",
+      "users",
+      "web_sessions",
     ]);
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'index' AND name = 'provisioning_run_targets_ref_idx'`
-      )?.name
-    ).toBe("provisioning_run_targets_ref_idx");
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'index' AND name = 'provisioning_runs_active_target_idx'`
-      )?.name
-    ).toBe("provisioning_runs_active_target_idx");
+    for (const table of [
+      "mock_mcp_revision_allocator",
+      "mock_llm_revision_allocator",
+    ]) {
+      expect(
+        store.get<{ count: number; last_revision: number }>(
+          `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
+           FROM ${table}`
+        )
+      ).toEqual({ count: 1, last_revision: 0 });
+    }
   });
 
-  it("upgrades a v4 database to provisioning persistence schema without rewriting runs", () => {
+  it("refuses a database newer than the supported baseline", () => {
     const store = memoryStore();
-    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 4))).toBe(4);
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, mode, status, summary_json, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-      "run_existing",
-      "app_existing",
-      "incremental",
-      "queued",
-      null,
-      "2026-07-22T12:00:00.000Z"
-    );
+    expect(applyMigrations(store)).toBe(1);
+    store.run("PRAGMA user_version = 2");
 
-    expect(applyMigrations(store)).toBe(5);
-    expect(
-      store.get<{ status: string; target_ref: string | null }>(
-        "SELECT status, target_ref FROM provisioning_runs WHERE id = ?",
-        "run_existing"
-      )
-    ).toEqual({ status: "queued", target_ref: null });
-    store.run(
-      `INSERT INTO provisioning_watermarks (
-        application_id, target_ref, watermark_json, updated_at
-      ) VALUES (?, ?, ?, ?)`,
-      "app_existing",
-      "target-app",
-      '{"users":[],"groups":[]}',
-      "2026-07-22T12:01:00.000Z"
+    expect(() => applyMigrations(store)).toThrow(
+      "Database schema version 2 is newer than supported version 1."
     );
-    expect(
-      store.get<{ target_ref: string }>(
-        `SELECT target_ref FROM provisioning_watermarks
-         WHERE application_id = ? AND target_ref = ?`,
-        "app_existing",
-        "target-app"
-      )
-    ).toEqual({ target_ref: "target-app" });
+    expect(getSchemaVersion(store)).toBe(2);
+  });
 
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, target_ref, mode, status, summary_json,
-        created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
-      "run_active",
-      "app_locked",
-      "target-locked",
-      "incremental",
-      "queued",
-      "2026-07-22T12:02:00.000Z"
-    );
-    expect(() =>
+  it("allows one active provisioning run per application target", () => {
+    const store = memoryStore();
+    applyMigrations(store);
+    const insertRun = (
+      id: string,
+      targetRef: string | null,
+      status: string,
+      completedAt: string | null
+    ) =>
       store.run(
         `INSERT INTO provisioning_runs (
           id, application_id, target_ref, mode, status, summary_json,
           created_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
-        "run_conflict",
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+        id,
         "app_locked",
-        "target-locked",
+        targetRef,
         "incremental",
-        "running",
-        "2026-07-22T12:03:00.000Z"
-      )
-    ).toThrow();
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, target_ref, mode, status, summary_json,
-        created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
-      "run_terminal",
-      "app_locked",
-      "target-locked",
-      "incremental",
-      "succeeded",
-      "2026-07-22T11:00:00.000Z",
-      "2026-07-22T11:01:00.000Z"
-    );
+        status,
+        "2026-07-22T12:00:00.000Z",
+        completedAt
+      );
+
+    insertRun("run_active", "target-locked", "queued", null);
+    expect(() => insertRun("run_conflict", "target-locked", "running", null)).toThrow();
+    // A terminal run releases the target, and a null target is never locked.
+    insertRun("run_terminal", "target-locked", "succeeded", "2026-07-22T13:00:00.000Z");
+    insertRun("run_untargeted", null, "queued", null);
   });
 
   it("keeps deterministic identifiers stable and seed-specific", () => {
@@ -427,6 +405,8 @@ describe("Entra OIDC vertical slice", () => {
       authorization_endpoint: `https://login.example/e/test/${engine.tenantId}/oauth2/v2.0/authorize`,
       token_endpoint: `https://login.example/e/test/${engine.tenantId}/oauth2/v2.0/token`,
     });
+    expect(discovery).not.toHaveProperty("userinfo_endpoint");
+    expect(engine.provider.urls).not.toHaveProperty("userInfo");
     expect(discovery.issuer).not.toContain("/v2.0/");
     expect(
       store.get<{ value: string }>(

@@ -1,11 +1,10 @@
 import {
-  createApplicationInputSchema,
-  environmentConfigSchema,
+  assertMockLlmServerSpecBounds,
   environmentIdSchema,
-  identitySeedSchema,
   type Problem,
   type ProvisioningWorkflowParams,
 } from "@mockos/contracts";
+import { mockosHttpOperations, mockosRouterPath } from "@mockos/contracts/operations";
 import {
   type EnvironmentCatalogDurableObject,
   type EnvironmentDurableObject,
@@ -16,6 +15,18 @@ import {
 } from "@mockos/worker-kit";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+
+const MANAGEMENT_API_PREFIX = "/__mockos/v1";
+
+const managementRoute = (path: `/${string}`): string =>
+  `${MANAGEMENT_API_PREFIX}${mockosRouterPath(path)}`;
+
+const configureEnvironmentOperation = mockosHttpOperations.configure_environment.http;
+const seedIdentitiesOperation = mockosHttpOperations.seed_identities.http;
+const createApplicationOperation = mockosHttpOperations.create_application.http;
+const getEnvironmentDiscoveryOperation =
+  mockosHttpOperations.get_environment_discovery.http;
+const deleteEnvironmentOperation = mockosHttpOperations.delete_environment.http;
 
 export type CloudflareEnv = {
   ENVIRONMENT_CATALOG: DurableObjectNamespace<EnvironmentCatalogDurableObject>;
@@ -176,6 +187,23 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+const containsSecret = (root: unknown, secret: string): boolean => {
+  const pending: unknown[] = [root];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object") continue;
+    for (const [key, child] of Object.entries(value)) {
+      if (key.includes(secret)) return true;
+      if (typeof child === "string") {
+        if (child.includes(secret)) return true;
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+};
+
 const isPlatformCredentialToolCall = (
   value: unknown,
   platformApiKey: string
@@ -183,14 +211,30 @@ const isPlatformCredentialToolCall = (
   const message = record(value);
   if (message?.method !== "tools/call") return false;
   const params = record(message.params);
+  const arguments_ = record(params?.arguments);
+  if (params?.name === "put_mock_mcp_server") {
+    const server = record(arguments_?.server);
+    const authentication = record(server?.authentication);
+    const token = authentication?.mode === "bearer" ? authentication.token : undefined;
+    return typeof token === "string" && token.includes(platformApiKey);
+  }
+  if (params?.name === "put_mock_llm_server") {
+    const server = record(arguments_?.server);
+    if (!server) return false;
+    try {
+      assertMockLlmServerSpecBounds(server);
+    } catch {
+      return false;
+    }
+    return containsSecret(server, platformApiKey);
+  }
   if (params?.name !== "run_provisioning_cycle") return false;
-  const arguments_ = record(params.arguments);
   const target = record(arguments_?.target);
   if (target?.kind !== "inline") return false;
   const inlineTarget = record(target.target);
   const auth = record(inlineTarget?.auth);
   const token = auth?.kind === "bearer" ? auth.token : undefined;
-  return typeof token === "string" && sameSecret(token.trim(), platformApiKey);
+  return typeof token === "string" && token.trim().includes(platformApiKey);
 };
 
 const mcpBodyUsesPlatformCredential = (
@@ -241,8 +285,8 @@ const serveMcp = async (context: Context<WorkerHonoEnv>) => {
   if (platformApiKey && mcpBodyUsesPlatformCredential(bounded.body, platformApiKey)) {
     const body = problem(
       400,
-      "Outbound credential rejected",
-      "The platform Access Key cannot be used as an outbound target credential.",
+      "Platform credential rejected",
+      "The platform Access Key cannot be used as a Mock Credential or outbound target credential.",
       "PLATFORM_CREDENTIAL_NOT_ALLOWED",
       context.req.raw
     );
@@ -318,15 +362,19 @@ export const createWorkerApp = () => {
     }
   );
 
-  app.use("/__mockos/v1/*", async (context, next) => {
+  app.use(`${MANAGEMENT_API_PREFIX}/*`, async (context, next) => {
     const failure = apiKeyFailure(context.req.raw, context.env);
     if (failure) return failure;
     await next();
   });
 
-  app.put("/__mockos/v1/environments/:environmentId", async (context) => {
-    const environmentId = environmentIdSchema.parse(context.req.param("environmentId"));
-    const config = environmentConfigSchema.parse(await context.req.json());
+  app.put(managementRoute(configureEnvironmentOperation.path), async (context) => {
+    const { environmentId } = configureEnvironmentOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const config = configureEnvironmentOperation.bodySchema.parse(
+      await context.req.json()
+    );
     if (config.id !== environmentId) {
       throw new Error("Environment id in the URL and body must match.");
     }
@@ -343,48 +391,52 @@ export const createWorkerApp = () => {
     });
   });
 
-  app.post(
-    "/__mockos/v1/environments/:environmentId/identities:seed",
-    async (context) => {
-      const seed = identitySeedSchema.parse(await context.req.json());
-      const result = await environmentStub(
-        context.env,
-        context.req.param("environmentId")
-      ).seed(seed);
-      return context.json({
-        data: result,
-        meta: { requestId: crypto.randomUUID() },
-      });
-    }
-  );
-
-  app.post("/__mockos/v1/environments/:environmentId/applications", async (context) => {
-    const input = createApplicationInputSchema.parse(await context.req.json());
-    const result = await environmentStub(
-      context.env,
-      context.req.param("environmentId")
-    ).createApplication(input);
-    return context.json(
-      { data: result, meta: { requestId: crypto.randomUUID() } },
-      201
-    );
-  });
-
-  app.get("/__mockos/v1/environments/:environmentId/well-known", async (context) => {
-    const issuerBase = context.req.query("issuer_base");
-    if (!issuerBase) throw new Error("issuer_base query parameter is required.");
-    const result = await environmentStub(
-      context.env,
-      context.req.param("environmentId")
-    ).getWellKnown(issuerBase);
+  app.post(managementRoute(seedIdentitiesOperation.path), async (context) => {
+    const { environmentId } = seedIdentitiesOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const seed = seedIdentitiesOperation.bodySchema.parse(await context.req.json());
+    const result = await environmentStub(context.env, environmentId).seed(seed);
     return context.json({
       data: result,
       meta: { requestId: crypto.randomUUID() },
     });
   });
 
-  app.delete("/__mockos/v1/environments/:environmentId", async (context) => {
-    const environmentId = environmentIdSchema.parse(context.req.param("environmentId"));
+  app.post(managementRoute(createApplicationOperation.path), async (context) => {
+    const { environmentId } = createApplicationOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const input = createApplicationOperation.bodySchema.parse(await context.req.json());
+    const result = await environmentStub(context.env, environmentId).createApplication(
+      input
+    );
+    return context.json(
+      { data: result, meta: { requestId: crypto.randomUUID() } },
+      createApplicationOperation.successStatus
+    );
+  });
+
+  app.get(managementRoute(getEnvironmentDiscoveryOperation.path), async (context) => {
+    const { environmentId } = getEnvironmentDiscoveryOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
+    const query = getEnvironmentDiscoveryOperation.querySchema.parse({
+      issuer_base: context.req.query("issuer_base"),
+    });
+    const result = await environmentStub(context.env, environmentId).getWellKnown(
+      query.issuer_base
+    );
+    return context.json({
+      data: result,
+      meta: { requestId: crypto.randomUUID() },
+    });
+  });
+
+  app.delete(managementRoute(deleteEnvironmentOperation.path), async (context) => {
+    const { environmentId } = deleteEnvironmentOperation.pathSchema.parse({
+      environmentId: context.req.param("environmentId"),
+    });
     const stub = environmentStub(context.env, environmentId);
     const catalog = environmentCatalog(context.env);
     let config = await catalog.beginDeleteEnvironment(environmentId);
@@ -422,12 +474,19 @@ export const createWorkerApp = () => {
       );
       return context.json(body, body.status as ContentfulStatusCode);
     }
-    const response = await routeEnvironmentRequest(context.req.raw, context.env, {
-      hostingMode,
-      pathPrefix: context.env.PATH_PREFIX,
-      baseDomain: context.env.BASE_DOMAIN,
-      entraHost: context.env.ENTRA_HOST,
-    });
+    const response = await routeEnvironmentRequest(
+      context.req.raw,
+      context.env,
+      {
+        hostingMode,
+        pathPrefix: context.env.PATH_PREFIX,
+        baseDomain: context.env.BASE_DOMAIN,
+        entraHost: context.env.ENTRA_HOST,
+      },
+      {
+        waitUntil: (promise) => context.executionCtx.waitUntil(promise),
+      }
+    );
     return response ?? context.notFound();
   });
 

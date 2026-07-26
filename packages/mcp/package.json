@@ -17,6 +17,7 @@
     "@modelcontextprotocol/sdk": "catalog:"
   },
   "devDependencies": {
+    "@mockos/openapi": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

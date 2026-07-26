@@ -1,7 +1,9 @@
 # Self-hosting
 
-Status: Source-build guide with sampled M6 workers.dev acceptance; distribution limits remain
-Last reviewed: 2026-07-22
+Status: Source-build guide with F1 and partial OpenAI/Anthropic F2 local routes,
+sampled M6 workers.dev acceptance, and bounded local official-client qualifications;
+distribution limits remain
+Last reviewed: 2026-07-26
 
 Prerequisites are Node 22.12 or newer, pnpm 10.30.2, a Cloudflare account for Worker
 operations, and Wrangler authentication. Local repository checks do not require a
@@ -36,18 +38,75 @@ mock provider protocol routes do not require that control credential.
 The accepted M3 source exposes 14 authenticated MCP management tools, including
 `simulate_lifecycle`. M5 adds `run_provisioning_cycle` as tool 15; its Worker suite,
 full repository gate, and two-process provisioning e2e are green locally. The
-source-paired hosted flow also passed. Path-mode provider
+source-paired hosted flow also passed. The current F1 source appends five mock-MCP
+definition/state tools and F2 appends four mock-LLM definition tools for 24 total;
+neither addition inherits the M5 hosted result.
+Path-mode provider
 surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
 `/e/<environment>/api/v1`. The bounded M6 implementation also mounts Okta Classic
-primary authentication at `/e/<environment>/api/v1/authn`. Entra and Okta token
-endpoints also have local refresh
+primary authentication at `/e/<environment>/api/v1/authn`. The current source also
+mounts bounded Entra public-device authorization at
+`/e/<environment>/<tenant>/oauth2/v2.0/devicecode` and credential-gated activation at
+`/e/<environment>/devicelogin`. Entra and Okta token endpoints also have local refresh
 redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
 deployed evidence; M5 has a separate source-paired hosted acceptance record. The
 [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) samples the six bounded M6
 slices, including Classic Authn states/privacy/CORS/redaction, on exact staging and
 production versions; it is not corpus-wide or verified-live evidence.
+
+The F1 source route is
+`/e/<environment>/mcp-mock/<slug>`. Configure it through management MCP, then connect
+the agent under test with no credential or the separate Bearer Mock Credential defined
+for that slug. The local adapter supports MCP `2025-11-25`, POST, and DELETE; GET
+returns `405`. See [Environment-hosted mock MCP](./mock-mcp.md). Neither listed
+workers.dev deployment has recorded F1 acceptance.
+
+Current partial F2 source routes are
+`/e/<environment>/llm-mock/<slug>/openai/v1` and
+`/e/<environment>/llm-mock/<slug>/anthropic`. Configure the complete definition only
+through management MCP, then give the application under test a separate
+dialect-scoped Mock Credential. OpenAI uses Bearer; Anthropic uses `x-api-key` plus
+exactly `anthropic-version: 2023-06-01`. Both `accept_any` and `strict` require a valid
+credential; only `strict` compares its stored verifier. The bounded source supports
+model list/retrieve plus OpenAI and Anthropic JSON/SSE Chat Completions/Messages
+through pinned official SDKs. Successfully parsed/planned provider POSTs that pass
+response preflight attempt one metadata-only request-log reservation within a
+50-millisecond fail-open budget; prospective metadata/credential collisions skip it.
+Management MCP can query/assert successfully persisted rows. See the
+[OpenAI](./quickstarts/openai-sdk.md) and
+[Anthropic](./quickstarts/anthropic-sdk.md) SDK quickstarts and
+[MCP-managed mock OpenAI and Anthropic](./mock-llm.md). The listed workers.dev
+deployments have no F2 acceptance; configured midstream errors, OpenAI Responses,
+Anthropic betas, state, actual-network qualification, and Cloud integration remain
+unavailable.
+
+Application registration defaults to `clientType: "confidential"` and returns a
+synthetic secret exactly once. A public registration must explicitly use
+`clientType: "public"`, omit `clientSecret`, and cannot request
+`client_credentials`; it returns no secret. Public code and refresh grants omit a
+secret, public Okta revocation is owner-bound, and introspection remains confidential.
+An Entra device-only public registration uses `redirectUris: []`; the device flow has
+no callback and needs no synthetic workaround. Authorization-code and mixed
+authorization-code/device registrations still require at least one real, exact
+callback URI.
+
+After installing dependencies, reproduce the two local official-client paths with:
+
+```sh
+pnpm e2e:entra-msal
+pnpm e2e:entra-msal-cleanup
+pnpm e2e:okta-authjs
+pnpm e2e:okta-authjs-cleanup
+```
+
+These commands own local Wrangler HTTPS processes and temporary trust/state. The MSAL
+path combines confidential authorization code and public device code; the Okta path is
+public authorization code. They qualify only the exact versions and flows in the
+[MSAL Node](./quickstarts/entra-msal-node.md) and
+[Okta Auth JS](./quickstarts/okta-auth-js-node.md) guides. They do not qualify the
+deployed Worker, a real provider, or production readiness.
 
 Save a local CLI profile without putting the key directly in the command line:
 
@@ -81,7 +140,8 @@ node packages/cli/dist/bin.js lifecycle simulate \
 
 SCIM and Graph accept non-empty synthetic Bearer values; the Okta directory API accepts
 a non-empty synthetic SSWS value. Those checks are for protocol tests, not production
-authorization. Never use the MCP Access Key as a directory or outbound target token.
+authorization. Never use the MCP Access Key as a directory, mock-MCP, mock-LLM, or
+outbound target token.
 The M5 CLI and runtime reject an outbound target Bearer equal to the exact active
 self-host `API_KEY`, even when it has no `mk_` prefix. A later key rotation that
 collides with a saved target also fails before the outbound request; choose distinct,

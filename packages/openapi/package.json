@@ -1,0 +1,28 @@
+{
+  "name": "@mockos/openapi",
+  "version": "0.0.0",
+  "description": "Deterministic OpenAPI generation for the mockOS management contract.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "types": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mockos/contracts": "workspace:*",
+    "@mockos/llm-mock": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "ajv": "catalog:",
+    "ajv-formats": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

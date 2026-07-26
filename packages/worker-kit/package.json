@@ -5,7 +5,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./routing": "./src/edge-router.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -16,7 +17,9 @@
     "@mockos/contracts": "workspace:*",
     "@mockos/core": "workspace:*",
     "@mockos/engine-http": "workspace:*",
+    "@mockos/llm-mock": "workspace:*",
     "@mockos/mcp": "workspace:*",
+    "@mockos/mcp-mock": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "agents": "catalog:",
     "hono": "catalog:"

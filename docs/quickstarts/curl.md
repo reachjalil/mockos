@@ -1,7 +1,7 @@
 # Entra OIDC curl walkthrough
 
-Status: Accepted M3 path-mode identity walkthrough; M5 provisioning evidence is documented separately
-Last reviewed: 2026-07-22
+Status: Accepted M3 path-mode identity walkthrough; explicit confidential/public application boundary and official-client guides linked
+Last reviewed: 2026-07-26
 
 This walkthrough uses only synthetic data. It exercises the authenticated HTTP control
 routes and the same public protocol routes as the
@@ -81,9 +81,17 @@ Register the application:
 curl --fail-with-body --request POST \
   --header "Authorization: Bearer $MOCKOS_API_KEY" \
   --header 'Content-Type: application/json' \
-  --data "{\"name\":\"curl PKCE client\",\"clientId\":\"$MOCKOS_CLIENT\",\"clientSecret\":\"$MOCKOS_CLIENT_SECRET\",\"redirectUris\":[\"$MOCKOS_REDIRECT\"],\"grantTypes\":[\"authorization_code\",\"refresh_token\"],\"appRoles\":[],\"groupClaimsMode\":\"none\"}" \
+  --data "{\"name\":\"curl PKCE client\",\"clientId\":\"$MOCKOS_CLIENT\",\"clientSecret\":\"$MOCKOS_CLIENT_SECRET\",\"clientType\":\"confidential\",\"redirectUris\":[\"$MOCKOS_REDIRECT\"],\"grantTypes\":[\"authorization_code\",\"refresh_token\"],\"appRoles\":[],\"groupClaimsMode\":\"none\"}" \
   "$MOCKOS_ORIGIN/__mockos/v1/environments/$MOCKOS_ENV/applications"
 ```
+
+This walkthrough deliberately uses a confidential registration and sends its
+creation-only synthetic secret at the token endpoint. To test a public application,
+set `clientType` to `public`, omit `clientSecret` from creation and token requests, and
+never replace it with an empty placeholder. Public clients cannot request
+`client_credentials`; Okta public introspection is unavailable. Use the
+[Okta Auth JS quickstart](./okta-auth-js-node.md) for the qualified public-client
+code/PKCE/JWKS/refresh/revocation/lifecycle path.
 
 Fetch discovery and confirm its absolute URLs use `MOCKOS_ORIGIN`:
 

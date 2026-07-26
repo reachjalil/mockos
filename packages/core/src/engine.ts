@@ -4,6 +4,8 @@ import type {
   ClearScenarioResult,
   ProviderId,
   RequestLogEntry,
+  RequestLogLlmFinalization,
+  RequestLogLlmReservation,
   RequestLogPage,
   RequestLogQuery,
   ScenarioSpec,
@@ -249,6 +251,17 @@ export class Engine {
 
   appendRequestLog(entry: RequestLogEntry): RequestLogEntry {
     return this.requestLog.append(entry);
+  }
+
+  reserveLlmObservation(entry: RequestLogLlmReservation): RequestLogEntry {
+    return this.requestLog.reserveLlmObservation(entry);
+  }
+
+  finalizeLlmObservation(
+    requestId: string,
+    finalization: RequestLogLlmFinalization
+  ): RequestLogEntry | undefined {
+    return this.requestLog.finalizeLlmObservation(requestId, finalization);
   }
 
   assertRequests(assertion: AssertionSpec): AssertionResult {

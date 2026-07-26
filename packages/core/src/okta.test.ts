@@ -1,5 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type ApplicationRecord,
   type CreatedApplication,
@@ -66,7 +66,10 @@ class MemorySqlStore implements SqlStore {
 
 const stores: MemorySqlStore[] = [];
 
-const setup = async (grantTypes: CreatedApplication["grantTypes"]) => {
+const setup = async (
+  grantTypes: CreatedApplication["grantTypes"],
+  clientType: CreatedApplication["clientType"] = "confidential"
+) => {
   const store = new MemorySqlStore();
   stores.push(store);
   const clock = new FixedClock("2026-07-22T12:00:00.000Z");
@@ -90,7 +93,8 @@ const setup = async (grantTypes: CreatedApplication["grantTypes"]) => {
   const application = await engine.applications.create({
     name: "Okta target",
     clientId: "0oaMockClient",
-    clientSecret: "okta-client-secret",
+    clientType,
+    ...(clientType === "confidential" ? { clientSecret: "okta-client-secret" } : {}),
     redirectUris: ["https://client.example/callback"],
     grantTypes,
   });
@@ -116,7 +120,9 @@ const issueAuthorizationCodeTokens = async (input: {
   return input.engine.oauth.redeemAuthorizationCode({
     code: authorization.code,
     clientId: input.application.clientId,
-    clientSecret: "okta-client-secret",
+    ...(input.application.clientType === "confidential"
+      ? { clientSecret: "okta-client-secret" }
+      : {}),
     redirectUri: "https://client.example/callback",
     codeVerifier: verifier,
     issuerBase: input.issuer,
@@ -128,6 +134,144 @@ afterEach(() => {
 });
 
 describe("Okta OIDC profile", () => {
+  it("supports public S256 PKCE clients without opening protected token APIs", async () => {
+    const { store, engine, user, application } = await setup(
+      ["authorization_code", "refresh_token"],
+      "public"
+    );
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+
+    expect(application).toMatchObject({
+      clientId: "0oaMockClient",
+      clientType: "public",
+    });
+    expect(application.clientSecret).toBeUndefined();
+    expect(
+      store.get<{ secret_hash: string | null }>(
+        "SELECT secret_hash FROM applications WHERE client_id = ?",
+        application.clientId
+      )
+    ).toEqual({ secret_hash: null });
+    expect(engine.discovery(issuer)).toMatchObject({
+      token_endpoint_auth_methods_supported: [
+        "client_secret_post",
+        "client_secret_basic",
+        "none",
+      ],
+      introspection_endpoint_auth_methods_supported: [
+        "client_secret_post",
+        "client_secret_basic",
+      ],
+      revocation_endpoint_auth_methods_supported: [
+        "client_secret_post",
+        "client_secret_basic",
+        "none",
+      ],
+    });
+    await expect(
+      engine.applications.create({
+        name: "Invalid public secret",
+        clientType: "public",
+        clientSecret: "must-not-be-stored",
+        redirectUris: ["https://client.example/invalid-secret"],
+        grantTypes: ["authorization_code"],
+      })
+    ).rejects.toThrow("must not configure a client secret");
+    await expect(
+      engine.applications.create({
+        name: "Invalid public client credentials",
+        clientType: "public",
+        redirectUris: ["https://client.example/invalid-grant"],
+        grantTypes: ["client_credentials"],
+      })
+    ).rejects.toThrow("cannot use client_credentials");
+
+    const initial = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const refreshed = await engine.oauth.redeemRefreshToken({
+      clientId: application.clientId,
+      issuerBase: issuer,
+      refreshToken: initial.refreshToken ?? "",
+    });
+    expect(refreshed.refreshToken).toBeTruthy();
+    expect(refreshed.refreshToken).not.toBe(initial.refreshToken);
+
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        clientId: application.clientId,
+        clientSecret: "spurious-public-secret",
+        issuerBase: issuer,
+        refreshToken: refreshed.refreshToken ?? "",
+      })
+    ).rejects.toMatchObject({
+      code: "BAD_CLIENT_SECRET",
+      oauthError: "invalid_client",
+    });
+    await expect(
+      engine.oauth.introspectToken({
+        clientId: application.clientId,
+        issuerBase: issuer,
+        token: refreshed.accessToken,
+      })
+    ).rejects.toMatchObject({ code: "BAD_CLIENT_SECRET" });
+    await engine.oauth.revokeToken({
+      clientId: application.clientId,
+      token: refreshed.refreshToken ?? "",
+    });
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        clientId: application.clientId,
+        issuerBase: issuer,
+        refreshToken: refreshed.refreshToken ?? "",
+      })
+    ).rejects.toMatchObject({
+      code: "INVALID_GRANT",
+      oauthError: "invalid_grant",
+    });
+  });
+
+  it("rechecks user lifecycle after asynchronous code hashing", async () => {
+    const { engine, store, user, application } = await setup(
+      ["authorization_code"],
+      "confidential"
+    );
+    const findById = engine.users.findById.bind(engine.users);
+    let reads = 0;
+    vi.spyOn(engine.users, "findById").mockImplementation((id) => {
+      const current = findById(id);
+      if (id !== user.id || !current) return current;
+      reads += 1;
+      return reads === 2
+        ? {
+            ...current,
+            accountEnabled: false,
+            lifecycleState: "disabled",
+            resourceVersion: current.resourceVersion + 1,
+          }
+        : current;
+    });
+
+    await expect(
+      engine.oauth.createAuthorizationCode({
+        clientId: application.clientId,
+        redirectUri: "https://client.example/callback",
+        userId: user.id,
+        scope: "openid",
+        codeChallenge: await pkceS256(
+          "okta-lifecycle-race-verifier-abcdefghijklmnopqrstuvwxyz-0123456789"
+        ),
+        codeChallengeMethod: "S256",
+      })
+    ).rejects.toMatchObject({ code: "USER_DISABLED" });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM oauth_codes")?.count
+    ).toBe(0);
+  });
+
   it("renders request-derived discovery, scope-aware claims, and native errors", async () => {
     const { engine, user, application } = await setup([
       "authorization_code",
@@ -147,6 +291,8 @@ describe("Okta OIDC profile", () => {
         "urn:ietf:params:oauth:grant-type:device_code",
       ],
     });
+    expect(engine.discovery(issuer)).not.toHaveProperty("userinfo_endpoint");
+    expect(engine.provider.urls).not.toHaveProperty("userInfo");
 
     const tokens = await issueAuthorizationCodeTokens({
       engine,
@@ -296,6 +442,83 @@ describe("Okta OIDC profile", () => {
     ).rejects.toMatchObject({
       code: "BAD_CLIENT_SECRET",
       oauthError: "invalid_client",
+    });
+  });
+
+  it("prevents a public client from revoking another application's tokens or refresh family", async () => {
+    const { store, engine, user, application } = await setup([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const ownerCredentials = {
+      clientId: application.clientId,
+      clientSecret: "okta-client-secret",
+      issuerBase: issuer,
+    };
+    const publicApplication = await engine.applications.create({
+      name: "Unrelated public client",
+      clientId: "0oaUnrelatedPublicClient",
+      clientType: "public",
+      redirectUris: ["https://public-client.example/callback"],
+      grantTypes: ["authorization_code", "refresh_token"],
+    });
+    const initial = await issueAuthorizationCodeTokens({
+      engine,
+      user,
+      application,
+      issuer,
+    });
+    const rotated = await engine.oauth.redeemRefreshToken({
+      refreshToken: initial.refreshToken ?? "",
+      ...ownerCredentials,
+    });
+    const rotatedRefreshToken = rotated.refreshToken ?? "";
+    const rotatedRefreshHash = await hashSecret(rotatedRefreshToken);
+    const refreshFamily = store.get<{ family_id: string }>(
+      "SELECT family_id FROM refresh_tokens WHERE token_hash = ?",
+      rotatedRefreshHash
+    );
+    expect(refreshFamily?.family_id).toBeTruthy();
+
+    await engine.oauth.revokeToken({
+      clientId: publicApplication.clientId,
+      token: initial.accessToken,
+    });
+    await engine.oauth.revokeToken({
+      clientId: publicApplication.clientId,
+      token: rotatedRefreshToken,
+      tokenTypeHint: "refresh_token",
+    });
+
+    await expect(
+      engine.oauth.introspectToken({
+        token: initial.accessToken,
+        ...ownerCredentials,
+      })
+    ).resolves.toMatchObject({ active: true });
+    await expect(
+      engine.oauth.introspectToken({
+        token: rotatedRefreshToken,
+        tokenTypeHint: "refresh_token",
+        ...ownerCredentials,
+      })
+    ).resolves.toMatchObject({ active: true, token_type: "refresh_token" });
+    expect(
+      store.all<{ revoked_at: string | null }>(
+        "SELECT revoked_at FROM refresh_tokens WHERE family_id = ?",
+        refreshFamily?.family_id ?? ""
+      )
+    ).toEqual([{ revoked_at: null }, { revoked_at: null }]);
+
+    await expect(
+      engine.oauth.redeemRefreshToken({
+        refreshToken: rotatedRefreshToken,
+        ...ownerCredentials,
+      })
+    ).resolves.toMatchObject({
+      accessToken: expect.stringMatching(/^eyJ/),
+      refreshToken: expect.stringMatching(/^refresh_/),
     });
   });
 
@@ -653,10 +876,12 @@ describe("Okta device authorization", () => {
       "urn:ietf:params:oauth:grant-type:device_code",
     ]);
     const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const directoryBaseUrl = "https://id.mockos.test/e/acme";
     const authorization = await engine.oauth.createDeviceAuthorization({
       clientId: application.clientId,
       scope: "openid profile offline_access",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     expect(authorization).toMatchObject({
       expiresIn: 600,
@@ -699,6 +924,7 @@ describe("Okta device authorization", () => {
       clientId: application.clientId,
       scope: "openid",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     engine.oauth.denyDeviceAuthorization(denied.userCode);
     await expect(
@@ -713,6 +939,7 @@ describe("Okta device authorization", () => {
       clientId: application.clientId,
       scope: "openid",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     clock.advance(601_000);
     await expect(
