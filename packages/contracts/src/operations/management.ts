@@ -112,7 +112,7 @@ export const oidcDiscoveryDocumentSchema = z
     authorization_endpoint: z.url(),
     token_endpoint: z.url(),
     jwks_uri: z.url(),
-    userinfo_endpoint: z.url(),
+    userinfo_endpoint: z.url().optional(),
     response_types_supported: z.array(z.string()),
     response_modes_supported: z.array(z.string()),
     subject_types_supported: z.array(z.string()),

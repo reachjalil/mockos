@@ -55,6 +55,11 @@ rotated refresh family after an unrelated public client attempts revocation.
 | `POST /oauth2/default/v1/introspect` | Active/inactive access- and refresh-token state after client authentication |
 | `POST /oauth2/default/v1/revoke` | Access- or refresh-token revocation; unknown tokens are idempotent |
 
+OIDC discovery and `get_wellknown_urls` deliberately omit UserInfo because
+`/oauth2/default/v1/userinfo` is not mounted. Removing the previously advertised URL
+makes discovery match the executable runtime; it adds no UserInfo support or higher
+evidence claim.
+
 Token discovery advertises `client_secret_basic`, `client_secret_post`, and `none`.
 Confidential clients authenticate with a secret. Public code and refresh redemption
 omit a secret, and a spurious secret fails client authentication. Authorization-code
@@ -235,8 +240,8 @@ revocation, or race assertion remotely and is not verified-live Okta evidence.
   contract above. They cannot configure a secret, use `client_credentials`, or call
   introspection. Refresh tokens remain bearer credentials without DPoP or another
   sender constraint.
-- Discovery and `get_wellknown_urls` return a UserInfo URL, but `/v1/userinfo` is not
-  implemented yet.
+- Discovery and `get_wellknown_urls` omit UserInfo because `/v1/userinfo` is not
+  implemented.
 - Classic `/api/v1/authn` is limited to primary authentication, state retrieval, and
   cancellation. Factor verification, password change, recovery/unlock execution,
   Sessions API exchange, password warnings, enrollment, and the rest of the Classic

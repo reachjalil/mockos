@@ -148,6 +148,7 @@ describe("Entra authorization-code flow", () => {
       token_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
       jwks_uri: `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`,
     });
+    expect(managementDiscovery.data).not.toHaveProperty("userinfo_endpoint");
 
     const discoveryResponse = await worker.fetch(
       `${issuer}/.well-known/openid-configuration`
@@ -160,6 +161,7 @@ describe("Entra authorization-code flow", () => {
       token_endpoint: `${origin}/e/${environmentId}/${tenantId}/oauth2/v2.0/token`,
       jwks_uri: `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`,
     });
+    expect(discovery).not.toHaveProperty("userinfo_endpoint");
     const jwksUrl = `${origin}/e/${environmentId}/${tenantId}/discovery/v2.0/keys`;
     const beforeRotation = await (await worker.fetch(jwksUrl)).json<{
       keys: Array<JsonWebKey & { kid?: string }>;

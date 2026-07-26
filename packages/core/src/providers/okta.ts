@@ -134,8 +134,6 @@ const oktaUrls = {
   token: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, "v1/token"),
   jwks: ({ issuerBase }: ProviderUrlContext) => appendIssuerPath(issuerBase, "v1/keys"),
-  userInfo: ({ issuerBase }: ProviderUrlContext) =>
-    appendIssuerPath(issuerBase, "v1/userinfo"),
   discovery: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, ".well-known/openid-configuration"),
   introspection: ({ issuerBase }: ProviderUrlContext) =>
@@ -157,7 +155,6 @@ const oktaDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => ({
   authorization_endpoint: oktaUrls.authorization(context),
   token_endpoint: oktaUrls.token(context),
   jwks_uri: oktaUrls.jwks(context),
-  userinfo_endpoint: oktaUrls.userInfo(context),
   introspection_endpoint: oktaUrls.introspection(context),
   revocation_endpoint: oktaUrls.revocation(context),
   device_authorization_endpoint: oktaUrls.deviceAuthorization(context),

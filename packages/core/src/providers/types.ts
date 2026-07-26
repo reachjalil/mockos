@@ -12,7 +12,7 @@ export interface ProviderUrls {
   authorization(context: ProviderUrlContext): string;
   token(context: ProviderUrlContext): string;
   jwks(context: ProviderUrlContext): string;
-  userInfo(context: ProviderUrlContext): string;
+  userInfo?(context: ProviderUrlContext): string;
   discovery(context: ProviderUrlContext): string;
   introspection?(context: ProviderUrlContext): string;
   revocation?(context: ProviderUrlContext): string;
@@ -68,7 +68,7 @@ export interface OidcDiscoveryDocument {
   readonly authorization_endpoint: string;
   readonly token_endpoint: string;
   readonly jwks_uri: string;
-  readonly userinfo_endpoint: string;
+  readonly userinfo_endpoint?: string;
   readonly response_types_supported: readonly string[];
   readonly response_modes_supported: readonly string[];
   readonly subject_types_supported: readonly string[];

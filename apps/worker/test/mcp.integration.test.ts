@@ -1035,6 +1035,7 @@ describe("management MCP", () => {
           openidConfiguration?: string;
           scimBaseUrl?: string;
           tokenEndpoint?: string;
+          userinfoEndpoint?: string;
         }
       | undefined;
     const managementBase = `${publicOrigin}/e/${environment?.id}`;
@@ -1048,6 +1049,7 @@ describe("management MCP", () => {
       scimBaseUrl: `${managementBase}/scim/v2`,
       graphBaseUrl: `${managementBase}/graph/v1.0`,
     });
+    expect(wellKnownData).not.toHaveProperty("userinfoEndpoint");
     expect(normalTokenData?.claims?.iss).toBe(managementIssuer);
 
     const scenarioId = "mcp-discovery-mfa";

@@ -27,7 +27,6 @@ describe("MockosClient", () => {
           authorization_endpoint: "https://issuer.example/tenant/oauth2/v2.0/authorize",
           token_endpoint: "https://issuer.example/tenant/oauth2/v2.0/token",
           jwks_uri: "https://issuer.example/tenant/discovery/v2.0/keys",
-          userinfo_endpoint: "https://issuer.example/tenant/openid/userinfo",
           response_types_supported: ["code"],
           response_modes_supported: ["query"],
           subject_types_supported: ["pairwise"],
@@ -47,10 +46,11 @@ describe("MockosClient", () => {
       fetch,
     });
 
-    await client.getEnvironmentDiscovery(
+    const discovery = await client.getEnvironmentDiscovery(
       "env_client_test",
       "https://issuer.example/base?shape=one two"
     );
+    expect(discovery.data).not.toHaveProperty("userinfo_endpoint");
 
     const [url, init] = fetch.mock.calls[0] ?? [];
     expect(String(url)).toBe(

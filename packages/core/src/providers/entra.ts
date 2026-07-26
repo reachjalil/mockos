@@ -142,8 +142,6 @@ const entraUrls = {
     appendIssuerPath(entraAuthority(issuerBase), "oauth2/v2.0/token"),
   jwks: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(entraAuthority(issuerBase), "discovery/v2.0/keys"),
-  userInfo: ({ issuerBase }: ProviderUrlContext) =>
-    appendIssuerPath(entraAuthority(issuerBase), "openid/userinfo"),
   discovery: ({ issuerBase }: ProviderUrlContext) =>
     appendIssuerPath(issuerBase, ".well-known/openid-configuration"),
 };
@@ -153,7 +151,6 @@ const entraDiscovery = (context: ProviderUrlContext): OidcDiscoveryDocument => (
   authorization_endpoint: entraUrls.authorization(context),
   token_endpoint: entraUrls.token(context),
   jwks_uri: entraUrls.jwks(context),
-  userinfo_endpoint: entraUrls.userInfo(context),
   response_types_supported: ["code"],
   response_modes_supported: ["query", "form_post"],
   subject_types_supported: ["pairwise"],

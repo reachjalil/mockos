@@ -573,6 +573,8 @@ describe("Entra OIDC vertical slice", () => {
       authorization_endpoint: `https://login.example/e/test/${engine.tenantId}/oauth2/v2.0/authorize`,
       token_endpoint: `https://login.example/e/test/${engine.tenantId}/oauth2/v2.0/token`,
     });
+    expect(discovery).not.toHaveProperty("userinfo_endpoint");
+    expect(engine.provider.urls).not.toHaveProperty("userInfo");
     expect(discovery.issuer).not.toContain("/v2.0/");
     expect(
       store.get<{ value: string }>(

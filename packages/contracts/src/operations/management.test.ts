@@ -7,6 +7,7 @@ import {
   mockosManagementOperations,
   mockosManagementScopes,
   mockosRouterPath,
+  oidcDiscoveryDocumentSchema,
 } from "./index";
 
 describe("management operation registry", () => {
@@ -51,6 +52,41 @@ describe("management operation registry", () => {
       "GET /environments/{environmentId}/well-known",
     ]);
     expect(mockosHttpOperationIds).toHaveLength(5);
+  });
+
+  it("accepts discovery documents only conditionally advertising UserInfo", () => {
+    const document = {
+      issuer: "https://issuer.example/tenant/v2.0",
+      authorization_endpoint: "https://issuer.example/tenant/oauth2/v2.0/authorize",
+      token_endpoint: "https://issuer.example/tenant/oauth2/v2.0/token",
+      jwks_uri: "https://issuer.example/tenant/discovery/v2.0/keys",
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      subject_types_supported: ["pairwise"],
+      id_token_signing_alg_values_supported: ["RS256"],
+      scopes_supported: ["openid"],
+      token_endpoint_auth_methods_supported: ["client_secret_post"],
+      claims_supported: ["sub"],
+      grant_types_supported: ["authorization_code"],
+      code_challenge_methods_supported: ["S256"],
+    };
+
+    expect(oidcDiscoveryDocumentSchema.parse(document)).not.toHaveProperty(
+      "userinfo_endpoint"
+    );
+    expect(
+      oidcDiscoveryDocumentSchema.parse({
+        ...document,
+        userinfo_endpoint: "https://issuer.example/tenant/openid/userinfo",
+      })
+    ).toHaveProperty(
+      "userinfo_endpoint",
+      "https://issuer.example/tenant/openid/userinfo"
+    );
+    const jsonSchema = z.toJSONSchema(oidcDiscoveryDocumentSchema, {
+      io: "output",
+    });
+    expect(jsonSchema.required).not.toContain("userinfo_endpoint");
   });
 
   it("keeps mock-MCP server management MCP-only with explicit safety metadata", () => {

@@ -20,6 +20,11 @@ claims include `aud`, `iss`, `iat`, `exp`, `nonce`, `oid`, `sub`, `tid`,
 and a configured username claim. The [Worker integration test](../../apps/worker/test/oidc.integration.test.ts)
 drives the full hosted-login flow and verifies the minted ID token from JWKS.
 
+OIDC discovery and `get_wellknown_urls` deliberately omit UserInfo because no
+UserInfo route is mounted. Entra fixtures 28 and 29 remain documented targets only.
+Removing the previously advertised URL makes discovery match the executable runtime;
+it adds no UserInfo support or higher evidence claim.
+
 The accepted M3 implementation also redeems the `refresh_token` grant for an authenticated
 client. Refresh tokens are stored hashed and rotate atomically within a family while
 preserving the original authentication time and absolute expiry. Scope escalation is

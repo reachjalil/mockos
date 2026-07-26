@@ -25,6 +25,10 @@ P.
 - Entra remains a narrow OIDC/OAuth slice. Authorization code and rotating refresh
   grants have local evidence; client credentials, device flow, UserInfo, logout
   fidelity, and SAML remain unimplemented or unqualified.
+- Entra and Okta OIDC discovery plus `get_wellknown_urls` intentionally omit UserInfo
+  until an executable route exists. Entra fixtures 28 and 29 remain documented-only
+  targets. This corrects capability discovery; it is not UserInfo implementation,
+  qualification, hosted evidence, or provider parity.
 - The only official Entra identity-client qualification is `@azure/msal-node` 5.4.2
   as a confidential client for one tenant-specific custom authority, authorization
   code with S256 PKCE, and forced silent refresh. It uses host-only

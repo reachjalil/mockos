@@ -91,7 +91,9 @@ Keep every returned ID and use an explicit `environmentId` in saved automation:
    of logs and reports.
 4. Call `get_wellknown_urls` with the explicit environment ID. Configure the
    application from the returned issuer, discovery, OAuth/OIDC, JWKS, SCIM, and
-   provider-specific directory URLs. Never reconstruct an absolute URL from memory.
+   provider-specific directory URLs. Never reconstruct an absolute URL from memory,
+   and treat an omitted optional endpoint as unsupported. Entra and Okta currently
+   omit UserInfo because neither provider profile mounts a UserInfo route.
 5. Run the application flow against those provider-shaped endpoints with separate
    synthetic protocol credentials.
 6. Call `get_request_log` for diagnosis and `assert_requests` for stable,

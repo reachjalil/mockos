@@ -615,10 +615,12 @@ describe("Okta public identity surface", () => {
       scimBaseUrl: `${publicBase}/scim/v2`,
       oktaApiBaseUrl: `${publicBase}/api/v1`,
     });
+    expect(urls).not.toHaveProperty("userinfoEndpoint");
 
     const discoveryResponse = await worker.fetch(urls.openidConfiguration);
     expect(discoveryResponse.status, await discoveryResponse.clone().text()).toBe(200);
-    expect(await discoveryResponse.json()).toMatchObject({
+    const discovery = await discoveryResponse.json<Record<string, unknown>>();
+    expect(discovery).toMatchObject({
       issuer,
       authorization_endpoint: urls.authorizationEndpoint,
       token_endpoint: urls.tokenEndpoint,
@@ -635,6 +637,7 @@ describe("Okta public identity surface", () => {
       ],
       code_challenge_methods_supported: ["S256"],
     });
+    expect(discovery).not.toHaveProperty("userinfo_endpoint");
 
     const verifier =
       "okta-worker-integration-verifier-with-more-than-forty-three-characters";

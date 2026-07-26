@@ -253,6 +253,8 @@ describe("Okta OIDC profile", () => {
         "urn:ietf:params:oauth:grant-type:device_code",
       ],
     });
+    expect(engine.discovery(issuer)).not.toHaveProperty("userinfo_endpoint");
+    expect(engine.provider.urls).not.toHaveProperty("userInfo");
 
     const tokens = await issueAuthorizationCodeTokens({
       engine,

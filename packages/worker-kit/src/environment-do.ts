@@ -50,7 +50,6 @@ import {
   toMockLlmServerView,
   toMockMcpServerView,
   type WellKnownUrls,
-  wellKnownUrlsSchema,
 } from "@mockos/contracts";
 import {
   applyMigrations,
@@ -121,6 +120,7 @@ import {
   validateOutboundTarget,
 } from "./secure-fetch";
 import { trustedPublicUrl } from "./trusted-public-url";
+import { buildWellKnownUrls } from "./well-known-urls";
 
 const CONFIG_KEY = "environment_config";
 const LAST_ACTIVITY_KEY = "last_activity";
@@ -2014,49 +2014,7 @@ export class EnvironmentDurableObject extends DurableObject {
 
   async getWellKnownUrls(location: WellKnownPublicLocation): Promise<WellKnownUrls> {
     const engine = await this.#engine();
-    const issuerBase = trustedPublicUrl(location.issuerBase, "Well-known issuer base");
-    const directoryBaseUrl = trustedPublicUrl(
-      location.directoryBaseUrl,
-      "Well-known directory base",
-      { protocol: new URL(issuerBase).protocol }
-    );
-    const context = { issuerBase, tenantId: engine.tenantId };
-    const urls = engine.provider.urls;
-    const graphBaseUrl =
-      engine.providerId === "entra"
-        ? trustedPublicUrl(location.graphBaseUrl ?? "", "Well-known Graph base", {
-            pathSuffix: "/graph/v1.0",
-            protocol: new URL(issuerBase).protocol,
-          })
-        : undefined;
-    if (
-      graphBaseUrl &&
-      graphBaseUrl !== `${directoryBaseUrl.replace(/\/+$/, "")}/graph/v1.0`
-    ) {
-      throw new Error("Well-known Graph base must belong to the directory base.");
-    }
-    const result = wellKnownUrlsSchema.parse({
-      issuer: urls.issuer(context),
-      openidConfiguration: urls.discovery(context),
-      authorizationEndpoint: urls.authorization(context),
-      tokenEndpoint: urls.token(context),
-      jwksUri: urls.jwks(context),
-      scimBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/scim/v2`,
-      ...(engine.providerId === "entra"
-        ? { graphBaseUrl }
-        : {
-            oktaApiBaseUrl: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1`,
-            oktaAuthnEndpoint: `${directoryBaseUrl.replace(/\/+$/, "")}/api/v1/authn`,
-          }),
-      userinfoEndpoint: urls.userInfo(context),
-      ...(urls.introspection
-        ? { introspectionEndpoint: urls.introspection(context) }
-        : {}),
-      ...(urls.revocation ? { revocationEndpoint: urls.revocation(context) } : {}),
-      ...(urls.deviceAuthorization
-        ? { deviceAuthorizationEndpoint: urls.deviceAuthorization(context) }
-        : {}),
-    });
+    const result = buildWellKnownUrls(engine.provider, engine.tenantId, location);
     await this.#touch();
     return result;
   }
