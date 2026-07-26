@@ -19,19 +19,20 @@ matrix.
 
 | Surface | Caller | Purpose | Credential |
 | --- | --- | --- | --- |
-| Management MCP at `/mcp` | operator agent, automation, CI | Create, inspect, replace, reset, and delete mock MCP servers | Platform management Access Key |
+| Management MCP at `/mcp` | operator agent, automation, CI | Create, inspect, replace, reset, and delete mock MCP servers; discover and install built-in presets | Platform management Access Key |
 | Environment mock MCP at `/e/{environmentId}/mcp-mock/{slug}` or `https://{environmentId}.{baseDomain}/mcp-mock/{slug}` | agent or MCP client under test | Exercise configured tools, resources, templates, prompts, errors, and state | No credential or a server-specific Bearer Mock Credential |
 | Self-hosted HTTP under `/__mockos/v1` | narrow browser or operator integration | Five existing identity-management operations | Platform management Access Key |
 
-The five F1 operations are MCP-only. They do not add routes to
+The eight F1 operations are MCP-only. They do not add routes to
 `/__mockos/v1`, the OpenAPI document, or `@mockos/client`. The environment endpoint is
 a synthetic dependency called by the application under test, not another management
 API.
 
 ## Configure through management MCP
 
-The management registry now contains 24 tools. The five F1 tools occupy positions
-16–20 after the 15 accepted identity-management tools:
+The management registry now contains 27 tools and exactly five self-hosted HTTP
+routes. The eight F1 tools occupy positions 16–23 after the 15 accepted
+identity-management tools:
 
 | Tool | Effect | Exact result data | State semantics |
 | --- | --- | --- | --- |
@@ -40,10 +41,43 @@ The management registry now contains 24 tools. The five F1 tools occupy position
 | `get_mock_mcp_server` | safe read | A safe server view | Returns no Bearer token or verifier |
 | `delete_mock_mcp_server` | idempotent-state destructive mutation | `{ slug, deleted: true }` | Requires the positive current revision and atomically deletes the definition, application state, and all sessions; a retry after success returns typed not-found |
 | `reset_mock_mcp_state` | idempotent destructive mutation | `{ slug, cleared }` | Requires the positive current revision and atomically deletes application state only; the definition, revision, and active sessions remain, and an exact retry returns `cleared: 0` |
+| `list_mock_mcp_blueprints` | safe read | `{ schemaVersion, blueprints }` | Lists secret-free built-in summaries and provenance |
+| `get_mock_mcp_blueprint` | safe read | A complete built-in blueprint definition | Returns the exact public server-definition preset with no credential |
+| `install_mock_mcp_blueprint` | destructive mutation | `{ schemaVersion, blueprintId, blueprintVersion, server }` | Creates or CAS-replaces the selected environment-local slug and validates the complete installed public server specification |
 
-Every input accepts an optional `environmentId`. Saved automation should provide it
-explicitly. Omitting it uses the current management transport session's environment
-cursor and therefore does not transfer to another MCP session.
+Each of the five environment server/state inputs and blueprint install accepts an
+optional `environmentId`. Saved automation should provide it explicitly. Omitting it
+uses the current management transport session's environment cursor and therefore does
+not transfer to another MCP session. Blueprint list/get are global catalog reads and
+do not take an environment.
+
+### Install the built-in Salesforce SObject Reads preset
+
+The current catalog entry is
+`salesforce/hosted-mcp/sobject-reads`. It installs a stateless,
+unauthenticated mock MCP server with exactly six tools: `getObjectSchema`,
+`soqlQuery`, `find`, `getUserInfo`, `listRecentSobjectRecords`, and
+`getRelatedRecords`. Discover its complete secret-free definition through
+`list_mock_mcp_blueprints` and `get_mock_mcp_blueprint`, or use the generated
+[`mock-mcp-blueprints.v1.json`](./reference/mock-mcp-blueprints.v1.json) catalog.
+
+Use `install_mock_mcp_blueprint` with `expectedRevision: null` for create intent or
+the positive current revision for a changed replacement. The handler validates the
+complete public installed server specification against the selected blueprint and
+slug, not only authentication or slug. A changed install is destructive: it deletes
+the previous revision's application state and terminates its revision-bound sessions.
+Canonically identical replay converges before CAS without mutation, including an
+identical delete/recreate generation; only a changed definition with stale or ABA
+intent receives typed `409`.
+
+The fixture derives its tool names and inputs from Salesforce documentation reviewed
+on 2026-07-25. It performs no Salesforce network or REST call, accepts no Salesforce
+OAuth credential, enforces no Salesforce field-level security or sharing, and makes
+no Salesforce output-wire-parity claim. Its D/I/S/X/Q evidence is local only;
+actual-network, H, V, and P are unqualified. It is a built-in server-definition
+preset, not the F5 portable blueprint export/import/apply system. See the
+[Salesforce SObject Reads blueprint guide](./blueprints/salesforce-sobject-reads.md)
+for exact fixtures, evidence, and limitations.
 
 `put_mock_mcp_server` takes
 `{ environmentId?, expectedRevision, server }`. This minimal definition uses
@@ -121,6 +155,11 @@ Load the token from a secret store and inject it into the management tool call. 
 put a real credential in a committed definition or example. The public Worker rejects
 its own platform `API_KEY` as a mock Bearer value, so management authority cannot be
 replayed against the data plane.
+
+The exact raw Bearer value is allowed only at `authentication.token`. The same value
+in any other definition key or string value is rejected before persistence, and an
+MCP dependency result that reflects it fails closed instead of returning the
+credential.
 
 A replacement is a complete definition write, not a patch. Resend every intended
 server field and use the positive current revision returned by put/get. For Bearer
@@ -222,9 +261,11 @@ not replayed response shape.
 Put checks a canonically identical definition before its CAS comparison. Retrying an
 ambiguous successful put therefore returns the existing record even if the supplied
 expectation is now stale or still `null`; it does not allocate a revision, delete
-state, or terminate sessions. This exception applies only to canonical replay. A
-changed create against an existing slug, a changed replacement against a missing
-slug, and stale or delete/recreate ABA expectations fail with
+state, or terminate sessions. The same definition also converges to the current
+generation after an identical delete/recreate. This exception applies only to
+canonical replay. A changed create against an existing slug, a changed replacement
+against a missing slug, and changed-definition stale or delete/recreate ABA
+expectations fail with
 `409 MOCK_MCP_SERVER_REVISION_CONFLICT` without mutation.
 
 ## Connect the agent under test
@@ -653,18 +694,19 @@ commit.
 
 - Every management mutation carries explicit generation intent. Put uses `null` only
   for create or a positive current revision for replacement; reset and delete require
-  a positive current revision. Stale and delete/recreate ABA expectations fail
-  atomically with typed `409`.
+  a positive current revision. Changed-definition stale and delete/recreate ABA
+  expectations fail atomically with typed `409`.
 - Every successful new or changed definition receives the next environment-wide safe
   positive-integer revision. One slug's revisions therefore increase strictly but may
   skip values used by other slugs.
 - Canonical replay is checked before put CAS. Repeating the same normalized definition
   is a true no-op even with a stale or `null` expectation: revision, timestamps,
-  application state, and sessions are preserved.
-- Changing a slug's definition advances its revision atomically, removes prior
-  application state, and terminates sessions for the old revision. It is a complete
-  write, so Bearer authentication requires caller-owned credential resupply or
-  rotation.
+  application state, and sessions are preserved. This convergence also applies when
+  the same definition is the current generation after delete/recreate.
+- Changing a slug's definition through direct put or blueprint install advances its
+  revision atomically, removes prior application state, and terminates sessions for
+  the old revision. Direct put is a complete write, so Bearer authentication requires
+  caller-owned credential resupply or rotation.
 - The one-row revision allocator survives deletion, including deletion of every
   server, so recreating a slug cannot reuse an old revision. Reset, delete, invalid
   input, and rejected capacity writes do not consume revisions. If the safe-integer
@@ -705,6 +747,8 @@ After handler entry, F1 exposes these stable mutation outcomes:
 | Condition | MCP problem status/code | Mutation |
 | --- | --- | --- |
 | Changed put does not match create/current-revision intent | `409 MOCK_MCP_SERVER_REVISION_CONFLICT` | None |
+| Changed blueprint install does not match create/current-revision intent | `409 MOCK_MCP_SERVER_REVISION_CONFLICT` | None |
+| Blueprint dependency result differs from the complete selected public specification | Fails closed | None |
 | Reset/delete uses a stale or delete/recreate ABA revision | `409 MOCK_MCP_SERVER_REVISION_CONFLICT` | None |
 | Reset/delete targets a missing server, including delete retry | `404 MOCK_MCP_SERVER_NOT_FOUND` | None |
 | Reset matches current revision after state is already clear | Success with `cleared: 0` | No additional state change |
@@ -879,14 +923,22 @@ package publication, hosted CI, merge, staging, production, wildcard TLS, operat
 Cloud composition, a future MCP protocol revision, or external ecosystem compatibility
 beyond the tested clients.
 
-For the bounded F1 management-CAS slice, D/I/S/X/Q are yes locally: strict contracts,
-repository/MCP tests, and the mounted Worker integration prove discovery and runtime
-agreement, canonical replay, current-revision reset/delete, one-winner concurrent
-replacement, typed stale/ABA conflict, repeated-delete not-found, and credential
-non-reflection through `@modelcontextprotocol/sdk` `1.29.0`. Q is limited to that
-mounted official-client management and data-plane path; it is not an actual-network,
-hosted, deployed, broad-client, or production qualification. H and P remain
-unqualified; V is not applicable to this synthetic flow.
+For the bounded generic F1 management-CAS slice, D/I/S/X/Q are yes locally: strict
+contracts, repository/MCP tests, and the mounted Worker integration prove discovery
+and runtime agreement, canonical replay, current-revision reset/delete, one-winner
+concurrent replacement, typed stale/ABA conflict, repeated-delete not-found, and
+credential non-reflection through `@modelcontextprotocol/sdk` `1.29.0`. Q is limited
+to that mounted official-client management and data-plane path; it is not an
+actual-network, hosted, deployed, broad-client, or production qualification. H and P
+remain unqualified; V is not applicable to the generic user-authored synthetic flow.
+
+The provider-derived `salesforce/hosted-mcp/sobject-reads` preset has a separate
+evidence statement: D/I/S/X/Q are yes for the exact local catalog, installation, six
+deterministic tools, observation/assertion, and cleanup flow. Actual-network, H, V,
+and P are unqualified; there is no hosted smoke, deployment, private Cloud pin, live
+Salesforce organization comparison, provider REST/OAuth/FLS/sharing exercise, or
+output-wire-parity qualification. The 2026-07-25 documentation review is provenance,
+not V evidence.
 
 ## Current limitations
 
@@ -903,7 +955,7 @@ unqualified; V is not applicable to this synthetic flow.
 - This F1 mock-MCP route exposes no LLM API. The separate partial F2 surface supports
   bounded OpenAI and Anthropic JSON/SSE provider routes.
 - No enforced `env:ro` or `env:rw` Access Key scopes before F4.
-- No direct HTTP management routes for the five F1 operations.
+- No direct HTTP management routes for the eight F1 operations.
 - No npm publication, hosted acceptance, deployment acceptance, load envelope, or
   production SLA claim.
 

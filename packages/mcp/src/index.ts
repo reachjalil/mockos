@@ -18,6 +18,9 @@ import {
   type MockLlmServerSummary,
   type MockLlmServerView,
   type MockLlmServerWrite,
+  type MockMcpBlueprint,
+  type MockMcpBlueprintCatalog,
+  type MockMcpBlueprintId,
   type MockMcpExpectedRevision,
   type MockMcpRevision,
   type MockMcpServerSummary,
@@ -26,6 +29,11 @@ import {
   type MockosMcpToolName,
   mockLlmServerListSchema,
   mockLlmServerViewSchema,
+  mockMcpBlueprintCatalogSchema,
+  mockMcpBlueprintInstallResultSchema,
+  mockMcpBlueprintSchema,
+  mockMcpServerPublicSpecSchema,
+  mockMcpServerViewSchema,
   type Problem,
   type ProvisioningRun,
   problemSchema,
@@ -149,6 +157,13 @@ export type MockosToolDependencies = {
     expectedRevision: MockMcpRevision,
     context: MockosToolRequestContext
   ): Promise<number>;
+  listMockMcpBlueprints(
+    context: MockosToolRequestContext
+  ): Promise<MockMcpBlueprintCatalog>;
+  getMockMcpBlueprint(
+    blueprintId: MockMcpBlueprintId,
+    context: MockosToolRequestContext
+  ): Promise<MockMcpBlueprint>;
   putMockLlmServer(
     environmentId: string,
     server: MockLlmServerWrite,
@@ -282,6 +297,60 @@ const execute = async <T>(
   } catch (error) {
     return errorResult(redactProblem(normalizedProblem(error, context), secrets));
   }
+};
+
+const sha256Hex = async (value: string): Promise<string> =>
+  [
+    ...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+    ),
+  ]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+const structurallyEqual = (left: unknown, right: unknown): boolean => {
+  if (left === right) return true;
+  if (
+    left === null ||
+    right === null ||
+    typeof left !== "object" ||
+    typeof right !== "object"
+  ) {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => structurallyEqual(value, right[index]))
+    );
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] && structurallyEqual(leftRecord[key], rightRecord[key])
+    )
+  );
+};
+
+const requireBlueprintDependencyResult = async (
+  dependencies: MockosToolDependencies,
+  blueprintId: MockMcpBlueprintId,
+  context: MockosToolRequestContext
+): Promise<MockMcpBlueprint> => {
+  const blueprint = mockMcpBlueprintSchema.parse(
+    await dependencies.getMockMcpBlueprint(blueprintId, context)
+  );
+  if (blueprint.id !== blueprintId) {
+    throw new Error("A mock MCP blueprint dependency returned a mismatched id.");
+  }
+  return blueprint;
 };
 
 const requireEnvironmentId = async (
@@ -621,10 +690,14 @@ export const registerMockosTools = (
     },
     async ({ environmentId, expectedRevision, server: mockServer }, extra) => {
       const context = requestContext(dependencies, extra);
-      const secrets =
+      const rawSecrets =
         mockServer.authentication.mode === "bearer"
           ? [mockServer.authentication.token]
           : [];
+      const secrets = [
+        ...rawSecrets,
+        ...(await Promise.all(rawSecrets.map(sha256Hex))),
+      ];
       return execute(
         context,
         async () => {
@@ -633,12 +706,19 @@ export const registerMockosTools = (
             dependencies,
             context
           );
-          return dependencies.putMockMcpServer(
-            resolvedId,
-            mockServer,
-            expectedRevision,
-            context
+          const view = mockMcpServerViewSchema.parse(
+            await dependencies.putMockMcpServer(
+              resolvedId,
+              mockServer,
+              expectedRevision,
+              context
+            )
           );
+          const serializedView = JSON.stringify(view);
+          if (secrets.some((secret) => serializedView.includes(secret))) {
+            throw new Error("A mock MCP safe view contained write-only material.");
+          }
+          return view;
         },
         secrets
       );
@@ -739,6 +819,89 @@ export const registerMockosTools = (
             context
           ),
         };
+      });
+    }
+  );
+
+  const listMockMcpBlueprints = server.registerTool(
+    "list_mock_mcp_blueprints",
+    {
+      title: mockosManagementOperations.list_mock_mcp_blueprints.title,
+      description: mockosManagementOperations.list_mock_mcp_blueprints.description,
+      ...mockosManagementOperations.list_mock_mcp_blueprints.mcp,
+    },
+    async (_input, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () =>
+        mockMcpBlueprintCatalogSchema.parse(
+          await dependencies.listMockMcpBlueprints(context)
+        )
+      );
+    }
+  );
+
+  const getMockMcpBlueprint = server.registerTool(
+    "get_mock_mcp_blueprint",
+    {
+      title: mockosManagementOperations.get_mock_mcp_blueprint.title,
+      description: mockosManagementOperations.get_mock_mcp_blueprint.description,
+      ...mockosManagementOperations.get_mock_mcp_blueprint.mcp,
+    },
+    async ({ blueprintId }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () =>
+        requireBlueprintDependencyResult(dependencies, blueprintId, context)
+      );
+    }
+  );
+
+  const installMockMcpBlueprint = server.registerTool(
+    "install_mock_mcp_blueprint",
+    {
+      title: mockosManagementOperations.install_mock_mcp_blueprint.title,
+      description: mockosManagementOperations.install_mock_mcp_blueprint.description,
+      ...mockosManagementOperations.install_mock_mcp_blueprint.mcp,
+    },
+    async ({ environmentId, blueprintId, slug, expectedRevision }, extra) => {
+      const context = requestContext(dependencies, extra);
+      return execute(context, async () => {
+        const blueprint = await requireBlueprintDependencyResult(
+          dependencies,
+          blueprintId,
+          context
+        );
+        const resolvedId = await requireEnvironmentId(
+          environmentId,
+          dependencies,
+          context
+        );
+        const selectedSlug = slug ?? blueprint.defaultSlug;
+        const serverDefinition: MockMcpServerWrite = {
+          ...blueprint.server,
+          slug: selectedSlug,
+        };
+        const expectedServerSpec =
+          mockMcpServerPublicSpecSchema.parse(serverDefinition);
+        const installedServer = mockMcpServerViewSchema.parse(
+          await dependencies.putMockMcpServer(
+            resolvedId,
+            serverDefinition,
+            expectedRevision,
+            context
+          )
+        );
+        if (!structurallyEqual(installedServer.spec, expectedServerSpec)) {
+          throw new Error(
+            "A mock MCP server dependency returned a mismatched blueprint install."
+          );
+        }
+        const installed = mockMcpBlueprintInstallResultSchema.parse({
+          schemaVersion: blueprint.schemaVersion,
+          blueprintId: blueprint.id,
+          blueprintVersion: blueprint.blueprintVersion,
+          server: installedServer,
+        });
+        return installed;
       });
     }
   );
@@ -881,6 +1044,9 @@ export const registerMockosTools = (
     get_mock_mcp_server: getMockMcpServer,
     delete_mock_mcp_server: deleteMockMcpServer,
     reset_mock_mcp_state: resetMockMcpState,
+    list_mock_mcp_blueprints: listMockMcpBlueprints,
+    get_mock_mcp_blueprint: getMockMcpBlueprint,
+    install_mock_mcp_blueprint: installMockMcpBlueprint,
     put_mock_llm_server: putMockLlmServer,
     list_mock_llm_servers: listMockLlmServers,
     get_mock_llm_server: getMockLlmServer,

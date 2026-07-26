@@ -120,7 +120,7 @@ In particular:
 - `/e/{environmentId}/llm-mock/{slug}/anthropic` and the corresponding environment
   subdomain form are source-implemented for exactly three operations; Messages
   supports bounded JSON and named-event SSE responses;
-- management MCP contains 24 tools, including four MCP-only LLM-definition
+- management MCP contains 27 tools, including four MCP-only LLM-definition
   operations; self-hosted management HTTP remains at five routes;
 - the Access Key authenticates management MCP and is rejected from the provider data
   plane; both `accept_any` and `strict` require a valid dialect credential, while

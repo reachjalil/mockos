@@ -10,6 +10,8 @@ import {
 export const MOCK_MCP_PROTOCOL_VERSION = "2025-11-25" as const;
 export const mockMcpRevisionSchema = z.number().int().safe().min(1);
 export type MockMcpRevision = z.infer<typeof mockMcpRevisionSchema>;
+export const mockMcpExpectedRevisionSchema = z.union([z.null(), mockMcpRevisionSchema]);
+export type MockMcpExpectedRevision = z.infer<typeof mockMcpExpectedRevisionSchema>;
 export const MOCK_MCP_MAX_SERVERS = 64;
 export const MOCK_MCP_MAX_CAPABILITIES_PER_KIND = 64;
 export const MOCK_MCP_MAX_PAGE_SIZE = 50;
@@ -793,6 +795,8 @@ export const mockMcpBearerTokenSchema = z
   .max(1_024)
   .regex(/^[A-Za-z0-9\-._~+/]+=*$/);
 export type MockMcpBearerToken = z.infer<typeof mockMcpBearerTokenSchema>;
+export const mockMcpBearerTokenSha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+export type MockMcpBearerTokenSha256 = z.infer<typeof mockMcpBearerTokenSha256Schema>;
 
 export const mockMcpAuthenticationWriteSchema = z
   .discriminatedUnion("mode", [
@@ -815,7 +819,7 @@ export const mockMcpAuthenticationSpecSchema = z
     z
       .object({
         mode: z.literal("bearer"),
-        tokenSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        tokenSha256: mockMcpBearerTokenSha256Schema,
       })
       .strict(),
   ])
@@ -1012,8 +1016,74 @@ const mockMcpServerSpecObjectSchema = z
   })
   .strict()
   .superRefine(validateMockMcpServer);
-export const mockMcpServerSpecSchema = z.preprocess((input) => {
+
+const secretAppearsOutsidePath = (
+  input: unknown,
+  secret: string,
+  allowedPath: readonly string[]
+): boolean => {
+  const pending: Array<{
+    readonly value: unknown;
+    readonly path: readonly string[];
+  }> = [{ value: input, path: [] }];
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (!entry) continue;
+    if (typeof entry.value === "string") {
+      const isAllowedPath =
+        entry.path.length === allowedPath.length &&
+        entry.path.every((segment, index) => segment === allowedPath[index]);
+      if (!isAllowedPath && entry.value.includes(secret)) return true;
+      continue;
+    }
+    if (entry.value === null || typeof entry.value !== "object") continue;
+    const fields = Array.isArray(entry.value)
+      ? entry.value.map((value, index) => [String(index), value] as const)
+      : Object.entries(entry.value as Record<string, unknown>);
+    for (const [key, value] of fields) {
+      if (key.includes(secret)) return true;
+      pending.push({ value, path: [...entry.path, key] });
+    }
+  }
+  return false;
+};
+
+const bearerAuthenticationValue = (
+  input: unknown,
+  field: "token" | "tokenSha256"
+): string | undefined => {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return undefined;
+  }
+  const authentication = Reflect.get(input, "authentication");
+  if (
+    authentication === null ||
+    typeof authentication !== "object" ||
+    Array.isArray(authentication) ||
+    Reflect.get(authentication, "mode") !== "bearer"
+  ) {
+    return undefined;
+  }
+  const value = Reflect.get(authentication, field);
+  return typeof value === "string" ? value : undefined;
+};
+
+export const mockMcpServerSpecSchema = z.preprocess((input, context) => {
   assertMockMcpSpecSize(input);
+  const verifier = bearerAuthenticationValue(input, "tokenSha256");
+  if (
+    verifier !== undefined &&
+    mockMcpBearerTokenSha256Schema.safeParse(verifier).success &&
+    secretAppearsOutsidePath(input, verifier, ["authentication", "tokenSha256"])
+  ) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "A bearer Mock Credential verifier may appear only in authentication.tokenSha256.",
+      path: ["authentication"],
+    });
+    return z.NEVER;
+  }
   return input;
 }, mockMcpServerSpecObjectSchema);
 export type MockMcpServerSpec = z.infer<typeof mockMcpServerSpecSchema>;
@@ -1025,11 +1095,40 @@ const mockMcpServerWriteObjectSchema = z
   })
   .strict()
   .superRefine(validateMockMcpServer);
-export const mockMcpServerWriteSchema = z.preprocess((input) => {
+
+export const mockMcpServerWriteSchema = z.preprocess((input, context) => {
   assertMockMcpSpecSize(input);
+  const token = bearerAuthenticationValue(input, "token");
+  if (
+    token !== undefined &&
+    mockMcpBearerTokenSchema.safeParse(token).success &&
+    secretAppearsOutsidePath(input, token, ["authentication", "token"])
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "A bearer Mock Credential may appear only in authentication.token.",
+      path: ["authentication"],
+    });
+    return z.NEVER;
+  }
   return input;
 }, mockMcpServerWriteObjectSchema);
 export type MockMcpServerWrite = z.infer<typeof mockMcpServerWriteSchema>;
+
+const mockMcpSecretFreeServerWriteObjectSchema = z
+  .object({
+    ...mockMcpServerCommonShape,
+    authentication: z.object({ mode: z.literal("none") }).strict(),
+  })
+  .strict()
+  .superRefine(validateMockMcpServer);
+export const mockMcpSecretFreeServerWriteSchema = z.preprocess((input) => {
+  assertMockMcpSpecSize(input);
+  return input;
+}, mockMcpSecretFreeServerWriteObjectSchema);
+export type MockMcpSecretFreeServerWrite = z.infer<
+  typeof mockMcpSecretFreeServerWriteSchema
+>;
 
 const mockMcpServerPublicSpecObjectSchema = z
   .object({

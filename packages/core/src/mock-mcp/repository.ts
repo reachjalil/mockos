@@ -226,9 +226,10 @@ export class MockMcpRepository {
       const existing = this.#serverRow(spec.slug);
       const existingRecord = existing ? parseServerRow(existing) : undefined;
 
-      // Replay precedes CAS deliberately. A timed-out successful write can be
-      // retried with its now-stale expectation without allocating a revision,
-      // deleting state, or terminating revision-bound sessions.
+      // Canonical convergence precedes CAS deliberately. This keeps ambiguous
+      // write retries idempotent and also treats an identical delete/recreate
+      // generation as already converged. Only a changed definition is allowed
+      // to fail a stale or ABA expectation.
       if (existing?.spec_json === serializedSpec) {
         if (!existingRecord) {
           throw new MockMcpRepositoryError(

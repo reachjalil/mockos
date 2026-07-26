@@ -22,10 +22,15 @@
 > are locally source-qualified in the revision carrying this document: their focused
 > suites and the complete repository `pnpm check` gate are green. F1 definition
 > mutations now require explicit revision intent, preserve canonical put replay, and
-> protect replacement/reset/delete from stale or delete/recreate ABA callers. The
+> protect changed replacement/reset/delete from stale or delete/recreate ABA callers.
+> Canonically identical content, including an identical recreated generation,
+> deliberately converges before CAS without mutation. F1 also exposes a built-in,
+> secret-free `salesforce/hosted-mcp/sobject-reads` server-definition preset through
+> three MCP-only catalog/install tools. The
 > mounted official MCP SDK `1.29.0` Worker flow qualifies that bounded management
 > path through D/I/S/X/Q only; it is not actual-network or hosted evidence, V is not
-> applicable to the synthetic flow, and P remains unqualified.
+> applicable to the generic synthetic runtime, the provider-derived preset's
+> live-provider V remains unqualified, and P remains unqualified.
 > Hosted CI/merge,
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
@@ -55,10 +60,11 @@ randomness, and SQLite seams make failures reproducible.
 ## MCP first
 
 The management MCP server at `/mcp` is the primary control interface for agents and
-automation. Its current 24 tools create and configure environments, seed synthetic
+automation. Its current 27 tools create and configure environments, seed synthetic
 identities, register applications, drive lifecycle and provisioning, inject
-deterministic scenarios, configure environment-hosted mock MCP servers and
-mock-LLM definitions, inspect captured traffic, and clean up. Start
+deterministic scenarios, configure environment-hosted mock MCP servers and mock-LLM
+definitions, inspect and install built-in mock-MCP presets, inspect captured traffic,
+and clean up. Start
 with the
 [MCP-first quickstart](./docs/getting-started/mcp-first.md) and use the
 [generated tool reference](./docs/reference/management-tools.md) for the exact
@@ -72,14 +78,19 @@ five-route self-hosted HTTP API.
 
 Environment-hosted mock MCP servers have a different product role: they simulate
 tools, resources, resource templates, and prompts for an agent under test. The bounded
-F1 source implements that data plane at an environment route while the five
-configuration operations remain part of management MCP. Put uses
+F1 source implements that data plane at an environment route while five
+definition/state operations and three built-in blueprint operations remain part of
+management MCP. Put and install use
 `expectedRevision: null` for create or the positive current revision for a complete
 replacement; reset and delete require the positive current revision. Canonical put
-replay precedes CAS, while stale/ABA mutations return typed `409`. Bearer replacement
-must resupply or rotate the raw synthetic credential because the safe
-`configured: true` view cannot be written back. Start with the
-[mock MCP guide](./docs/mock-mcp.md). Four
+or install replay precedes CAS; only changed-definition stale/ABA mutation intent
+returns typed `409`. A changed replacement deletes application state and terminates
+revision-bound sessions. Bearer replacement must resupply or rotate the raw synthetic
+credential because the safe `configured: true` view cannot be written back, and the
+same raw value is rejected from every other definition key or string value. Start with
+the [mock MCP guide](./docs/mock-mcp.md) or install the
+[Salesforce SObject Reads built-in blueprint](./docs/blueprints/salesforce-sobject-reads.md).
+Four
 [mock-LLM definition operations](./docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
 list/retrieve and Chat Completions as JSON or bounded SSE plus Anthropic model
@@ -149,22 +160,27 @@ private control plane, licensing, billing, or a hosted mockOS account.
   login, S256 PKCE, code redemption, refresh/lifecycle failure, directory reads, Entra
   claims, and JWKS signature verification in focused local suites
 - An accepted authenticated Agents SDK management MCP server whose current source
-  registry contains 24 tools: the accepted 15-tool M5 set, five MCP-only F1 mock-MCP
-  definition/state operations, and four MCP-only F2 mock-LLM definition operations
+  registry contains 27 tools: the accepted 15-tool M5 set, eight MCP-only F1 mock-MCP
+  definition/state/catalog/install operations, and four MCP-only F2 mock-LLM definition
+  operations
 - A bounded F1 source runtime for deterministic environment-hosted tools, resources,
   safe Level-1 resource templates, and prompts over MCP `2025-11-25`; definitions are
   revisioned with null-create/positive-current mutation CAS, canonical replay is
-  retry-safe, changed replacement is a full credential-resupplying write, and
-  reset/delete reject stale or ABA generations atomically. Bearer Mock Credentials
-  and transport sessions are stored hash-only, behavior state is bounded, both
+  retry-safe even for an identical recreated generation, changed replacement is a full
+  credential-resupplying write that deletes state and sessions, and reset/delete reject
+  stale or ABA generations atomically. Bearer Mock Credentials and transport sessions
+  are stored hash-only; cross-field credential reuse is rejected; behavior state is bounded; both
   hosting routes are resolved, and MCP method/tool/argument evidence joins the
-  existing request log and assertions. The 24-tool registry and five-route HTTP
-  surface do not change. GET streaming,
+  existing request log and assertions. A documentation-derived, secret-free Salesforce
+  SObject Reads preset supplies six deterministic read tools with no provider network
+  or output-wire-parity claim. The 27-tool registry leaves the five-route HTTP surface
+  unchanged. GET streaming,
   `listChanged`, scripts, proxy/record-replay, hosted qualification, and deployment
   remain open
-- A source-complete local F0 foundation: one 24-operation metadata registry consumed
+- A source-complete local F0 foundation: one 27-operation metadata registry consumed
   by MCP, deterministic OpenAPI and typed-client artifacts for the five live HTTP
-  control routes, generated human/machine management references and agent indexes, a
+  control routes, generated human/machine management and built-in blueprint references
+  plus agent indexes, a
   fetch-based `@mockos/client` workspace skeleton, all six locked version-one behavior
   contracts, and fail-closed Code Mode/`NoSandbox` wrapper packages. The F1 operations
   deliberately do not appear in HTTP/OpenAPI/client projections, nor do the four F2
@@ -289,7 +305,7 @@ and never persisted.
 ## Documentation
 
 Start at the [documentation index](./docs/README.md). It routes agents and humans by
-task, distinguishes the 24-tool management MCP interface, the environment-hosted mock
+task, distinguishes the 27-tool management MCP interface, the environment-hosted mock
 MCP data plane, the MCP-managed OpenAI/Anthropic data planes, and the five-route
 management HTTP subset, and
 links support claims to their evidence. Use

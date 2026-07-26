@@ -183,7 +183,48 @@ describe("mock MCP persistence", () => {
     expect(repository.put(serverSpec("one"), null)).toEqual(first);
   });
 
-  it("rejects stale and ABA mutations without touching the recreated generation", () => {
+  it("converges an identical stale ABA replay on the recreated generation", () => {
+    const store = memoryStore();
+    const repository = new MockMcpRepository(store);
+    const first = repository.put(serverSpec("one"), null);
+    expect(repository.delete("agent", first.revision)).toBe(true);
+
+    const recreated = repository.put(serverSpec("one"), null);
+    expect(recreated.revision).toBe(2);
+    repository.writeState("agent", recreated.revision, "sequence:tool", 2);
+    store.run(
+      `INSERT INTO mock_mcp_sessions (
+        session_hash, server_slug, server_revision, protocol_version,
+        initialized, created_at, expires_at, terminated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      "f".repeat(64),
+      "agent",
+      recreated.revision,
+      "2025-11-25",
+      1,
+      "2026-07-23T12:00:00.000Z",
+      "2099-07-23T13:00:00.000Z"
+    );
+
+    const converged = repository.put(serverSpec("one"), first.revision);
+
+    expect(converged).toEqual(recreated);
+    expect(repository.require("agent")).toEqual(recreated);
+    expect(repository.readState("agent", recreated.revision, "sequence:tool")).toBe(2);
+    expect(
+      store.get<{ last_revision: number }>(
+        "SELECT last_revision FROM mock_mcp_revision_allocator WHERE singleton = 1"
+      )?.last_revision
+    ).toBe(recreated.revision);
+    expect(
+      store.get<{ terminated_at: string | null }>(
+        "SELECT terminated_at FROM mock_mcp_sessions WHERE session_hash = ?",
+        "f".repeat(64)
+      )?.terminated_at
+    ).toBeNull();
+  });
+
+  it("rejects changed-definition stale and ABA mutations without touching the recreated generation", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
     const first = repository.put(serverSpec("one"), null);

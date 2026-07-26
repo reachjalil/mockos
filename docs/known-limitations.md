@@ -172,18 +172,23 @@ P.
   The standalone public staging/production Access Keys were preserved, so the
   authenticated hosted acceptance ran through the private edge consuming the public
   runtime rather than those standalone credentials.
-  F1 appends five locally source-qualified tools for environment-hosted mock MCP
-  definitions and state. Put requires `expectedRevision: null` for create or the
-  positive current revision for changed replacement; reset/delete require the
-  positive current revision. Canonical put replay precedes CAS. Stale and
-  delete/recreate ABA mutation intent returns typed `409`, while missing reset/delete
-  and a repeated delete return typed `404`. Reset retry succeeds with `cleared: 0`;
-  delete success is literal `deleted: true`. The mounted official MCP SDK `1.29.0`
-  Worker flow qualifies this bounded management path through D/I/S/X/Q only. It is
-  not actual-network evidence, and those five have no inherited M5 hosted/deployed,
-  H, or P acceptance; V is not applicable to the synthetic flow.
+  F1 appends eight locally source-qualified tools: five for environment-hosted mock
+  MCP definitions/state and three for listing, reading, and installing built-in
+  presets. Put and install require `expectedRevision: null` for create or the positive
+  current revision for changed replacement; reset/delete require the positive current
+  revision. Canonically identical put/install replay precedes CAS and converges
+  without mutation, including an identical delete/recreate generation. Only a changed
+  definition with stale or delete/recreate ABA intent returns typed `409`, while
+  missing reset/delete and a repeated delete return typed `404`. Reset retry succeeds
+  with `cleared: 0`; delete success is literal `deleted: true`. A changed put or
+  install deletes the previous revision's application state and terminates its
+  revision-bound sessions. The mounted official MCP SDK `1.29.0` Worker flow qualifies
+  this bounded management path through D/I/S/X/Q only. It is not actual-network
+  evidence, and those eight have no inherited M5 hosted/deployed, H, or P acceptance;
+  V is not applicable to generic user-authored synthetic servers and remains
+  unqualified for the provider-derived preset.
   F2 appends four source-implemented tools for mock-LLM definitions, bringing the
-  current source registry to 24. Those four likewise inherit no hosted/deployed
+  current source registry to 27. Those four likewise inherit no hosted/deployed
   evidence.
 - The locally source-qualified F1 implementation supports only MCP `2025-11-25` over POST-only Streamable
   HTTP. `GET` returns `405`; there are no `listChanged` notifications, JSON-RPC
@@ -198,6 +203,11 @@ P.
   than incrementing or overwriting revisions blindly. Delete is idempotent only in
   state effect: retry after success reports `MOCK_MCP_SERVER_NOT_FOUND` instead of
   replaying success.
+- The exact raw mock-MCP Bearer value is accepted only at
+  `authentication.token`; the same value in every other definition key or string
+  value is rejected. A reflected credential in an MCP dependency result fails closed.
+  Blueprint install accepts no Salesforce credential and validates the complete
+  public installed server specification, not only its slug or authentication mode.
 - F1 protects staged sequence state when an HTTP Fetch abort/disconnect is observed
   during configured latency and uses JSON-RPC `-32800` if it can still render a
   response. It has no in-flight request-ID registry: `notifications/cancelled` is
@@ -208,8 +218,18 @@ P.
   configured `error` behavior. A `script` definition can only use an explicit
   declarative fallback or fail closed because no executor is installed. `proxy`
   record/replay is rejected. F1 itself does not define an LLM provider surface; the
-  separate partial F2 slice below owns bounded mock OpenAI/Anthropic. Code Mode, team ACLs,
-  blueprints, and OIDC-federated CI access remain future work.
+  separate partial F2 slice below owns bounded mock OpenAI/Anthropic. Code Mode, team
+  ACLs, the F5 portable blueprint export/import/apply system, and OIDC-federated CI
+  access remain future work.
+- The built-in `salesforce/hosted-mcp/sobject-reads` preset contains exactly six
+  deterministic tools derived from Salesforce documentation reviewed on 2026-07-25.
+  It does not contact a Salesforce organization or provider network, proxy Salesforce
+  REST, perform OAuth, field-level security, or sharing checks, or qualify Salesforce
+  output-wire parity. Its catalog, install, mounted client flow, deterministic
+  fixtures, observation/assertion, and cleanup are D/I/S/X/Q locally only;
+  actual-network, H, V, and P are unqualified. See the
+  [blueprint guide](./blueprints/salesforce-sobject-reads.md) and generated
+  [catalog](./reference/mock-mcp-blueprints.v1.json).
 - The partial F2 source has an MCP-only configuration plane and separate bounded
   OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
   strict definitions, schema-v8 persistence, mandatory changed-write revision CAS,
@@ -290,7 +310,7 @@ P.
   [Anthropic](./reference/mock-llm-anthropic.v1.json) provider manifests, not either
   broader API, as the compatibility boundary.
 - The OpenAPI document contains exactly five already-implemented self-hosted HTTP
-  control routes; the other 19 management MCP operations, including all five F1 and
+  control routes; the other 22 management MCP operations, including all eight F1 and
   all four F2 operations, are deliberately absent from the HTTP client. `env:ro`/`env:rw` are
   contract metadata until F4 implements scoped-key/role/ACL enforcement. Code Mode has
   no Worker import, flag, `LOADER`, or `worker_loaders` binding, and `NoSandbox` always

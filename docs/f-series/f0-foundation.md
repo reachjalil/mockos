@@ -1,6 +1,6 @@
 # F0 contract, client, and wrapper foundation
 
-Status: Source-complete locally; registry extended by qualified F1 and bounded OpenAI F2
+Status: Source-complete locally; registry extended by qualified F1 and bounded OpenAI/Anthropic F2
 Last reviewed: 2026-07-25
 
 F0 established checked seams for the F-series without enabling a runtime. The current
@@ -38,6 +38,10 @@ The generated products are:
 - [`packages/openapi/openapi/mockos-management.v1.json`](../../packages/openapi/openapi/mockos-management.v1.json);
 - [`packages/client/src/generated.ts`](../../packages/client/src/generated.ts);
 - [`docs/reference/management-operations.v1.json`](../reference/management-operations.v1.json);
+- [`docs/reference/mock-mcp-blueprints.v1.json`](../reference/mock-mcp-blueprints.v1.json);
+- [`docs/reference/product-capabilities.v1.json`](../reference/product-capabilities.v1.json);
+- [`docs/reference/mock-llm-openai.v1.json`](../reference/mock-llm-openai.v1.json);
+- [`docs/reference/mock-llm-anthropic.v1.json`](../reference/mock-llm-anthropic.v1.json);
 - [`docs/reference/management-tools.md`](../reference/management-tools.md);
 - [`docs/reference/self-hosted-http.md`](../reference/self-hosted-http.md); and
 - the compact [`llms.txt`](../../llms.txt) plus curated
@@ -51,7 +55,7 @@ performs a byte-for-byte comparison and is part of local and hosted CI gates.
 | Package | F0 responsibility | Outside the F0 boundary |
 | --- | --- | --- |
 | `@mockos/contracts/behavior` | Version-one `static`, `template`, `sequence`, `match`, `error`, and `script` schemas with seeded latency | Evaluator, template semantics, sequence storage, proxy, or script execution |
-| `@mockos/contracts/operations` | Exhaustive metadata for all current operations—24 after F1/F2—and HTTP metadata for five live routes | HTTP availability for MCP-only operations or enforced scoped Access Keys |
+| `@mockos/contracts/operations` | Exhaustive metadata for all current operations—27 after F1/F2 and the built-in F1 blueprint catalog—and HTTP metadata for five live routes | HTTP availability for MCP-only operations or enforced scoped Access Keys |
 | `@mockos/openapi` | Deterministic OpenAPI, client-manifest, and management-documentation catalog generation | A deployed public API catalog |
 | `@mockos/client` | Fetch injection, relative known paths, constructor-owned auth, Zod validation, abort/timeout handling, and typed problems | CLI migration, automatic retries, npm publication, or unsupported HTTP operations |
 | `@mockos/codemode` | Explicit-enable wrapper around the exact experimental package | Worker wiring, `LOADER`, executor qualification, audit, or quotas |

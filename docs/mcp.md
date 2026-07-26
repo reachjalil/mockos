@@ -1,7 +1,7 @@
 # Management MCP interface
 
 Status: M5 authenticated management MCP accepted; bounded M6 paths sampled on exact
-deployed versions; 20-tool F1 locally qualified; 24-tool F2 source registry with
+deployed versions; 23-tool F1 locally qualified; 27-tool F2 source registry with
 separate partial OpenAI/Anthropic data planes; MSAL and Okta Auth JS local
 official-client management qualified
 Last reviewed: 2026-07-26
@@ -19,13 +19,15 @@ Separate local official-client candidates use the same MCP registry for environm
 creation, seeding, application registration, URL discovery, request observation,
 lifecycle, and cleanup. Those local results do not add hosted evidence.
 
-The current source appends five F1 and four F2 management tools without changing that
+The current source appends eight F1 and four F2 management tools without changing that
 historical acceptance claim. Management MCP controls mockOS; it is not a simulated
 MCP workload.
 Environment-hosted mock MCP servers are separate dependencies for an agent under
 test. See the [interface model](./concepts/interface-model.md), begin identity
 workflows with the [MCP-first quickstart](./getting-started/mcp-first.md), and use the
-[mock MCP guide](./mock-mcp.md) for F1. Use the
+[mock MCP guide](./mock-mcp.md) for F1 and the
+[Salesforce SObject Reads blueprint guide](./blueprints/salesforce-sobject-reads.md)
+for the first built-in preset. Use the
 [mock LLM guide](./mock-llm.md) for the F2 MCP definition contract and separate
 OpenAI/Anthropic provider data planes.
 
@@ -64,15 +66,18 @@ cursor does not cross sessions.
 
 ## Exact current tool registry
 
-The current source exposes 24 tools: the accepted 15-tool M5 set, five F1 operations
+The current source exposes 27 tools: the accepted 15-tool M5 set, eight F1 operations
 for creating/replacing, listing, reading, deleting, and resetting environment-hosted
-mock MCP servers, and four F2 operations for creating/replacing, listing, reading, and
-deleting mock-LLM definitions. Their IDs, descriptions, input/output JSON Schemas, MCP
-annotations, effects, retry policies, secret policies, and exact HTTP availability
-are generated from the canonical registry in the
+mock MCP servers plus listing, reading, and installing built-in blueprints, and four
+F2 operations for creating/replacing, listing, reading, and deleting mock-LLM
+definitions. Their IDs, descriptions, input/output JSON Schemas, MCP annotations,
+effects, retry policies, secret policies, and exact HTTP availability are generated
+from the canonical registry in the
 [management-tool reference](./reference/management-tools.md). The corresponding
 [JSON catalog](./reference/management-operations.v1.json) is intended for machine
 readers. The generated
+[mock-MCP blueprint catalog](./reference/mock-mcp-blueprints.v1.json) describes the
+versioned, secret-free built-in presets. The generated
 [mock OpenAI](./reference/mock-llm-openai.v1.json) and
 [mock Anthropic](./reference/mock-llm-anthropic.v1.json) manifests describe the
 separate application-facing provider operations; those operations are not management
@@ -96,7 +101,7 @@ tools.
 | `get_wellknown_urls` | Derive provider URLs from the active public origin and environment |
 | `set_current_environment` | Set or clear the transport session's environment cursor |
 
-All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
+All eight F1 and all four F2 operations are MCP-only. The self-hosted HTTP surface
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
 to those routes.
 `put_mock_mcp_server` is the only F1 operation that accepts a Bearer Mock Credential;
@@ -116,6 +121,26 @@ Delete atomically removes the definition, state, and all sessions and succeeds o
 changed F1 mutation returns `409 MOCK_MCP_SERVER_REVISION_CONFLICT` without mutation.
 Clients must read and reconcile the current definition rather than incrementing or
 overwriting revisions blindly.
+Both a changed direct put and a changed blueprint install are destructive. They
+allocate a new revision, delete the prior revision's application state, and terminate
+its revision-bound sessions. Canonically identical replay converges before CAS without
+mutation, including an identical definition after delete/recreate; only a changed
+definition with stale or ABA intent receives the typed `409`.
+
+`list_mock_mcp_blueprints`, `get_mock_mcp_blueprint`, and
+`install_mock_mcp_blueprint` expose the built-in preset catalog. The current entry is
+`salesforce/hosted-mcp/sobject-reads`, a stateless, unauthenticated definition with
+six deterministic tools. Install validates the complete public installed server
+specification against the selected blueprint and slug, not only authentication or
+slug. It accepts no Salesforce credential. The preset derives names and inputs from
+Salesforce documentation reviewed on 2026-07-25; it performs no Salesforce network,
+REST, OAuth, field-level security, or sharing work and makes no output-wire-parity
+claim. It is not the F5 portable blueprint export/import/apply system.
+
+For a Bearer-authenticated direct server definition, the exact raw value is accepted
+only at `authentication.token`; the same value in every other definition key or
+string value is rejected. If an MCP dependency result reflects the credential, the
+operation fails closed before returning it.
 `put_mock_llm_server` requires explicit `expectedRevision` compare-and-swap intent and
 accepts independent strict OpenAI/Anthropic Mock Credentials as write-only fields.
 They are hashed before persistence; safe put/get views expose only `configured: true`,
@@ -422,11 +447,19 @@ is a hosted MCP command matrix, remote Worker smoke, verified-live comparison, o
 production-readiness result.
 
 The F1 Worker integration separately uses `@modelcontextprotocol/sdk` `1.29.0` against
-the mounted Worker to discover the 24-tool registry and invoke create, canonical
+the mounted Worker to discover the 27-tool registry and invoke create, canonical
 replay, reset, concurrent changed replacement, stale put/reset/delete, and delete
 through management MCP before exercising the environment data plane. That bounded
 management-CAS slice is D/I/S/X/Q locally. It is not an actual-network run and adds no
 H, P, hosted, Cloud-pin, deployment, or broad-client claim; V is not applicable.
+
+The same pinned mounted-Worker path qualifies the exact built-in
+`salesforce/hosted-mcp/sobject-reads` catalog, install, six-tool discovery and
+deterministic fixtures, observation, assertion, reset, and cleanup through D/I/S/X/Q
+locally. H, V, and P are unqualified: there is no actual-network run, hosted smoke,
+private Cloud pin, deployed acceptance, live Salesforce organization comparison, or
+production-readiness evidence. The 2026-07-25 Salesforce documentation review is
+design provenance, not V evidence.
 
 Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
 additionally binds that revision to an exact mockOS deployment/version and recorded

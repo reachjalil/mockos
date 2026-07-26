@@ -78,6 +78,21 @@ implementation interpretation.
 
 ### Mock MCP servers
 
+Current-source note: F1 now exposes eight MCP-only management operations: five
+server-definition/state operations plus built-in blueprint list/get/install. The
+management registry contains 27 tools while companion management HTTP remains five
+routes. The first preset, `salesforce/hosted-mcp/sobject-reads`, was derived from
+Salesforce Hosted MCP SObject Reads documentation reviewed on 2026-07-25 and installs
+six ordered deterministic tools: `getObjectSchema`, `soqlQuery`, `find`,
+`getUserInfo`, `listRecentSobjectRecords`, and `getRelatedRecords`. The mounted
+official MCP SDK `1.29.0` Worker seam qualifies this bounded local path through
+D/I/S/X/Q only. It is not actual-network, hosted, deployed, Cloud-pinned, verified
+live, production-ready, or evidence of Salesforce network, REST, OAuth, field-level
+security, sharing, or output-wire parity. The
+[task guide](./blueprints/salesforce-sobject-reads.md) and
+[machine catalog](./reference/mock-mcp-blueprints.v1.json) own the exact fixture and
+evidence boundary.
+
 - Host each mock inside its environment at
   `/e/{env}/mcp-mock/{slug}` in path mode and
   `{env}.id.mockos.live/mcp-mock/{slug}` in subdomain mode.
@@ -409,6 +424,12 @@ issuer-specific trust rule. Exchange processing must:
 
 ### Public blueprints and hosted gallery
 
+The current built-in, secret-free mock-MCP server-definition presets are an F1
+convenience and are not completion of this F5 portable system. In particular,
+`list_mock_mcp_blueprints`, `get_mock_mcp_blueprint`, and
+`install_mock_mcp_blueprint` do not export, import, apply, hash, submit, moderate, or
+publish portable blueprints.
+
 The public `mockos` repository owns the portable blueprint system: schema,
 canonicalization and content hashing, no-secrets validation, semantic validation,
 export, import planning, CLI validation/apply commands, fixtures, and tests. Script
@@ -427,7 +448,7 @@ the open-core package.
 | Design-0 | This roadmap, ADRs, sourced fixture research, spike plans | Current M0-M2 candidate | Docs checks pass; no F-series runtime or dependency change is merged. |
 | F0 | Additive contracts modules, operation metadata, `@mockos/client` skeleton, OpenAPI generation, wrapper package shells, exact dependency pins behind disabled flags | **Satisfied: M2 deployed smoke and hosted CI are green** | Contract/client/OpenAPI drift tests pass; existing M suites are unchanged and green. |
 | M2/CLI-A | Public CLI limited to existing M2 server capabilities | M2 server capabilities | Implementation and command tests are complete; the deployed smoke uses the CLI MCP client. Package publication and a command-by-command staging matrix remain qualification evidence. |
-| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, and complete repository gates are green. The July 28 version checkpoint and all hosted/deployed evidence remain open. |
+| F1 | Declarative mock MCP engine in EnvironmentDO, `2025-11-25` adapter, management tools, fixtures, and built-in secret-free server-definition presets | F0 and M2 | Locally source-qualified: official-SDK in-process/path-mode Worker, raw-wire, contracts, persistence, security/availability, documentation, build, complete repository gates, and the bounded Salesforce preset exercise/observe/assert loop are green. The Salesforce provider network and output-wire parity, July 28 version checkpoint, actual-network qualification, and all hosted/deployed/Cloud-pin/live-provider/production evidence remain open. |
 | F2 | Neutral LLM planner, OpenAI and Anthropic dialects, MCP-first definitions, edge streaming, tools and errors. The current source slice includes MCP-managed definitions, bounded model discovery, and OpenAI/Anthropic JSON/SSE Chat Completions/Messages; the rest remains open. | F0 and M2 | Real OpenAI and Anthropic SDK clients pass normal, error, usage, abort, and streaming fixtures under Wrangler. |
 | F3 | Sandbox provider, deployed Worker Loader spike, versioned scripts, F1/F2 script seam | F0 and M2 deployed environment | ADR records go/no-go; local and paid-account tests prove egress, hard limits, output validation, and cost IDs. |
 | F4 | Audit, idempotency, `ensure_*`, scoped keys, roles/ACLs, KV entitlement record v2 | M4 green | Security-critical audit, concurrency, scope matrix, migration, and dual-read tests pass in cloud staging. |
@@ -441,13 +462,15 @@ F1, F2, and F3 may run in parallel after F0. F4 may run in the private cloud lan
 after M4. Per-area contract files, append-only migration ownership, and table-driven
 route registration remain the merge choke-point rules.
 
-The current source covers the six-variant `BehaviorSpec`, an exhaustive 24-operation
+The current source covers the six-variant `BehaviorSpec`, an exhaustive 27-operation
 management registry consumed by MCP, deterministic OpenAPI and client
 artifacts for the five HTTP routes that actually exist, a validated fetch client, and
 default-off Code Mode/sandbox wrappers with exact dependency guards. The full local
 F0 repository gate is green. F1 locally qualifies only the bounded
-environment-hosted mock-MCP runtime and five MCP-only management operations; it does
-not add HTTP management routes or activate Code Mode, scripts, or proxy. The partial
+environment-hosted mock-MCP runtime and eight MCP-only management operations: five
+definition/state operations plus built-in blueprint list/get/install. The built-in
+catalog is not the portable F5 export/import/apply/gallery system. F1 does not add HTTP
+management routes or activate Code Mode, scripts, or proxy. The partial
 F2 adds neutral schemas, behavior adaptation, MCP-only persisted definitions, and
 user-operable bounded OpenAI/Anthropic provider routes for model discovery and
 OpenAI JSON/SSE Chat Completions plus Anthropic JSON/SSE Messages. Local

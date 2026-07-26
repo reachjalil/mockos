@@ -5,14 +5,16 @@ description: >-
   workflows, and bounded mock-OpenAI/Anthropic workflows through authenticated
   management MCP: create isolated Entra ID or Okta environments, seed identities,
   register public or confidential OIDC clients, configure revision-safe MCP-managed
-  mock MCP and mock LLM definitions, call model discovery, run OpenAI Chat Completions
+  mock MCP and mock LLM definitions, install and exercise the built-in Salesforce
+  Hosted MCP SObject Reads preset, call model discovery, run OpenAI Chat Completions
   and Anthropic Messages as JSON or bounded SSE, exercise
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, qualify pinned MSAL Node or Okta Auth JS paths, and clean
   up. Use when wiring or testing an application's enterprise identity,
-  MCP-shaped, or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped failures;
+  MCP-shaped, Salesforce-style MCP, or OpenAI/Anthropic-shaped integration, or
+  reproducing provider-shaped failures;
   do not claim unrecorded deployment qualification, Anthropic betas, configured
   midstream errors, the complete Okta Classic Authn transaction machine, or broad
   provider parity.
@@ -75,7 +77,7 @@ Treat `GET /mcp` returning 405 as the expected POST-only Streamable HTTP fallbac
 the issued session ID on later requests and close the client when finished so it sends
 the authenticated session-termination DELETE.
 
-Call `tools/list` before creating anything. The current source registry contains 24
+Call `tools/list` before creating anything. The current source registry contains 27
 management MCP tools. The accepted identity workflow uses these 15:
 
 `create_environment`, `list_environments`, `delete_environment`,
@@ -88,13 +90,16 @@ The bounded mock-LLM workflows additionally require
 `put_mock_llm_server`, `list_mock_llm_servers`, `get_mock_llm_server`, and
 `delete_mock_llm_server`. A bounded mock-MCP workflow instead requires
 `put_mock_mcp_server`, `list_mock_mcp_servers`, `get_mock_mcp_server`,
-`reset_mock_mcp_state`, and `delete_mock_mcp_server`. Require only the tools needed by
-the planned workflow and
+`reset_mock_mcp_state`, and `delete_mock_mcp_server`. A built-in preset workflow also
+requires `list_mock_mcp_blueprints`, `get_mock_mcp_blueprint`, and
+`install_mock_mcp_blueprint`; those three complete F1's eight MCP-only management
+operations. Require only the tools needed by the planned workflow and
 tolerate additional tools from a newer compatible server. Report a capability
 mismatch before any mutation; in particular, do not attempt the lifecycle cascade
 unless `simulate_lifecycle` is advertised, provisioning unless
-`run_provisioning_cycle` is advertised, mock-MCP configuration unless all five
-definition/state tools expose their required revision schemas, or mock-OpenAI
+`run_provisioning_cycle` is advertised, custom mock-MCP configuration unless all five
+definition/state tools expose their required revision schemas, blueprint installation
+unless all three catalog/install tools expose their exact catalog and CAS schemas, or mock-OpenAI
 configuration unless all four definition tools are advertised. Capability discovery
 is evidence about the
 connected server, not proof that the checkout under test is the source deployed
@@ -138,7 +143,8 @@ Read the [canonical mock MCP guide](../../docs/mock-mcp.md) before configuring a
 server. Management MCP is the control plane; the application or agent under test
 connects to the separate environment mock MCP data plane.
 
-1. Capability-negotiate all five F1 tools. Require `put_mock_mcp_server` to advertise
+1. Capability-negotiate all five F1 server-definition/state tools. Require
+   `put_mock_mcp_server` to advertise
    mandatory `expectedRevision` accepting `null` or a positive integer, and require
    `reset_mock_mcp_state` and `delete_mock_mcp_server` to advertise a mandatory
    positive integer. Stop on an older or incompatible schema.
@@ -160,10 +166,14 @@ connects to the separate environment mock MCP data plane.
 6. For a changed replacement, call `get_mock_mcp_server`, reconcile the current safe
    definition with the intended complete definition, and pass its positive revision
    to `put_mock_mcp_server`. Resupply or rotate the raw Bearer value from caller-owned
-   storage. Do not increment the revision locally or treat the operation as a patch.
+   storage. The raw value is allowed only at `authentication.token`; its exact value
+   must be rejected from every other definition key or string value, and a dependency
+   result that reflects it must fail closed. Do not increment the revision locally or
+   treat the operation as a patch.
 7. A canonical replay of an identical put succeeds before CAS, preserving revision,
    timestamps, state, and sessions even when its expectation is stale or still
-   `null`. A changed stale or delete/recreate ABA put/reset/delete must return
+   `null`. This includes convergence to an identical later delete/recreate
+   generation. Only a changed stale or ABA put/reset/delete must return
    `MOCK_MCP_SERVER_REVISION_CONFLICT`; read and reconcile instead of overwriting.
 8. In `finally`, read the latest generation and call `delete_mock_mcp_server` with
    that positive revision. Require literal `deleted: true`. A retry after successful
@@ -173,7 +183,41 @@ connects to the separate environment mock MCP data plane.
 The current bounded evidence uses mounted `@modelcontextprotocol/sdk` `1.29.0` Worker
 discovery and runtime calls. Report D/I/S/X/Q yes only for that named local path. It
 is not actual-network evidence and establishes no H, P, hosted, Cloud-pin, deployment,
-or broad ecosystem claim; V is not applicable.
+or broad ecosystem claim; V is not applicable to this generic synthetic-engine flow.
+
+## Exercise the built-in Salesforce SObject Reads preset
+
+Read the
+[preset guide](../../docs/blueprints/salesforce-sobject-reads.md) and generated
+[machine catalog](../../docs/reference/mock-mcp-blueprints.v1.json). This is a
+built-in, secret-free server-definition preset, not the portable F5
+export/import/apply/gallery system.
+
+1. Capability-negotiate `list_mock_mcp_blueprints`,
+   `get_mock_mcp_blueprint`, and `install_mock_mcp_blueprint` plus the five
+   server-definition/state tools.
+2. List and get `salesforce/hosted-mcp/sobject-reads`. Require documentation-derived
+   provenance reviewed on 2026-07-25, `providerNetwork: false`,
+   `outputWireParity: "unqualified"`, and authentication mode `none`.
+3. Create a disposable environment and install with `expectedRevision: null`. A
+   changed replacement requires the current positive revision and is destructive:
+   it deletes application state and terminates revision-bound sessions. Canonically
+   identical replay, including identical delete/recreate convergence, resolves before
+   CAS; only changed stale or ABA intent returns typed `409`. Require the result to
+   match the complete public blueprint server specification.
+4. On the separate mock-MCP data plane, discover exactly these ordered tools:
+   `getObjectSchema`, `soqlQuery`, `find`, `getUserInfo`,
+   `listRecentSobjectRecords`, and `getRelatedRecords`. Exercise only the exact
+   deterministic fixtures in the guide, then use management `get_request_log` and
+   `assert_requests` to verify the calls.
+5. Delete the current installed revision, delete the disposable environment, and
+   close both MCP clients in `finally`.
+
+Report D/I/S/X/Q only for the mounted official MCP SDK `1.29.0` Worker flow. The
+Salesforce documentation review is provenance/design input, not V evidence. The
+preset contacts no Salesforce network and does not implement or qualify REST, OAuth,
+field-level security, sharing, or provider output-wire parity. Actual-network,
+hosted, deployed, Cloud-pin, H, V, and P evidence remain unqualified.
 
 ## Exercise the bounded mock-OpenAI flow
 

@@ -11,7 +11,11 @@ import {
   mockMcpServerListSchema,
   mockMcpServerViewSchema,
 } from "@mockos/contracts";
-import { createTenantId } from "@mockos/core";
+import {
+  createTenantId,
+  listMockMcpBlueprints,
+  requireMockMcpBlueprint,
+} from "@mockos/core";
 import {
   type MockosToolDependencies,
   MockosToolError,
@@ -133,6 +137,30 @@ const missingMockMcpServer = (slug: string): MockosToolError =>
     detail: `Mock MCP server '${slug}' is not available in the selected environment.`,
     code: "MOCK_MCP_SERVER_NOT_FOUND",
   });
+
+const missingMockMcpBlueprint = (blueprintId: string): MockosToolError =>
+  new MockosToolError({
+    type: "https://mockos.live/problems/mock-mcp-blueprint-not-found",
+    title: "Mock MCP blueprint not found",
+    status: 404,
+    detail: `Mock MCP blueprint '${blueprintId}' is not available.`,
+    code: "MOCK_MCP_BLUEPRINT_NOT_FOUND",
+  });
+
+const requireBlueprint = (blueprintId: string) => {
+  try {
+    return requireMockMcpBlueprint(blueprintId);
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? Reflect.get(error, "code")
+        : undefined;
+    if (code === "blueprint_not_found") {
+      throw missingMockMcpBlueprint(blueprintId);
+    }
+    throw error;
+  }
+};
 
 const mockMcpToolError = (
   error: unknown,
@@ -457,6 +485,8 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
           throw mockMcpToolError(error, slug) ?? error;
         }
       },
+      listMockMcpBlueprints: async () => listMockMcpBlueprints(),
+      getMockMcpBlueprint: async (blueprintId) => requireBlueprint(blueprintId),
       putMockLlmServer: async (environmentId, server, expectedRevision) => {
         await this.#requireEnvironment(environmentId);
         try {

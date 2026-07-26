@@ -14,21 +14,40 @@ architecture, responsibilities, and qualification boundary.
 
 ## Delivered vertical slice
 
-- F1 added five operations after the accepted 15-tool registry. The current combined
-  F1/F2 source registry contains 24 tools; F1 compare-and-swap semantics add no new
-  tool. The
+- F1 originally added five server-definition/state operations after the accepted
+  15-tool registry. The current source adds three built-in-blueprint operations, so
+  F1 now owns eight MCP-only management operations and the combined F1/F2 registry
+  contains 27 tools. The
   `put_mock_mcp_server`, `list_mock_mcp_servers`, `get_mock_mcp_server`,
   `delete_mock_mcp_server`, and `reset_mock_mcp_state` operations are generated from
-  the shared operation registry and are deliberately MCP-only. The existing
-  self-hosted HTTP surface remains five routes.
+  the shared operation registry. `list_mock_mcp_blueprints`,
+  `get_mock_mcp_blueprint`, and `install_mock_mcp_blueprint` expose the built-in
+  catalog and its CAS-aware install path. All eight are deliberately MCP-only; the
+  existing self-hosted HTTP surface remains five routes.
 - All F1 definition mutations are revision-safe. Put requires `null` create intent or
   the positive current revision for changed replacement, while reset and delete
-  require the positive current revision. Stale and delete/recreate ABA expectations
-  return a typed `409`; missing reset/delete and delete replay return typed `404`.
+  require the positive current revision. Blueprint install applies the same
+  null-create/positive-replace contract. Canonically identical replay is resolved
+  before CAS, including an identical definition in a later delete/recreate
+  generation. Only changed stale or ABA intent returns a typed `409`; missing
+  reset/delete and delete replay return typed `404`.
+- The built-in `salesforce/hosted-mcp/sobject-reads` preset is a secret-free,
+  documentation-derived server definition reviewed against Salesforce documentation
+  on 2026-07-25. It installs six ordered Salesforce-style tools:
+  `getObjectSchema`, `soqlQuery`, `find`, `getUserInfo`,
+  `listRecentSobjectRecords`, and `getRelatedRecords`. Its deterministic
+  `mockos.test` fixtures do not contact Salesforce and do not qualify REST, OAuth,
+  field-level security, sharing, or provider output-wire parity. This preset is not
+  the portable export/import/apply or gallery system planned for F5.
 - Strict version-one contracts cover server identity, transport and hash-only Bearer
   policy, bounded pagination, tools, fixed resources, safe Level-1 resource
   templates, prompts, declarative behavior, method-specific results, and configured
   server-range JSON-RPC errors.
+- Secret-bearing definitions accept a raw Bearer value only at
+  `authentication.token`; the exact credential is rejected from every other
+  definition key or string value. MCP fails closed if a dependency result reflects
+  the credential. Blueprint install is credential-free and verifies the complete
+  public installed server specification, not only its slug or authentication mode.
 - A hand-written `@mockos/mcp-mock` package implements the stable `2025-11-25`
   Streamable HTTP boundary without using the official SDK at runtime. The official
   SDK remains a black-box conformance client.
@@ -55,9 +74,10 @@ architecture, responsibilities, and qualification boundary.
 
 | Node | Responsibility | Must not own |
 | --- | --- | --- |
-| `packages/contracts/src/mock-mcp.ts` | Versioned public server/capability/result contracts, safe read views, validation limits | Transport I/O or database state |
-| `packages/contracts/src/operations/management.ts` | Five F1 management operation schemas and metadata | HTTP routes |
+| `packages/contracts/src/mock-mcp.ts` and `mock-mcp-blueprint.ts` | Versioned public server/capability/result contracts, safe read views, blueprint catalog/provenance/fidelity contracts, validation limits | Transport I/O or database state |
+| `packages/contracts/src/operations/management.ts` | Eight F1 management operation schemas and metadata | HTTP routes |
 | `packages/core/src/behavior/evaluator.ts` | Portable deterministic behavior plans and staged state | MCP wire rendering |
+| `packages/core/src/mock-mcp/blueprints.ts` | Built-in secret-free blueprint definitions and detached catalog/install projections | Portable F5 export/import or hosted gallery policy |
 | `packages/core/src/mock-mcp/repository.ts` | Environment-local revisions, state, sessions, pruning | Public routing |
 | `packages/mcp-mock` | `2025-11-25` parsing, lifecycle, dispatch, pagination, result validation, errors | Platform tenancy or private Cloud policy |
 | `packages/mcp/src/index.ts` | Handler-agnostic management tool registration | Direct Durable Object imports |
@@ -86,13 +106,25 @@ requires that private service.
   create-only, while a positive safe integer selects the current generation for a
   changed replacement. Canonical replay is evaluated before CAS, so an ambiguous
   successful retry preserves revision, timestamps, state, and sessions even when its
-  expectation is now stale or remains `null`. Every new or changed definition
-  atomically consumes the next environment-wide safe positive-integer revision,
-  deletes old application state when replacing a slug, and terminates old-revision
-  sessions. Per-slug values may skip, but they increase strictly.
+  expectation is now stale or remains `null`. That convergence also applies when an
+  identical definition was deleted and recreated at a later generation. Only a
+  changed stale or ABA write conflicts. Every new or changed definition atomically
+  consumes the next environment-wide safe positive-integer revision, deletes old
+  application state when replacing a slug, and terminates old-revision sessions.
+  Per-slug values may skip, but they increase strictly.
 - A changed replacement is a complete definition write. Bearer authentication must
   resupply or rotate the raw synthetic token from caller-owned secret storage; the
   safe `configured: true` view is deliberately not accepted as replacement input.
+  The raw token is valid only at `authentication.token`; placing its exact value in
+  any other definition key or string value is rejected. The MCP handler also fails
+  closed rather than returning a dependency result that reflects that credential.
+- `install_mock_mcp_blueprint` is a destructive, idempotent create-or-replace
+  operation. It accepts the catalog ID, an optional caller-selected slug, and the same
+  `expectedRevision` contract as put. A changed install deletes the prior
+  revision's application state and terminates its revision-bound sessions; canonical
+  identical replay, including identical delete/recreate convergence, preserves the
+  current generation. The handler verifies the exact full public installed
+  specification before returning success.
 - In-flight initialize, notification, request, configured-error, and DELETE paths
   recheck the resolved revision before commit/response. A racing replacement or
   deletion returns transport `409`, not an old-revision result.
@@ -186,11 +218,11 @@ and results may remain because observable test traffic is the product.
 
 | Evidence | F1 requirement |
 | --- | --- |
-| Contract tests | Strict bounds/defaults, schema subset, safe template grammar, write-only credentials, mandatory null/positive mutation intent, 24-tool current registry, five HTTP routes |
-| Core tests | Atomic create/replay/replace/reset/delete CAS, stale and delete/recreate ABA denial, hash-only sessions, cap/pruning, staged sequence conflict behavior, request-log assertions |
+| Contract tests | Strict bounds/defaults, schema subset, safe template grammar, write-only credentials and containment, mandatory null/positive mutation intent, blueprint provenance/fidelity/schema, 27-tool current registry, five HTTP routes |
+| Core tests | Atomic create/replay/replace/reset/delete CAS, identical delete/recreate convergence, changed stale/ABA denial, hash-only sessions, cap/pruning, staged sequence conflict behavior, request-log assertions, detached schema-valid Salesforce catalog and deterministic fixtures |
 | Adapter tests | Raw-wire negotiation, lifecycle, method dispatch, cursors, schemas, configured errors, bounded/linear resource-template reverse matching, HTTP-abort state protection during latency, deliberately ignored `notifications/cancelled`, output validation, in-flight revision races, and real-repository sequential/concurrent state capacity |
-| Management tests | Five tool registration, discovered/runtime schema identity, explicit/current environment resolution, safe results, typed 404/409 failures, pre-handler secret non-reflection, and redaction |
-| Worker and routing tests | Host-resolver coverage for both route modes and trusted headers; [`mock-mcp.integration.test.ts`](../../apps/worker/test/mock-mcp.integration.test.ts) for mounted `@modelcontextprotocol/sdk` `1.29.0` discovery and management create/replay/reset/concurrent replace/stale/delete calls plus path-mode auth/session, capabilities, revision invalidation, cleanup, and redacted observations |
+| Management tests | Eight F1 tool registrations, discovered/runtime schema identity, explicit/current environment resolution, safe results, typed 404/409 failures, pre-handler credential containment, dependency-reflection failure, full blueprint-install public-spec matching, and redaction |
+| Worker and routing tests | Host-resolver coverage for both route modes and trusted headers; [`mock-mcp.integration.test.ts`](../../apps/worker/test/mock-mcp.integration.test.ts) for mounted `@modelcontextprotocol/sdk` `1.29.0` discovery and management create/replay/reset/concurrent replace/stale/delete calls plus path-mode auth/session, capabilities, revision invalidation, cleanup, and redacted observations; [`mock-mcp-blueprint.integration.test.ts`](../../apps/worker/test/mock-mcp-blueprint.integration.test.ts) for catalog/get/install, CAS/replay, all six Salesforce-style tools, observe/assert, and cleanup |
 | Documentation checks | Generated catalog/reference drift, exact counts, links/anchors, inert examples, supported/unsupported claims |
 | Full local source gate | `pnpm check` |
 
@@ -198,10 +230,17 @@ Every applicable focused suite and the complete `pnpm check` gate are green in t
 revision carrying this record, so the bounded F1 implementation is locally
 source-qualified. D/I/S/X/Q are yes for the bounded management-CAS and mounted
 official-SDK Worker path. Q does not extend beyond the named SDK `1.29.0` flow, and
-the mounted fetch seam is not actual-network evidence. H and P remain unqualified,
-while V is not applicable to this synthetic flow. F1 does not yet have hosted CI,
-merge, package publication, staging, production, private Cloud consumption, or broader
-ecosystem evidence.
+the mounted fetch seam is not actual-network evidence. H and P remain unqualified.
+V is not applicable to the generic synthetic engine; for the
+Salesforce-documentation-derived compatibility preset, V remains explicitly
+unqualified because source provenance is design input, not live-provider comparison.
+The preset has no Salesforce network, REST, OAuth, field-level security, sharing,
+output-wire-parity, hosted, deployed, production, or Cloud-pin evidence. Exact usage
+and machine discovery are in the
+[Salesforce SObject Reads guide](../blueprints/salesforce-sobject-reads.md) and
+[generated blueprint catalog](../reference/mock-mcp-blueprints.v1.json). F1 does not
+yet have hosted CI, merge, package publication, staging, production, private Cloud
+consumption, or broader ecosystem evidence.
 
 ## Still open
 

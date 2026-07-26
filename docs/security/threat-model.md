@@ -10,7 +10,8 @@ Last reviewed: 2026-07-26
 Protected assets are platform Access Keys, Cloudflare credentials, environment control
 authority, hashed application secrets and OAuth tokens, signing keys, and isolation
 between mock environments. F1 adds mock-MCP Bearer verifiers, opaque transport
-sessions, revision-bound behavior state, and captured agent traffic. Provider,
+sessions, revision-bound behavior state, captured agent traffic, and secret-free
+built-in server-definition presets. Provider,
 environment mock-MCP, and mock-LLM protocol surfaces are intentionally
 attacker-controllable.
 F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
@@ -47,7 +48,11 @@ replacement or delete/recreate, pathological JSON Schema and URI-template input,
 prototype traversal, configured error-map ambiguity, sequence-state races, aborted
 latency that commits state, secret reflection through observations, lost definition
 updates, stale reset/delete, delete/recreate ABA mutation, and accidental credential
-loss or ambiguity when a safe read marker is reused as replacement input.
+loss or ambiguity when a safe read marker is reused as replacement input. Built-in
+blueprint threats additionally include a forged catalog/dependency definition,
+partial-spec install validation, accidental provider credential capture, and
+documentation provenance being misrepresented as provider-network or live-provider
+evidence.
 F2 definition threats add platform-key confusion with either provider key, plaintext
 or verifier reflection through safe reads/behavior material, cross-environment
 definition access, lost updates, delete/recreate revision reuse, canonicalization
@@ -75,13 +80,26 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   return only `configured: true`, and their strict schemas cannot contain token or
   verifier material. That marker is not a write shape. Replacement is a complete
   definition write and must resupply or rotate the raw synthetic Bearer value from
-  caller-owned secret storage.
+  caller-owned secret storage. The exact raw value is accepted only at
+  `authentication.token`; its occurrence in every other definition key or string
+  value is rejected. If an MCP dependency returns reflected credential material, the
+  operation fails closed.
 - Every mock-MCP definition mutation carries explicit compare-and-swap intent.
   `expectedRevision: null` is create-only; a changed put must name the positive
   current revision. Canonical replay is checked first, so an ambiguous successful
   retry returns the existing record without allocating a revision, clearing state, or
-  terminating sessions. Unknown top-level put arguments collapse to one secret-safe
-  validation issue without reflecting their key or value.
+  terminating sessions. It also converges to the current generation after an
+  identical delete/recreate. Only changed-definition stale or ABA intent receives the
+  typed `409`. A changed direct put deletes prior application state and terminates
+  revision-bound sessions. Unknown top-level put arguments collapse to one
+  secret-safe validation issue without reflecting their key or value.
+- `list_mock_mcp_blueprints` and `get_mock_mcp_blueprint` expose only reviewed,
+  secret-free public preset material. `install_mock_mcp_blueprint` accepts no
+  Salesforce credential and validates the complete installed public server
+  specification against the selected blueprint and slug, not only authentication or
+  slug. It uses the same replay-before-CAS rule as direct put; a changed install
+  deletes prior state and terminates revision-bound sessions, while a reflected or
+  mismatched dependency result fails closed.
 - Mock-MCP reset and delete require the positive current revision and validate it
   inside the mutation transaction. Reset removes current-revision application state
   while preserving definition, revision, and sessions; exact replay returns
@@ -430,6 +448,14 @@ is a synthetic per-server credential, not team or end-user authorization.
 `env:ro`/`env:rw` enforcement remains F4 work.
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
+
+The provider-derived `salesforce/hosted-mcp/sobject-reads` preset has D/I/S/X/Q only
+for its exact local catalog, install, six deterministic tools, mounted SDK flow,
+observation/assertion, and cleanup. Actual-network, H, V, and P are unqualified. The
+Salesforce source review dated 2026-07-25 establishes design provenance only: the
+fixture does not contact Salesforce, proxy REST, perform OAuth, field-level security,
+or sharing checks, or establish output-wire parity. It is a built-in secret-free
+server-definition preset, not the F5 portable blueprint system.
 
 The F2 definition and bounded OpenAI/Anthropic controls likewise have source evidence
 only. They are not a penetration test, hosted rollback, multi-tenant authorization

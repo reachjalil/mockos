@@ -39,6 +39,7 @@ support, deployment, or provider-parity claim.
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
+| Install a secret-free Salesforce-shaped six-tool MCP fixture | [Salesforce SObject Reads blueprint](./blueprints/salesforce-sobject-reads.md) |
 | Test an application against deterministic OpenAI model and JSON/SSE Chat Completions behavior | [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) |
 | Test an application against deterministic Anthropic model and JSON/SSE Messages behavior | [Anthropic SDK quickstart](./quickstarts/anthropic-sdk.md) |
 | Configure, replace, inspect, and remove a mock LLM through MCP | [MCP-managed mock OpenAI and Anthropic](./mock-llm.md) |
@@ -57,8 +58,9 @@ support, deployment, or provider-parity claim.
 - [MCP-first quickstart](./getting-started/mcp-first.md)
 - [Interface model](./concepts/interface-model.md)
 - [Management MCP behavior](./mcp.md)
-- [Generated 24-tool reference](./reference/management-tools.md)
+- [Generated 27-tool reference](./reference/management-tools.md)
 - [Machine-readable management catalog](./reference/management-operations.v1.json)
+- [Machine-readable built-in mock-MCP blueprint catalog](./reference/mock-mcp-blueprints.v1.json)
 - [Machine-readable product capability index](./reference/product-capabilities.v1.json)
 - [Machine-readable mock OpenAI provider manifest](./reference/mock-llm-openai.v1.json)
 - [Machine-readable mock Anthropic provider manifest](./reference/mock-llm-anthropic.v1.json)
@@ -67,14 +69,20 @@ support, deployment, or provider-parity claim.
 - [Agent testing skill](./skill.md)
 
 The management MCP server at `/mcp` is the primary control interface. The current
-source exposes 24 tools. Five F1 tools configure mock MCP servers and four F2 tools
+source exposes 27 tools. Five F1 tools configure mock MCP server definitions/state,
+three F1 tools inspect and install built-in server-definition presets, and four F2 tools
 configure mock-LLM definitions. The direct self-hosted management HTTP surface still
 contains only five identity-management routes and must not be presented as
-equivalent. F1 put uses explicit null-create or positive-current-replace intent;
+equivalent. F1 put and install use explicit null-create or positive-current-replace intent;
 reset/delete require the positive current revision, and stale or delete/recreate ABA
-intent fails atomically. Canonical put replay remains retry-safe and a changed Bearer
-replacement must resupply or rotate the raw synthetic credential. Environment mock
-MCP and mock LLM provider endpoints are separate data planes called by the
+intent for a changed definition fails atomically. Canonically identical convergence,
+including an identical recreated generation, remains retry-safe. A changed replacement
+deletes application state and terminates revision-bound sessions; a Bearer replacement
+must resupply or rotate the raw synthetic credential, which may not appear in another
+definition key or string value. The built-in
+[`salesforce/hosted-mcp/sobject-reads`](./blueprints/salesforce-sobject-reads.md)
+entry is documentation-derived and deterministic, not a live-provider or output-wire
+parity claim. Environment mock MCP and mock LLM provider endpoints are separate data planes called by the
 application or agent under test. Their source behavior and exact
 boundaries are in [Environment-hosted mock MCP](./mock-mcp.md) and
 [MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
@@ -149,8 +157,11 @@ Access Key.
 The F-series roadmap is target design, not implementation evidence. F1 is locally
 source-qualified for its bounded implementation. Its management-CAS and mounted
 official MCP SDK `1.29.0` Worker path are D/I/S/X/Q only; the mounted fetch seam is not
-actual-network evidence. Hosted CI, H/P, merge, package publication, private Cloud
-consumption, and deployed F1 acceptance remain open; V is not applicable. The
+actual-network evidence. The built-in Salesforce preset is qualified at those same
+local dimensions only; it performs no provider network call and has no output-wire
+parity claim. Hosted CI, H/P, merge, package publication, private Cloud consumption,
+and deployed F1 acceptance remain open. V is not applicable to the generic synthetic
+runtime, while the provider-derived preset's live-provider V remains unqualified. The
 F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
 server-definition contract, four MCP-only operations, schema-v8 environment

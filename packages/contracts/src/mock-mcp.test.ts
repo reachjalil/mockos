@@ -345,6 +345,137 @@ describe("mock MCP contracts", () => {
     ).toThrow();
   });
 
+  it("rejects a bearer credential reused anywhere outside its write-only leaf", () => {
+    const token = "mockos_cross_field_token_12345";
+    const base = {
+      version: 1 as const,
+      slug: "credential-containment",
+      serverInfo: { name: "Credential containment", version: "1" },
+      authentication: { mode: "bearer" as const, token },
+    };
+    expect(mockMcpServerWriteSchema.parse(base).authentication).toEqual({
+      mode: "bearer",
+      token,
+    });
+
+    const violations = [
+      {
+        ...base,
+        instructions: `Never persist ${token} outside authentication.`,
+      },
+      {
+        ...base,
+        tools: [
+          {
+            name: "nested_value",
+            behavior: {
+              version: 1,
+              type: "static",
+              value: {
+                content: [{ type: "text", text: `reflected:${token}` }],
+              },
+            },
+          },
+        ],
+      },
+      {
+        ...base,
+        tools: [
+          {
+            name: "nested_key",
+            behavior: {
+              version: 1,
+              type: "static",
+              value: {
+                content: [{ type: "text", text: "safe" }],
+                structuredContent: { [`prefix-${token}-suffix`]: true },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    for (const violation of violations) {
+      const result = mockMcpServerWriteSchema.safeParse(violation);
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error("Credential reuse must be rejected.");
+      expect(result.error.issues).toEqual([
+        expect.objectContaining({
+          message: "A bearer Mock Credential may appear only in authentication.token.",
+          path: ["authentication"],
+        }),
+      ]);
+      expect(JSON.stringify(result.error.issues)).not.toContain(token);
+    }
+  });
+
+  it("rejects a bearer verifier reused anywhere outside its persisted leaf", () => {
+    const verifier = "0123456789abcdef".repeat(4);
+    const base = {
+      version: 1 as const,
+      slug: "verifier-containment",
+      serverInfo: { name: "Verifier containment", version: "1" },
+      authentication: { mode: "bearer" as const, tokenSha256: verifier },
+    };
+    expect(mockMcpServerSpecSchema.parse(base).authentication).toEqual({
+      mode: "bearer",
+      tokenSha256: verifier,
+    });
+
+    const violations = [
+      {
+        ...base,
+        instructions: `Never persist ${verifier} outside authentication.`,
+      },
+      {
+        ...base,
+        tools: [
+          {
+            name: "nested_value",
+            behavior: {
+              version: 1,
+              type: "static",
+              value: {
+                content: [{ type: "text", text: `reflected:${verifier}` }],
+              },
+            },
+          },
+        ],
+      },
+      {
+        ...base,
+        tools: [
+          {
+            name: "nested_key",
+            behavior: {
+              version: 1,
+              type: "static",
+              value: {
+                content: [{ type: "text", text: "safe" }],
+                structuredContent: { [`prefix-${verifier}-suffix`]: true },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    for (const violation of violations) {
+      const result = mockMcpServerSpecSchema.safeParse(violation);
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error("Verifier reuse must be rejected.");
+      expect(result.error.issues).toEqual([
+        expect.objectContaining({
+          message:
+            "A bearer Mock Credential verifier may appear only in authentication.tokenSha256.",
+          path: ["authentication"],
+        }),
+      ]);
+      expect(JSON.stringify(result.error.issues)).not.toContain(verifier);
+    }
+  });
+
   it("requires explicit revision intent for every mock MCP mutation", () => {
     const server = {
       version: 1,

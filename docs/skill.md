@@ -36,12 +36,18 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   transaction cancellation/replay checks, lifecycle/password revocation, bounded
   retention, restricted same-origin non-credentialed CORS, provider-shaped response
   omissions, and recursive Authn body/header redaction;
-- capability discovery against the 24-tool current management registry, preserving
-  `simulate_lifecycle` and `run_provisioning_cycle` and recognizing the five F1
-  mock-MCP definition/state operations plus four F2 mock-LLM definition operations;
+- capability discovery against the 27-tool current management registry, preserving
+  `simulate_lifecycle` and `run_provisioning_cycle` and recognizing five F1
+  mock-MCP definition/state operations, three F1 built-in-blueprint operations, and
+  four F2 mock-LLM definition operations;
 - revision-safe F1 mock-MCP create, canonical replay, reset, complete replacement,
   stale-conflict reconciliation, and delete through the five MCP-only tools, including
   raw Bearer resupply rather than safe-view round-tripping;
+- built-in blueprint list/get/install for
+  `salesforce/hosted-mcp/sobject-reads`, followed by deterministic exercise,
+  observation, assertion, and cleanup of its six Salesforce-style tools without
+  confusing source provenance with live-provider verification or the future F5
+  portable blueprint system;
 - MCP-managed OpenAI definitions, an authenticated model-discovery capability probe,
   official-SDK JSON and bounded SSE Chat Completions, stream-option and cancellation
   checks, one bounded negative case, and revision-safe cleanup without confusing
@@ -141,8 +147,11 @@ separation:
    definition, revision, and sessions, and accept an exact retry as `cleared: 0`.
 6. For a changed replacement, read and reconcile the current server, pass that
    positive revision, resend the complete definition, and resupply or rotate the raw
-   Bearer credential. Canonical replay may succeed with a stale or `null` expectation,
-   but changed stale or delete/recreate ABA intent must return
+   Bearer credential. The raw value is valid only at `authentication.token`; its exact
+   value must be rejected from every other definition key or string value, and a
+   dependency response that reflects it must fail closed. Canonical replay may
+   succeed with a stale or `null` expectation, including an identical definition in a
+   later delete/recreate generation, but changed stale or ABA intent must return
    `MOCK_MCP_SERVER_REVISION_CONFLICT`.
 7. In `finally`, read the latest generation and delete it with that positive
    revision. Require `deleted: true`; a repeated delete returns
@@ -150,7 +159,48 @@ separation:
 8. Delete the disposable environment and close management MCP. Report the bounded
    mounted `@modelcontextprotocol/sdk` `1.29.0` Worker path as D/I/S/X/Q only, never
    broader than the named flow and as not actual-network, hosted, deployed, or
-   broad-client evidence. H and P remain unqualified; V is not applicable.
+   broad-client evidence. H and P remain unqualified; V is not applicable to this
+   generic synthetic-engine recipe.
+
+## Bounded Salesforce SObject Reads blueprint recipe
+
+Use the
+[Salesforce Hosted MCP SObject Reads preset guide](./blueprints/salesforce-sobject-reads.md)
+and generated
+[blueprint catalog](./reference/mock-mcp-blueprints.v1.json) for the exact fixture
+contract. This is a built-in, secret-free server-definition preset, not the portable
+F5 export/import/apply/gallery system.
+
+1. Capability-negotiate `list_mock_mcp_blueprints`,
+   `get_mock_mcp_blueprint`, and `install_mock_mcp_blueprint` in addition to the five
+   server-definition/state tools. Require the connected registry to expose the exact
+   install CAS schema; the current source registry has 27 MCP tools and five companion
+   HTTP routes.
+2. List and get `salesforce/hosted-mcp/sobject-reads`. Confirm its provenance is
+   documentation-derived, its source review date is 2026-07-25, its provider network
+   flag is false, its output-wire-parity status is unqualified, and its authentication
+   mode is `none`.
+3. Create a disposable environment and install with `expectedRevision: null`. A
+   changed replacement requires the positive current revision and is destructive:
+   it deletes prior application state and terminates revision-bound sessions.
+   Canonically identical replay, including identical delete/recreate convergence,
+   succeeds before CAS; only changed stale or ABA intent returns typed `409`.
+4. Require the install result to match the complete public blueprint server
+   specification. Discover exactly these ordered data-plane tools:
+   `getObjectSchema`, `soqlQuery`, `find`, `getUserInfo`,
+   `listRecentSobjectRecords`, and `getRelatedRecords`.
+5. Exercise only the exact deterministic fixtures documented by the guide, then use
+   management `get_request_log` and `assert_requests` to verify the ordered calls.
+   Keep the management plane and the installed mock-MCP data plane distinct.
+6. Delete the installed server at its current positive revision, delete the
+   disposable environment, and close both MCP clients in `finally`.
+
+Report D/I/S/X/Q only for the mounted official MCP SDK `1.29.0` Worker flow. The
+Salesforce documentation review is provenance/design input, not verified-live
+evidence. The preset performs no Salesforce network or REST calls and does not
+implement or qualify OAuth, field-level security, sharing, or provider output-wire
+parity. Actual-network, hosted, deployed, Cloud-pin, H, V, and P evidence remain
+unqualified.
 
 ## Bounded mock-OpenAI recipe
 

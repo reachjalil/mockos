@@ -23,7 +23,7 @@ You need:
 - a source Worker running at `http://127.0.0.1:8787`;
 - a management MCP client connected to `http://127.0.0.1:8787/mcp`;
 - the local platform management Access Key;
-- the 24-tool registry, including `put_mock_llm_server`,
+- the 27-tool registry, including `put_mock_llm_server`,
   `get_mock_llm_server`, and `delete_mock_llm_server`; and
 - only synthetic provider credentials, model data, and prompts.
 

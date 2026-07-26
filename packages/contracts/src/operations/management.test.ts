@@ -19,7 +19,7 @@ describe("management operation registry", () => {
     expect(new Set(entries.map(([, operation]) => operation.operationId)).size).toBe(
       entries.length
     );
-    expect(entries).toHaveLength(24);
+    expect(entries).toHaveLength(27);
   });
 
   it("describes only live self-hosted HTTP management routes", () => {
@@ -70,18 +70,21 @@ describe("management operation registry", () => {
 
     expect(mockosManagementOperations.put_mock_mcp_server).toMatchObject({
       requiredScopes: ["env:rw"],
-      effect: "mutation",
+      effect: "destructive",
       retry: "idempotent",
       requestSecrets: "redact",
       responseSecrets: "none",
       mcp: {
         annotations: {
           readOnlyHint: false,
-          destructiveHint: false,
+          destructiveHint: true,
           idempotentHint: true,
         },
       },
     });
+    expect(mockosManagementOperations.put_mock_mcp_server.description).toBe(
+      "Creates with expectedRevision null or atomically replaces one environment-local mock MCP server at its current positive revision. Canonical replay succeeds before the revision check. A changed replacement deletes the prior revision's application state and terminates its revision-bound sessions. Replacement is a full definition write, so a bearer Mock Credential must be resupplied or rotated; credentials are accepted only in this write operation and are never returned."
+    );
     const putInputJsonSchema = JSON.stringify(
       z.toJSONSchema(mockosManagementOperations.put_mock_mcp_server.mcp.inputSchema, {
         io: "input",
@@ -163,6 +166,90 @@ describe("management operation registry", () => {
         },
       });
     }
+  });
+
+  it("keeps the blueprint catalog and installer MCP-only with exact safety contracts", () => {
+    for (const toolName of [
+      "list_mock_mcp_blueprints",
+      "get_mock_mcp_blueprint",
+      "install_mock_mcp_blueprint",
+    ] as const) {
+      expect("http" in mockosManagementOperations[toolName]).toBe(false);
+      expect(mockosManagementOperations[toolName].requestSecrets).toBe("none");
+      expect(mockosManagementOperations[toolName].responseSecrets).toBe("none");
+      expect(mockosManagementOperations[toolName].mcp.annotations.openWorldHint).toBe(
+        false
+      );
+    }
+
+    for (const toolName of [
+      "list_mock_mcp_blueprints",
+      "get_mock_mcp_blueprint",
+    ] as const) {
+      expect(mockosManagementOperations[toolName]).toMatchObject({
+        requiredScopes: ["env:ro"],
+        effect: "read",
+        retry: "safe",
+        mcp: {
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+          },
+        },
+      });
+    }
+    expect(mockosManagementOperations.install_mock_mcp_blueprint).toMatchObject({
+      requiredScopes: ["env:rw"],
+      effect: "destructive",
+      retry: "idempotent",
+      mcp: {
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+    });
+    expect(mockosManagementOperations.install_mock_mcp_blueprint.description).toBe(
+      "Creates with expectedRevision null or compare-and-swap replaces an environment-local mock MCP server from a built-in deterministic synthetic blueprint, optionally under a caller-selected slug. Canonical replay is idempotent. A changed replacement deletes the prior revision's application state and terminates its revision-bound sessions."
+    );
+
+    expect(
+      z.toJSONSchema(
+        mockosManagementOperations.list_mock_mcp_blueprints.mcp.inputSchema,
+        { io: "input" }
+      )
+    ).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+    });
+    expect(
+      z.toJSONSchema(
+        mockosManagementOperations.get_mock_mcp_blueprint.mcp.inputSchema,
+        { io: "input" }
+      )
+    ).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["blueprintId"],
+    });
+    expect(
+      z.toJSONSchema(
+        mockosManagementOperations.install_mock_mcp_blueprint.mcp.inputSchema,
+        { io: "input" }
+      )
+    ).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["blueprintId", "expectedRevision"],
+      properties: {
+        expectedRevision: {
+          anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+        },
+      },
+    });
   });
 
   it("keeps mock-LLM server management MCP-only and credential-safe", () => {

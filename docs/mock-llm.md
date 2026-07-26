@@ -63,7 +63,7 @@ application or provider SDK
           get_request_log / assert_requests
 ```
 
-The source contains exactly **24 management MCP tools**. The four mock-LLM
+The source contains exactly **27 management MCP tools**. The four mock-LLM
 definition tools are MCP-only. The separate self-hosted management HTTP API remains
 exactly **five routes** under `/__mockos/v1`; neither the provider routes above nor
 the four definition tools are part of that management HTTP count or its OpenAPI and

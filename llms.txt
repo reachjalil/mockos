@@ -14,6 +14,8 @@
   provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.
 - [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,
   resources, resource templates, and prompts from an agent under test.
+- [Salesforce SObject Reads blueprint](docs/blueprints/salesforce-sobject-reads.md):
+  install and call the built-in six-tool, secret-free synthetic fixture.
 - [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call
   its bounded streaming OpenAI or Anthropic provider data plane.
 - [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,
@@ -21,9 +23,11 @@
 - [Anthropic SDK quickstart](docs/quickstarts/anthropic-sdk.md): create through
   MCP, probe models, call Messages, test version/auth failures, and clean up safely.
 - [Management tool reference](docs/reference/management-tools.md): generated
-  reference for all 24 current MCP tools.
+  reference for all 27 current MCP tools.
 - [Machine operation catalog](docs/reference/management-operations.v1.json):
   generated schemas and capability metadata.
+- [Machine mock-MCP blueprint catalog](docs/reference/mock-mcp-blueprints.v1.json):
+  generated full built-in definitions, provenance, fidelity, and evidence limits.
 - [Machine product capability index](docs/reference/product-capabilities.v1.json):
   generated non-exhaustive F0-F2 support slice, executable provenance, exact
   specifications, anchored limitations, and independent evidence dimensions.
@@ -38,7 +42,7 @@
 ## Current capability boundary
 
 - Management MCP: implemented at `/mcp` with
-  24 tools over Streamable HTTP.
+  27 tools over Streamable HTTP.
 - Tested MCP revision: `2025-11-25`;
   standalone GET streaming is unsupported.
 - Self-hosted management HTTP: 5 implemented
@@ -51,6 +55,10 @@
 - F1 mock MCP definition mutations are MCP-only atomic CAS operations:
   `put` requires null-create or positive-current-replace intent, canonical replay
   precedes CAS, and reset/delete require the positive current revision.
+- F1 includes one built-in, secret-free Salesforce SObject Reads server-definition
+  preset with six deterministic read tools. It is documentation-derived, makes no
+  provider network or REST call, claims no provider output-wire parity, and is not
+  the F5 portable blueprint/export/import/gallery system.
 - F2 mock LLM definitions: four MCP-only operations are source-implemented with
   schema-v8 environment persistence and write-only provider Mock Credentials.
 - F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic

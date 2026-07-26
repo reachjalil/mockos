@@ -7,7 +7,7 @@ Last reviewed: 2026-07-25
 
 The public Worker exposes a deliberately narrow management HTTP surface under
 `/__mockos/v1`. It is a supporting interface, not an HTTP
-copy of the 24-tool management MCP server.
+copy of the 27-tool management MCP server.
 
 Exactly **5 routes** are implemented:
 
@@ -50,8 +50,9 @@ environment-hosted mock MCP, or outbound target requests.
 - There is no direct HTTP route for listing environments, minting tokens, running
   provisioning, setting scenarios, inspecting/asserting logs, simulating lifecycle,
   or selecting a session cursor.
-- The five F1 mock-MCP definition/state operations are MCP-only. The configured
-  environment endpoint is a data plane, not an HTTP management route.
+- The eight F1 mock-MCP definition/state/catalog/install operations are MCP-only.
+  The configured environment endpoint is a data plane, not an HTTP management
+  route.
 - The four F2 mock-LLM definition operations are also MCP-only. They persist
   configuration for the separate environment data plane and add no management
   HTTP route. The bounded OpenAI and Anthropic provider operations are not

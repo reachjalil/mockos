@@ -3,6 +3,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix, resolve } from "node:path";
 import {
+  listMockMcpBlueprints,
+  requireMockMcpBlueprint,
+} from "../packages/core/src/mock-mcp/blueprints";
+import {
   generateMockLlmAnthropicProviderDocumentation,
   generateMockLlmOpenAiProviderDocumentation,
   generateMockosHttpOperationManifest,
@@ -109,6 +113,47 @@ const generatedProductCapabilityIndexJson = (): string => {
     throw new Error("The generated product capability evidence-tier shape changed.");
   }
   return compactShortStringArrays(contents);
+};
+
+const generatedMockMcpBlueprintCatalogJson = (): string => {
+  const catalog = listMockMcpBlueprints();
+  return compactShortStringArrays(
+    stableJson({
+      schemaVersion: catalog.schemaVersion,
+      generatedFrom: {
+        path: "packages/core/src/mock-mcp/blueprints.ts",
+        listExport: "listMockMcpBlueprints",
+        getExport: "requireMockMcpBlueprint",
+      },
+      status: "source-qualified-local",
+      boundaries: {
+        catalogScope: "built-in-secret-free-server-definition-presets",
+        providerNetwork: false,
+        providerRestAdapter: "none",
+        liveProviderQualification: "unqualified",
+        outputWireParity: "unqualified",
+        portableBlueprintSystem: "not-f5-export-import-apply-or-gallery",
+      },
+      evidence: {
+        designed: "qualified",
+        implemented: "qualified",
+        sourceTested: "qualified",
+        integrationTested: "qualified-mounted-worker",
+        sdkClientQualified: "qualified-mcp-sdk-1.29.0-mounted-worker",
+        actualNetwork: "unqualified",
+        hostedSmoke: "unqualified",
+        verifiedLive: "unqualified",
+        productionReady: "unqualified",
+      },
+      trademarks: {
+        salesforce:
+          "Salesforce is a trademark of Salesforce, Inc. Names are used only for compatibility identification.",
+        relationship:
+          "mockOS is independent and is not affiliated with, sponsored by, or endorsed by Salesforce, Inc.",
+      },
+      blueprints: catalog.blueprints.map(({ id }) => requireMockMcpBlueprint(id)),
+    })
+  );
 };
 
 const generatedClientManifest = (): string => {
@@ -254,14 +299,24 @@ const renderManagementTools = (
   lines.push(
     "## Environment-hosted mock MCP",
     "",
-    "- The five F1 management operations configure source-qualified mock MCP servers",
-    "  inside an environment. They are MCP-only and add no self-hosted HTTP route.",
+    "- Eight F1 management operations configure source-qualified mock MCP servers and",
+    "  inspect or install built-in server-definition presets. They are MCP-only and add",
+    "  no self-hosted HTTP route.",
     "- Every F1 mutation carries explicit revision intent: create with",
     "  `expectedRevision: null`; replace, reset, or delete with the positive current",
-    "  revision. Canonically identical put replay succeeds before CAS validation.",
+    "  revision. Canonically identical put or install replay succeeds before CAS",
+    "  validation, including convergence on an identical delete/recreate generation.",
     "- Replacement is a complete definition write. A bearer Mock Credential must be",
     "  resupplied or rotated because the safe `{ configured: true }` read marker is",
-    "  not a valid replacement input.",
+    "  not a valid replacement input. The raw credential is rejected if it appears in",
+    "  any other definition key or string value, and MCP fails closed if a dependency",
+    "  reflects it in a purported safe result.",
+    "- `list_mock_mcp_blueprints` and `get_mock_mcp_blueprint` expose versioned catalog",
+    "  provenance and fidelity. `install_mock_mcp_blueprint` accepts no credential and",
+    "  validates the complete installed public specification before returning success.",
+    "- A changed put or blueprint install is destructive: it deletes prior application",
+    "  state and terminates revision-bound sessions. Changed-definition stale or ABA",
+    "  intent returns typed `409`; canonically identical convergence does not mutate.",
     "- Reset atomically clears application state while preserving the definition,",
     "  revision, and sessions. Delete atomically removes definition, state, and",
     "  sessions. Missing servers return typed 404 errors; stale or ABA revisions",
@@ -272,6 +327,9 @@ const renderManagementTools = (
     `  \`${catalog.future.mockMcpServers.subdomainEndpoint}\`.`,
     "- Use [the mock MCP guide](../mock-mcp.md) for the wire sequence, server contract,",
     "  behavior semantics, security boundary, and current limitations.",
+    "- Use the [Salesforce SObject Reads blueprint guide](../blueprints/salesforce-sobject-reads.md)",
+    "  for the built-in secret-free fixture, exact six-tool input contract, and explicit",
+    "  no-provider-network/no-output-wire-parity boundary.",
     `- Deployed acceptance is \`${catalog.future.mockMcpServers.deployedAcceptance}\`;`,
     "  this generated source catalog is not hosted evidence.",
     "",
@@ -450,8 +508,9 @@ const renderSelfHostedHttp = (
     "- There is no direct HTTP route for listing environments, minting tokens, running",
     "  provisioning, setting scenarios, inspecting/asserting logs, simulating lifecycle,",
     "  or selecting a session cursor.",
-    "- The five F1 mock-MCP definition/state operations are MCP-only. The configured",
-    "  environment endpoint is a data plane, not an HTTP management route.",
+    "- The eight F1 mock-MCP definition/state/catalog/install operations are MCP-only.",
+    "  The configured environment endpoint is a data plane, not an HTTP management",
+    "  route.",
     "- The four F2 mock-LLM definition operations are also MCP-only. They persist",
     "  configuration for the separate environment data plane and add no management",
     "  HTTP route. The bounded OpenAI and Anthropic provider operations are not",
@@ -489,6 +548,8 @@ const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string 
     "  provider endpoints, HTTP, CLI, console, and environment-hosted mock MCP.",
     "- [Mock MCP guide](docs/mock-mcp.md): configure and exercise deterministic tools,",
     "  resources, resource templates, and prompts from an agent under test.",
+    "- [Salesforce SObject Reads blueprint](docs/blueprints/salesforce-sobject-reads.md):",
+    "  install and call the built-in six-tool, secret-free synthetic fixture.",
     "- [Mock LLM guide](docs/mock-llm.md): configure an LLM server through MCP and call",
     "  its bounded streaming OpenAI or Anthropic provider data plane.",
     "- [OpenAI SDK quickstart](docs/quickstarts/openai-sdk.md): create through MCP,",
@@ -499,6 +560,8 @@ const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string 
     `  reference for all ${catalog.managementMcp.toolCount} current MCP tools.`,
     "- [Machine operation catalog](docs/reference/management-operations.v1.json):",
     "  generated schemas and capability metadata.",
+    "- [Machine mock-MCP blueprint catalog](docs/reference/mock-mcp-blueprints.v1.json):",
+    "  generated full built-in definitions, provenance, fidelity, and evidence limits.",
     "- [Machine product capability index](docs/reference/product-capabilities.v1.json):",
     "  generated non-exhaustive F0-F2 support slice, executable provenance, exact",
     "  specifications, anchored limitations, and independent evidence dimensions.",
@@ -526,6 +589,10 @@ const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string 
     "- F1 mock MCP definition mutations are MCP-only atomic CAS operations:",
     "  `put` requires null-create or positive-current-replace intent, canonical replay",
     "  precedes CAS, and reset/delete require the positive current revision.",
+    "- F1 includes one built-in, secret-free Salesforce SObject Reads server-definition",
+    "  preset with six deterministic read tools. It is documentation-derived, makes no",
+    "  provider network or REST call, claims no provider output-wire parity, and is not",
+    "  the F5 portable blueprint/export/import/gallery system.",
     "- F2 mock LLM definitions: four MCP-only operations are source-implemented with",
     "  schema-v8 environment persistence and write-only provider Mock Credentials.",
     "- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic",
@@ -592,6 +659,10 @@ const renderLlmsFull = async (generated: {
     {
       title: "Environment-hosted mock MCP",
       path: "docs/mock-mcp.md",
+    },
+    {
+      title: "Salesforce SObject Reads built-in blueprint",
+      path: "docs/blueprints/salesforce-sobject-reads.md",
     },
     {
       title: "Mock LLM management definitions",
@@ -683,6 +754,10 @@ const productCapabilityIndexPath = resolve(
   process.cwd(),
   "docs/reference/product-capabilities.v1.json"
 );
+const mockMcpBlueprintCatalogPath = resolve(
+  process.cwd(),
+  "docs/reference/mock-mcp-blueprints.v1.json"
+);
 const mockLlmOpenAiProviderPath = resolve(
   process.cwd(),
   "docs/reference/mock-llm-openai.v1.json"
@@ -719,6 +794,10 @@ const artifacts: Artifact[] = [
   {
     path: productCapabilityIndexPath,
     contents: generatedProductCapabilityIndexJson(),
+  },
+  {
+    path: mockMcpBlueprintCatalogPath,
+    contents: generatedMockMcpBlueprintCatalogJson(),
   },
   {
     path: mockLlmOpenAiProviderPath,

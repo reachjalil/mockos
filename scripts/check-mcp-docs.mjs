@@ -24,6 +24,9 @@ const expectedTools = [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "list_mock_mcp_blueprints",
+  "get_mock_mcp_blueprint",
+  "install_mock_mcp_blueprint",
   "put_mock_llm_server",
   "list_mock_llm_servers",
   "get_mock_llm_server",
@@ -43,6 +46,8 @@ const catalogPath = "docs/reference/management-operations.v1.json";
 const catalog = JSON.parse(await read(catalogPath));
 const productCapabilityIndexPath = "docs/reference/product-capabilities.v1.json";
 const productCapabilityIndex = JSON.parse(await read(productCapabilityIndexPath));
+const mockMcpBlueprintCatalogPath = "docs/reference/mock-mcp-blueprints.v1.json";
+const mockMcpBlueprintCatalog = JSON.parse(await read(mockMcpBlueprintCatalogPath));
 const mockLlmOpenAiProviderPath = "docs/reference/mock-llm-openai.v1.json";
 const mockLlmOpenAiProvider = JSON.parse(await read(mockLlmOpenAiProviderPath));
 const mockLlmAnthropicProviderPath = "docs/reference/mock-llm-anthropic.v1.json";
@@ -50,6 +55,8 @@ const mockLlmAnthropicProvider = JSON.parse(await read(mockLlmAnthropicProviderP
 const failures = [];
 
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const includesNormalized = (contents, expected) =>
+  contents?.replace(/\s+/g, " ").includes(expected);
 
 const evidenceTiers = ["source", "hostedCi", "cloudPin", "deployed", "verifiedLive"];
 const evidenceQualifications = ["qualified", "unqualified", "not-applicable"];
@@ -80,6 +87,9 @@ if (
     "generateMockosProductCapabilityIndex" ||
   !Array.isArray(productCapabilityIndex.provenance?.relatedArtifacts) ||
   !productCapabilityIndex.provenance.relatedArtifacts.includes(catalogPath) ||
+  !productCapabilityIndex.provenance.relatedArtifacts.includes(
+    mockMcpBlueprintCatalogPath
+  ) ||
   !productCapabilityIndex.provenance.relatedArtifacts.includes(
     mockLlmOpenAiProviderPath
   ) ||
@@ -176,6 +186,42 @@ const openAiCapability = (capabilities ?? []).find(
 const anthropicCapability = (capabilities ?? []).find(
   ({ id }) => id === "mock-llm.anthropic"
 );
+const mockMcpCapability = (capabilities ?? []).find(
+  ({ id }) => id === "mock-mcp.data-plane"
+);
+const managementCapability = (capabilities ?? []).find(
+  ({ id }) => id === "management.mcp"
+);
+if (
+  managementCapability?.scope !== "current-27-tool-registry" ||
+  managementCapability?.evidence?.source?.scope !== "current-27-tool-source-registry" ||
+  managementCapability?.evidence?.cloudPin?.qualification !== "unqualified" ||
+  managementCapability?.evidence?.cloudPin?.scope !==
+    "current-27-tool-registry-not-cloud-qualified"
+) {
+  failures.push(
+    "the management capability must keep the current 27-tool source registry separate from the unqualified Cloud pin"
+  );
+}
+if (
+  !mockMcpCapability?.provenance?.executableAuthorities?.some(
+    ({ path, export: exportedName }) =>
+      path === "packages/core/src/mock-mcp/blueprints.ts" &&
+      exportedName === "listMockMcpBlueprints"
+  ) ||
+  !mockMcpCapability?.evidence?.source?.proofRefs?.includes(
+    "packages/core/src/mock-mcp/blueprints.test.ts"
+  ) ||
+  !mockMcpCapability?.evidence?.source?.proofRefs?.includes(
+    "apps/worker/test/mock-mcp-blueprint.integration.test.ts"
+  ) ||
+  mockMcpCapability?.documentation?.quickstart !==
+    "docs/blueprints/salesforce-sobject-reads.md"
+) {
+  failures.push(
+    "the mock-MCP capability must trace the built-in blueprint catalog, source tests, mounted SDK integration, and task guide"
+  );
+}
 if (
   !openAiCapability?.provenance?.executableAuthorities?.some(
     ({ path, export: exportedName }) =>
@@ -485,8 +531,8 @@ for (const {
   }
 }
 
-if (catalog.managementMcp?.toolCount !== 24) {
-  failures.push("the generated management catalog must report exactly 24 MCP tools");
+if (catalog.managementMcp?.toolCount !== 27) {
+  failures.push("the generated management catalog must report exactly 27 MCP tools");
 }
 const actualTools = catalog.managementMcp?.tools?.map(({ operationId }) => operationId);
 if (!equal(actualTools, expectedTools)) {
@@ -526,6 +572,9 @@ const expectedMockMcpManagementTools = [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "list_mock_mcp_blueprints",
+  "get_mock_mcp_blueprint",
+  "install_mock_mcp_blueprint",
 ];
 const mockMcpManagement = catalog.future?.mockMcpServers?.managementDefinitions;
 if (
@@ -537,11 +586,16 @@ if (
   mockMcpManagement?.putContract?.expectedRevision !==
     "required-null-create-or-positive-replace" ||
   mockMcpManagement?.putContract?.replay !== "canonical-before-cas" ||
+  mockMcpManagement?.putContract?.identicalDeleteRecreate !==
+    "converges-to-current-generation-without-mutation" ||
   mockMcpManagement?.putContract?.replacement !== "full-definition" ||
+  mockMcpManagement?.putContract?.changedReplacementEffect !==
+    "deletes-state-and-terminates-revision-sessions" ||
   mockMcpManagement?.putContract?.bearerCredentialReplacement !==
     "resupply-or-rotate" ||
   mockMcpManagement?.putContract?.safeViewWriteShape !== "unsupported" ||
-  mockMcpManagement?.putContract?.revisionMismatch !== "typed-409" ||
+  mockMcpManagement?.putContract?.revisionMismatch !==
+    "typed-409-for-changed-definition" ||
   mockMcpManagement?.resetContract?.expectedRevision !== "required-positive" ||
   mockMcpManagement?.resetContract?.behavior !== "atomic-cas" ||
   mockMcpManagement?.resetContract?.preserves !== "definition-revision-and-sessions" ||
@@ -556,10 +610,142 @@ if (
   mockMcpManagement?.deleteContract?.revisionMismatch !== "typed-409" ||
   mockMcpManagement?.validation?.topLevelArguments !== "strict-secret-safe" ||
   mockMcpManagement?.validation?.definitionFailures !== "credential-free-generic" ||
+  mockMcpManagement?.validation?.bearerCredentialReuse !==
+    "rejected-from-all-other-definition-keys-and-string-values" ||
+  mockMcpManagement?.validation?.dependencyResultCredentialReflection !==
+    "fail-closed" ||
   mockMcpManagement?.validation?.revision !== "positive-safe-integer"
 ) {
   failures.push(
     "F1 mock MCP management must retain its exact MCP-only revision-safe contract"
+  );
+}
+const mockMcpBlueprints = mockMcpManagement?.blueprintCatalog;
+if (
+  mockMcpBlueprints?.status !== "source-qualified" ||
+  mockMcpBlueprints?.interface !== "MCP-only" ||
+  mockMcpBlueprints?.schemaVersion !== 1 ||
+  mockMcpBlueprints?.catalogScope !==
+    "built-in-secret-free-server-definition-presets" ||
+  mockMcpBlueprints?.artifact !== mockMcpBlueprintCatalogPath ||
+  mockMcpBlueprints?.canonicalSource !== "packages/core/src/mock-mcp/blueprints.ts" ||
+  !equal(mockMcpBlueprints?.blueprintIds, ["salesforce/hosted-mcp/sobject-reads"]) ||
+  mockMcpBlueprints?.provenance !== "documentation-derived-at-recorded-review-date" ||
+  mockMcpBlueprints?.fidelity !== "deterministic-synthetic-no-provider-network" ||
+  mockMcpBlueprints?.outputWireParity !== "unqualified" ||
+  mockMcpBlueprints?.portableBlueprintSystem !==
+    "not-f5-export-import-apply-or-gallery" ||
+  mockMcpBlueprints?.installContract?.expectedRevision !==
+    "required-null-create-or-positive-replace" ||
+  mockMcpBlueprints?.installContract?.slug !== "default-or-validated-override" ||
+  mockMcpBlueprints?.installContract?.replay !== "canonical-before-cas" ||
+  mockMcpBlueprints?.installContract?.changedReplacementEffect !==
+    "deletes-state-and-terminates-revision-sessions" ||
+  mockMcpBlueprints?.installContract?.dependencyResultValidation !==
+    "exact-full-public-spec-match" ||
+  mockMcpBlueprints?.installContract?.credentials !== "none"
+) {
+  failures.push(
+    "the generated management catalog must preserve the built-in mock-MCP blueprint provenance, fidelity, and destructive install contract"
+  );
+}
+const expectedSalesforceBlueprintTools = [
+  "getObjectSchema",
+  "soqlQuery",
+  "find",
+  "getUserInfo",
+  "listRecentSobjectRecords",
+  "getRelatedRecords",
+];
+const salesforceBlueprint = mockMcpBlueprintCatalog.blueprints?.[0];
+const salesforceBlueprintTools = salesforceBlueprint?.server?.tools;
+const requiredInputsByTool = {
+  getObjectSchema: [],
+  soqlQuery: ["query"],
+  find: ["search"],
+  getUserInfo: [],
+  listRecentSobjectRecords: ["sobject-name"],
+  getRelatedRecords: ["sobject-name", "id", "relationship-path"],
+};
+if (
+  mockMcpBlueprintCatalog.schemaVersion !== 1 ||
+  mockMcpBlueprintCatalog.generatedFrom?.path !==
+    "packages/core/src/mock-mcp/blueprints.ts" ||
+  mockMcpBlueprintCatalog.generatedFrom?.listExport !== "listMockMcpBlueprints" ||
+  mockMcpBlueprintCatalog.generatedFrom?.getExport !== "requireMockMcpBlueprint" ||
+  mockMcpBlueprintCatalog.status !== "source-qualified-local" ||
+  mockMcpBlueprintCatalog.boundaries?.catalogScope !==
+    "built-in-secret-free-server-definition-presets" ||
+  mockMcpBlueprintCatalog.boundaries?.providerNetwork !== false ||
+  mockMcpBlueprintCatalog.boundaries?.providerRestAdapter !== "none" ||
+  mockMcpBlueprintCatalog.boundaries?.liveProviderQualification !== "unqualified" ||
+  mockMcpBlueprintCatalog.boundaries?.outputWireParity !== "unqualified" ||
+  mockMcpBlueprintCatalog.boundaries?.portableBlueprintSystem !==
+    "not-f5-export-import-apply-or-gallery" ||
+  mockMcpBlueprintCatalog.evidence?.designed !== "qualified" ||
+  mockMcpBlueprintCatalog.evidence?.implemented !== "qualified" ||
+  mockMcpBlueprintCatalog.evidence?.sourceTested !== "qualified" ||
+  mockMcpBlueprintCatalog.evidence?.integrationTested !== "qualified-mounted-worker" ||
+  mockMcpBlueprintCatalog.evidence?.sdkClientQualified !==
+    "qualified-mcp-sdk-1.29.0-mounted-worker" ||
+  mockMcpBlueprintCatalog.evidence?.actualNetwork !== "unqualified" ||
+  mockMcpBlueprintCatalog.evidence?.hostedSmoke !== "unqualified" ||
+  mockMcpBlueprintCatalog.evidence?.verifiedLive !== "unqualified" ||
+  mockMcpBlueprintCatalog.evidence?.productionReady !== "unqualified" ||
+  !mockMcpBlueprintCatalog.trademarks?.salesforce?.includes(
+    "trademark of Salesforce, Inc."
+  ) ||
+  !mockMcpBlueprintCatalog.trademarks?.relationship?.includes(
+    "not affiliated with, sponsored by, or endorsed by Salesforce, Inc."
+  ) ||
+  mockMcpBlueprintCatalog.blueprints?.length !== 1 ||
+  salesforceBlueprint?.id !== "salesforce/hosted-mcp/sobject-reads" ||
+  salesforceBlueprint?.blueprintVersion !== 1 ||
+  salesforceBlueprint?.provenance?.kind !== "documentation-derived" ||
+  salesforceBlueprint?.provenance?.upstream?.server !== "platform/sobject-reads" ||
+  salesforceBlueprint?.provenance?.sourceReviewedAt !== "2026-07-25" ||
+  salesforceBlueprint?.fidelity?.behavior !== "deterministic-synthetic" ||
+  salesforceBlueprint?.fidelity?.providerNetwork !== false ||
+  salesforceBlueprint?.fidelity?.outputWireParity !== "unqualified" ||
+  salesforceBlueprint?.credentialMode !== "none" ||
+  salesforceBlueprint?.server?.authentication?.mode !== "none" ||
+  salesforceBlueprint?.server?.transport?.stateful !== false ||
+  !equal(salesforceBlueprint?.toolNames, expectedSalesforceBlueprintTools) ||
+  !equal(
+    salesforceBlueprintTools?.map(({ name }) => name),
+    expectedSalesforceBlueprintTools
+  ) ||
+  salesforceBlueprintTools?.some(
+    (tool) =>
+      tool.outputSchema !== undefined ||
+      tool.inputSchema?.additionalProperties !== false ||
+      !equal(
+        tool.inputSchema?.required ?? [],
+        requiredInputsByTool[tool.name] ?? null
+      ) ||
+      tool.annotations?.readOnlyHint !== true ||
+      tool.annotations?.destructiveHint !== false ||
+      tool.annotations?.idempotentHint !== true ||
+      tool.annotations?.openWorldHint !== false ||
+      tool.behavior?.type !== "match" ||
+      !tool.behavior?.cases?.every(
+        ({ behavior }) =>
+          behavior?.type === "static" &&
+          typeof behavior?.value?.structuredContent === "object" &&
+          behavior.value.structuredContent !== null
+      ) ||
+      tool.behavior?.fallback?.type !== "static" ||
+      tool.behavior?.fallback?.value?.isError !== true
+  ) ||
+  !equal(salesforceBlueprintTools?.[0]?.behavior?.cases?.[0]?.when, {
+    arguments: {},
+  }) ||
+  !equal(salesforceBlueprintTools?.[0]?.behavior?.cases?.[1]?.when, {
+    "arguments.object-name": "Account",
+  })
+) {
+  failures.push(
+    "the generated Salesforce SObject Reads blueprint catalog must preserve its exact secret-free six-tool fixtures, index/detail modes, provenance, fidelity, and evidence boundary"
   );
 }
 const expectedMockLlmManagementTools = [
@@ -1037,6 +1223,45 @@ if (
 ) {
   failures.push("delete_mock_mcp_server success must be the literal deleted: true");
 }
+const listMockMcpBlueprintsTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "list_mock_mcp_blueprints"
+);
+const getMockMcpBlueprintTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "get_mock_mcp_blueprint"
+);
+const installMockMcpBlueprintTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "install_mock_mcp_blueprint"
+);
+const installBlueprintExpectedRevision =
+  installMockMcpBlueprintTool?.mcp?.inputSchema?.properties?.expectedRevision;
+if (
+  listMockMcpBlueprintsTool?.effect !== "read" ||
+  listMockMcpBlueprintsTool?.mcp?.annotations?.readOnlyHint !== true ||
+  Object.keys(listMockMcpBlueprintsTool?.mcp?.inputSchema?.properties ?? {}).length !==
+    0 ||
+  getMockMcpBlueprintTool?.effect !== "read" ||
+  getMockMcpBlueprintTool?.mcp?.annotations?.readOnlyHint !== true ||
+  !getMockMcpBlueprintTool?.mcp?.inputSchema?.required?.includes("blueprintId") ||
+  installMockMcpBlueprintTool?.effect !== "destructive" ||
+  installMockMcpBlueprintTool?.retry !== "idempotent" ||
+  installMockMcpBlueprintTool?.secrets?.request !== "none" ||
+  installMockMcpBlueprintTool?.secrets?.response !== "none" ||
+  installMockMcpBlueprintTool?.mcp?.annotations?.destructiveHint !== true ||
+  installMockMcpBlueprintTool?.mcp?.annotations?.idempotentHint !== true ||
+  installMockMcpBlueprintTool?.mcp?.inputSchema?.additionalProperties !== false ||
+  !installMockMcpBlueprintTool.mcp.inputSchema.required?.includes("blueprintId") ||
+  !installMockMcpBlueprintTool.mcp.inputSchema.required?.includes("expectedRevision") ||
+  !installBlueprintExpectedRevision?.anyOf?.some(
+    (candidate) => candidate.type === "null"
+  ) ||
+  !installBlueprintExpectedRevision?.anyOf?.some(
+    (candidate) => candidate.type === "integer" && candidate.minimum === 1
+  )
+) {
+  failures.push(
+    "the three built-in blueprint tools must retain strict read/catalog and destructive CAS-install contracts"
+  );
+}
 const deleteMockLlmTool = catalog.managementMcp?.tools?.find(
   ({ operationId }) => operationId === "delete_mock_llm_server"
 );
@@ -1067,6 +1292,7 @@ const publicMcpFiles = [
   "docs/getting-started/mcp-first.md",
   "docs/concepts/interface-model.md",
   "docs/mock-mcp.md",
+  "docs/blueprints/salesforce-sobject-reads.md",
   "docs/mock-llm.md",
   "docs/quickstarts/openai-sdk.md",
   "docs/quickstarts/anthropic-sdk.md",
@@ -1078,6 +1304,7 @@ const publicMcpFiles = [
   "skills/mockos-testing/SKILL.md",
   catalogPath,
   productCapabilityIndexPath,
+  mockMcpBlueprintCatalogPath,
   mockLlmOpenAiProviderPath,
   mockLlmAnthropicProviderPath,
   "llms.txt",
@@ -1133,10 +1360,20 @@ for (const required of [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "list_mock_mcp_blueprints",
+  "get_mock_mcp_blueprint",
+  "install_mock_mcp_blueprint",
+  "salesforce/hosted-mcp/sobject-reads",
   "expectedRevision: null",
   "canonical replay",
+  "identical delete/recreate",
+  "changed definition",
   "complete definition write",
+  "terminates",
+  "application state",
   "resupply",
+  "any other definition key or string value",
+  "fails closed",
   "configured",
   "cleared: 0",
   "deleted: true",
@@ -1181,7 +1418,7 @@ for (const required of [
   "script",
   "proxy",
 ]) {
-  if (!mockMcpGuide?.includes(required)) {
+  if (!includesNormalized(mockMcpGuide, required)) {
     failures.push(`docs/mock-mcp.md must describe ${required}`);
   }
 }
@@ -1190,11 +1427,57 @@ if (mockMcpGuide?.includes("POST /__mockos/v1") && mockMcpGuide.includes("mock M
     "docs/mock-mcp.md must not invent a self-hosted HTTP management route for F1"
   );
 }
+const salesforceBlueprintGuide = contents.find(
+  ([path]) => path === "docs/blueprints/salesforce-sobject-reads.md"
+)?.[1];
+for (const required of [
+  "salesforce/hosted-mcp/sobject-reads",
+  "list_mock_mcp_blueprints",
+  "get_mock_mcp_blueprint",
+  "install_mock_mcp_blueprint",
+  "getObjectSchema",
+  "soqlQuery",
+  "find",
+  "getUserInfo",
+  "listRecentSobjectRecords",
+  "getRelatedRecords",
+  "object-name",
+  "sobject-name",
+  "relationship-path",
+  "Index mode",
+  "Detail mode",
+  "expectedRevision: null",
+  "application state",
+  "revision-bound sessions",
+  "structuredContent",
+  "output-wire parity",
+  "provider network",
+  "REST",
+  "OAuth",
+  "field-level security",
+  "sharing",
+  "documentation-derived",
+  "annotations are hints",
+  "F5",
+  "portable blueprint",
+  "Salesforce is a trademark of Salesforce, Inc.",
+  "not affiliated with, sponsored by, or endorsed by Salesforce, Inc.",
+  "D/I/S/X/Q",
+  "H/V/P",
+  "not actual-network",
+  "2026-07-25",
+]) {
+  if (!includesNormalized(salesforceBlueprintGuide, required)) {
+    failures.push(
+      `docs/blueprints/salesforce-sobject-reads.md must describe ${required}`
+    );
+  }
+}
 
 const mockLlmGuide = contents.find(([path]) => path === "docs/mock-llm.md")?.[1];
 for (const required of [
   "MCP-first",
-  "24 management MCP tools",
+  "27 management MCP tools",
   "five routes",
   "put_mock_llm_server",
   "list_mock_llm_servers",
@@ -1411,5 +1694,5 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(
-  "PASS  MCP-first docs preserve 24 tools, five management HTTP routes, source-qualified F1, bounded streaming OpenAI/Anthropic F2, and inert secrets\n"
+  "PASS  MCP-first docs preserve 27 tools, five management HTTP routes, source-qualified F1, bounded streaming OpenAI/Anthropic F2, and inert secrets\n"
 );

@@ -201,7 +201,7 @@ describe("public mock MCP Worker route", () => {
     try {
       management = await connectClient(`${origin}/mcp`, apiKey);
       const advertised = await management.client.listTools();
-      expect(advertised.tools).toHaveLength(24);
+      expect(advertised.tools).toHaveLength(27);
       expect(
         advertised.tools.find(({ name }) => name === "put_mock_mcp_server")?.inputSchema
       ).toMatchObject({

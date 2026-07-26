@@ -59,10 +59,10 @@ describe("management OpenAPI generation", () => {
     }
   });
 
-  it("documents exactly the 24 management tools and five implemented HTTP routes", () => {
+  it("documents exactly the 27 management tools and five implemented HTTP routes", () => {
     const catalog = generateMockosManagementDocumentationCatalog();
 
-    expect(catalog.managementMcp.toolCount).toBe(24);
+    expect(catalog.managementMcp.toolCount).toBe(27);
     expect(catalog.managementMcp.tools.map(({ operationId }) => operationId)).toEqual(
       mockosMcpToolNames
     );
@@ -95,16 +95,21 @@ describe("management OpenAPI generation", () => {
           "get_mock_mcp_server",
           "delete_mock_mcp_server",
           "reset_mock_mcp_state",
+          "list_mock_mcp_blueprints",
+          "get_mock_mcp_blueprint",
+          "install_mock_mcp_blueprint",
         ],
         persistence: "environment-schema-v6",
         bearerCredentials: "write-only-server-scoped",
         putContract: {
           expectedRevision: "required-null-create-or-positive-replace",
           replay: "canonical-before-cas",
+          identicalDeleteRecreate: "converges-to-current-generation-without-mutation",
           replacement: "full-definition",
+          changedReplacementEffect: "deletes-state-and-terminates-revision-sessions",
           bearerCredentialReplacement: "resupply-or-rotate",
           safeViewWriteShape: "unsupported",
-          revisionMismatch: "typed-409",
+          revisionMismatch: "typed-409-for-changed-definition",
         },
         resetContract: {
           expectedRevision: "required-positive",
@@ -125,7 +130,31 @@ describe("management OpenAPI generation", () => {
         validation: {
           topLevelArguments: "strict-secret-safe",
           definitionFailures: "credential-free-generic",
+          bearerCredentialReuse:
+            "rejected-from-all-other-definition-keys-and-string-values",
+          dependencyResultCredentialReflection: "fail-closed",
           revision: "positive-safe-integer",
+        },
+        blueprintCatalog: {
+          status: "source-qualified",
+          interface: "MCP-only",
+          schemaVersion: 1,
+          catalogScope: "built-in-secret-free-server-definition-presets",
+          artifact: "docs/reference/mock-mcp-blueprints.v1.json",
+          canonicalSource: "packages/core/src/mock-mcp/blueprints.ts",
+          blueprintIds: ["salesforce/hosted-mcp/sobject-reads"],
+          provenance: "documentation-derived-at-recorded-review-date",
+          fidelity: "deterministic-synthetic-no-provider-network",
+          outputWireParity: "unqualified",
+          portableBlueprintSystem: "not-f5-export-import-apply-or-gallery",
+          installContract: {
+            expectedRevision: "required-null-create-or-positive-replace",
+            slug: "default-or-validated-override",
+            replay: "canonical-before-cas",
+            changedReplacementEffect: "deletes-state-and-terminates-revision-sessions",
+            dependencyResultValidation: "exact-full-public-spec-match",
+            credentials: "none",
+          },
         },
       },
       testedProtocolVersion: "2025-11-25",
@@ -302,6 +331,7 @@ describe("management OpenAPI generation", () => {
         },
         relatedArtifacts: [
           "docs/reference/management-operations.v1.json",
+          "docs/reference/mock-mcp-blueprints.v1.json",
           "docs/reference/mock-llm-openai.v1.json",
           "docs/reference/mock-llm-anthropic.v1.json",
         ],

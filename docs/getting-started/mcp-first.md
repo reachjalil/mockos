@@ -1,6 +1,6 @@
 # MCP-first quickstart
 
-Status: Current 24-tool management workflow; package publication remains unavailable
+Status: Current 27-tool management workflow; package publication remains unavailable
 Last reviewed: 2026-07-26
 
 Use management MCP to create a deterministic identity environment, obtain its
@@ -54,10 +54,11 @@ back to the legacy HTTP+SSE transport.
 
 Call `tools/list` before any mutation. Require only the tools needed by the planned
 workflow and tolerate additional tools from a newer compatible server. The current
-source exposes exactly 24 tools; use the
+source exposes exactly 27 tools; use the
 [generated management-tool reference](../reference/management-tools.md) instead of a
-copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
-four F2 tools persist mock-LLM definitions. Those four tools do not prove that the
+copied list. Five F1 tools configure environment-hosted mock MCP definitions/state,
+three F1 tools inspect and install built-in secret-free server-definition presets, and
+four F2 tools persist mock-LLM definitions. Those tools do not prove that the
 connected endpoint serves either separate provider route.
 Saved F1 automation must also verify the discovered mutation schemas:
 `put_mock_mcp_server` requires `expectedRevision: null` for create or a positive
@@ -143,6 +144,11 @@ This identity workflow does not configure the source-qualified F1 mock MCP serve
 Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for its complete
 definition, canonical-replay-before-CAS, Bearer credential resupply, reset/delete,
 typed conflict/not-found, and bounded local official-SDK evidence rules.
+For the shortest preset-driven agent-dependency flow, use the
+[Salesforce SObject Reads blueprint guide](../blueprints/salesforce-sobject-reads.md).
+That built-in catalog entry is a secret-free deterministic server-definition preset,
+not the future F5 portable blueprint/export/import/gallery system and not evidence of a
+live Salesforce connection.
 It also does not configure the F2 definition/provider workflow. Use the
 [OpenAI SDK quickstart](../quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](../quickstarts/anthropic-sdk.md) for a short end-to-end

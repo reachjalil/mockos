@@ -430,6 +430,7 @@ export type MockosProductCapabilityIndex = {
     };
     relatedArtifacts: readonly [
       "docs/reference/management-operations.v1.json",
+      "docs/reference/mock-mcp-blueprints.v1.json",
       "docs/reference/mock-llm-openai.v1.json",
       "docs/reference/mock-llm-anthropic.v1.json",
     ];
@@ -451,6 +452,8 @@ export type MockosProductCapabilityIndex = {
         id: "synthetic-agent-data-planes";
         authorityRefs: readonly [
           "packages/contracts/src/mock-mcp.ts",
+          "packages/contracts/src/mock-mcp-blueprint.ts",
+          "packages/core/src/mock-mcp/blueprints.ts",
           "packages/mcp-mock/src/index.ts",
           "packages/llm-mock/src/openai-http.ts",
           "packages/llm-mock/src/anthropic-http.ts",
@@ -547,16 +550,21 @@ export type MockosManagementDocumentationCatalog = {
           "get_mock_mcp_server",
           "delete_mock_mcp_server",
           "reset_mock_mcp_state",
+          "list_mock_mcp_blueprints",
+          "get_mock_mcp_blueprint",
+          "install_mock_mcp_blueprint",
         ];
         persistence: "environment-schema-v6";
         bearerCredentials: "write-only-server-scoped";
         putContract: {
           expectedRevision: "required-null-create-or-positive-replace";
           replay: "canonical-before-cas";
+          identicalDeleteRecreate: "converges-to-current-generation-without-mutation";
           replacement: "full-definition";
+          changedReplacementEffect: "deletes-state-and-terminates-revision-sessions";
           bearerCredentialReplacement: "resupply-or-rotate";
           safeViewWriteShape: "unsupported";
-          revisionMismatch: "typed-409";
+          revisionMismatch: "typed-409-for-changed-definition";
         };
         resetContract: {
           expectedRevision: "required-positive";
@@ -577,7 +585,30 @@ export type MockosManagementDocumentationCatalog = {
         validation: {
           topLevelArguments: "strict-secret-safe";
           definitionFailures: "credential-free-generic";
+          bearerCredentialReuse: "rejected-from-all-other-definition-keys-and-string-values";
+          dependencyResultCredentialReflection: "fail-closed";
           revision: "positive-safe-integer";
+        };
+        blueprintCatalog: {
+          status: "source-qualified";
+          interface: "MCP-only";
+          schemaVersion: 1;
+          catalogScope: "built-in-secret-free-server-definition-presets";
+          artifact: "docs/reference/mock-mcp-blueprints.v1.json";
+          canonicalSource: "packages/core/src/mock-mcp/blueprints.ts";
+          blueprintIds: readonly ["salesforce/hosted-mcp/sobject-reads"];
+          provenance: "documentation-derived-at-recorded-review-date";
+          fidelity: "deterministic-synthetic-no-provider-network";
+          outputWireParity: "unqualified";
+          portableBlueprintSystem: "not-f5-export-import-apply-or-gallery";
+          installContract: {
+            expectedRevision: "required-null-create-or-positive-replace";
+            slug: "default-or-validated-override";
+            replay: "canonical-before-cas";
+            changedReplacementEffect: "deletes-state-and-terminates-revision-sessions";
+            dependencyResultValidation: "exact-full-public-spec-match";
+            credentials: "none";
+          };
         };
       };
       testedProtocolVersion: "2025-11-25";
@@ -1073,16 +1104,23 @@ export const generateMockosManagementDocumentationCatalog =
               "get_mock_mcp_server",
               "delete_mock_mcp_server",
               "reset_mock_mcp_state",
+              "list_mock_mcp_blueprints",
+              "get_mock_mcp_blueprint",
+              "install_mock_mcp_blueprint",
             ],
             persistence: "environment-schema-v6",
             bearerCredentials: "write-only-server-scoped",
             putContract: {
               expectedRevision: "required-null-create-or-positive-replace",
               replay: "canonical-before-cas",
+              identicalDeleteRecreate:
+                "converges-to-current-generation-without-mutation",
               replacement: "full-definition",
+              changedReplacementEffect:
+                "deletes-state-and-terminates-revision-sessions",
               bearerCredentialReplacement: "resupply-or-rotate",
               safeViewWriteShape: "unsupported",
-              revisionMismatch: "typed-409",
+              revisionMismatch: "typed-409-for-changed-definition",
             },
             resetContract: {
               expectedRevision: "required-positive",
@@ -1103,7 +1141,32 @@ export const generateMockosManagementDocumentationCatalog =
             validation: {
               topLevelArguments: "strict-secret-safe",
               definitionFailures: "credential-free-generic",
+              bearerCredentialReuse:
+                "rejected-from-all-other-definition-keys-and-string-values",
+              dependencyResultCredentialReflection: "fail-closed",
               revision: "positive-safe-integer",
+            },
+            blueprintCatalog: {
+              status: "source-qualified",
+              interface: "MCP-only",
+              schemaVersion: 1,
+              catalogScope: "built-in-secret-free-server-definition-presets",
+              artifact: "docs/reference/mock-mcp-blueprints.v1.json",
+              canonicalSource: "packages/core/src/mock-mcp/blueprints.ts",
+              blueprintIds: ["salesforce/hosted-mcp/sobject-reads"],
+              provenance: "documentation-derived-at-recorded-review-date",
+              fidelity: "deterministic-synthetic-no-provider-network",
+              outputWireParity: "unqualified",
+              portableBlueprintSystem: "not-f5-export-import-apply-or-gallery",
+              installContract: {
+                expectedRevision: "required-null-create-or-positive-replace",
+                slug: "default-or-validated-override",
+                replay: "canonical-before-cas",
+                changedReplacementEffect:
+                  "deletes-state-and-terminates-revision-sessions",
+                dependencyResultValidation: "exact-full-public-spec-match",
+                credentials: "none",
+              },
             },
           },
           testedProtocolVersion: "2025-11-25",
@@ -1305,6 +1368,7 @@ export const generateMockosProductCapabilityIndex =
         },
         relatedArtifacts: [
           "docs/reference/management-operations.v1.json",
+          "docs/reference/mock-mcp-blueprints.v1.json",
           "docs/reference/mock-llm-openai.v1.json",
           "docs/reference/mock-llm-anthropic.v1.json",
         ],
@@ -1326,6 +1390,8 @@ export const generateMockosProductCapabilityIndex =
             id: "synthetic-agent-data-planes",
             authorityRefs: [
               "packages/contracts/src/mock-mcp.ts",
+              "packages/contracts/src/mock-mcp-blueprint.ts",
+              "packages/core/src/mock-mcp/blueprints.ts",
               "packages/mcp-mock/src/index.ts",
               "packages/llm-mock/src/openai-http.ts",
               "packages/llm-mock/src/anthropic-http.ts",
@@ -1382,7 +1448,7 @@ export const generateMockosProductCapabilityIndex =
             catalog.managementMcp.status === "implemented"
               ? "supported"
               : "unsupported",
-          scope: "current-24-tool-registry",
+          scope: "current-27-tool-registry",
           role: "management-plane",
           interface: {
             kind: "mcp-streamable-http",
@@ -1407,7 +1473,7 @@ export const generateMockosProductCapabilityIndex =
           evidence: {
             source: qualifiedSourceClaim(
               catalog.managementMcp.status === "implemented",
-              "current-24-tool-source-registry",
+              "current-27-tool-source-registry",
               [
                 "packages/contracts/src/operations/management.test.ts",
                 "packages/mcp/src/index.test.ts",
@@ -1420,7 +1486,9 @@ export const generateMockosProductCapabilityIndex =
               "historical-15-tool-m5-hosted-ci-slice",
               ["docs/evidence/m5-workers-dev-smoke.md"]
             ),
-            cloudPin: unqualifiedCurrentClaim("current-24-tool-cloud-pin"),
+            cloudPin: unqualifiedCurrentClaim(
+              "current-27-tool-registry-not-cloud-qualified"
+            ),
             deployed: qualifiedEvidenceClaim(
               "partial",
               "historical",
@@ -1523,6 +1591,16 @@ export const generateMockosProductCapabilityIndex =
                 export: "MOCK_MCP_PROTOCOL_VERSION",
               },
               {
+                kind: "contract",
+                path: "packages/contracts/src/mock-mcp-blueprint.ts",
+                export: "mockMcpBlueprintSchema",
+              },
+              {
+                kind: "runtime",
+                path: "packages/core/src/mock-mcp/blueprints.ts",
+                export: "listMockMcpBlueprints",
+              },
+              {
                 kind: "runtime",
                 path: "packages/mcp-mock/src/index.ts",
                 export: "createMockMcpFetchHandler",
@@ -1541,10 +1619,12 @@ export const generateMockosProductCapabilityIndex =
               [
                 "packages/contracts/src/operations/management.test.ts",
                 "packages/core/src/mock-mcp/foundation.test.ts",
+                "packages/core/src/mock-mcp/blueprints.test.ts",
                 "packages/mcp/src/index.test.ts",
                 "packages/mcp-mock/src/sdk-conformance.test.ts",
                 "packages/mcp-mock/src/repository-integration.test.ts",
                 "apps/worker/test/mock-mcp.integration.test.ts",
+                "apps/worker/test/mock-mcp-blueprint.integration.test.ts",
               ]
             ),
             hostedCi: unqualifiedCurrentClaim("f1-current-source"),
@@ -1554,7 +1634,7 @@ export const generateMockosProductCapabilityIndex =
           },
           documentation: {
             guide: "docs/mock-mcp.md",
-            quickstart: "docs/mock-mcp.md",
+            quickstart: "docs/blueprints/salesforce-sobject-reads.md",
             reference: "docs/reference/management-tools.md",
             limitations: "docs/known-limitations.md",
           },

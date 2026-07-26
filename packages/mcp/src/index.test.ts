@@ -16,6 +16,10 @@ import {
   type MockLlmServerSummary,
   type MockLlmServerView,
   type MockLlmServerWrite,
+  type MockMcpBlueprint,
+  type MockMcpBlueprintCatalog,
+  type MockMcpBlueprintId,
+  type MockMcpBlueprintInstallResult,
   type MockMcpExpectedRevision,
   type MockMcpServerSummary,
   type MockMcpServerView,
@@ -47,6 +51,17 @@ const EXPIRES_AT = "2026-07-22T13:00:00.000Z";
 const MOCK_MCP_CREDENTIAL = "synthetic-mock-mcp-credential";
 const OPENAI_MOCK_CREDENTIAL = "synthetic-openai-mock-credential";
 const ANTHROPIC_MOCK_CREDENTIAL = "synthetic-anthropic-mock-credential";
+const MOCK_MCP_BLUEPRINT_ID =
+  "salesforce/hosted-mcp/sobject-reads" as MockMcpBlueprintId;
+
+const sha256Hex = async (value: string): Promise<string> =>
+  [
+    ...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+    ),
+  ]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 
 const mockMcpServerWrite = (): MockMcpServerWrite => ({
   version: 1,
@@ -64,6 +79,57 @@ const mockMcpServerWrite = (): MockMcpServerWrite => ({
   resourceTemplates: [],
   prompts: [],
   errorCodeMap: {},
+});
+
+const mockMcpBlueprint = (): MockMcpBlueprint => ({
+  schemaVersion: 1,
+  blueprintVersion: 1,
+  id: MOCK_MCP_BLUEPRINT_ID,
+  title: "Salesforce SObject Reads",
+  description: "A deterministic synthetic Salesforce-shaped read fixture.",
+  provider: "salesforce",
+  provenance: {
+    kind: "documentation-derived",
+    upstream: {
+      product: "Salesforce Hosted MCP Servers",
+      server: "platform/sobject-reads",
+    },
+    sourceReviewedAt: "2026-07-25",
+    officialDocumentationUrl:
+      "https://developer.salesforce.com/docs/platform/hosted-mcp-servers/references/reference/sobject-reads.html",
+  },
+  fidelity: {
+    behavior: "deterministic-synthetic",
+    providerNetwork: false,
+    outputWireParity: "unqualified",
+  },
+  defaultSlug: "salesforce-sobject-reads",
+  toolNames: ["getUserInfo"],
+  credentialMode: "none",
+  server: {
+    ...mockMcpServerWrite(),
+    slug: "salesforce-sobject-reads",
+    authentication: { mode: "none" },
+    tools: [
+      {
+        name: "getUserInfo",
+        inputSchema: { type: "object", additionalProperties: false },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        behavior: {
+          version: 1,
+          type: "static",
+          value: {
+            content: [{ type: "text", text: "Synthetic Salesforce user" }],
+          },
+        },
+      },
+    ],
+  },
 });
 
 const mockLlmServerWrite = (): MockLlmServerWrite => ({
@@ -113,6 +179,7 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   readonly mockLlmServers = new Map<string, MockLlmServerView>();
   readonly mockMcpServers = new Map<string, MockMcpServerView>();
   readonly mockMcpServerWrites = new Map<string, string>();
+  readonly mockMcpBlueprintCalls: string[] = [];
   currentEnvironmentId: string | null = null;
   lastLogQuery: RequestLogQuery | undefined;
 
@@ -496,6 +563,30 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
     return 0;
   }
 
+  async listMockMcpBlueprints(
+    _context: MockosToolRequestContext
+  ): Promise<MockMcpBlueprintCatalog> {
+    this.mockMcpBlueprintCalls.push("list");
+    const { server: _server, ...summary } = mockMcpBlueprint();
+    return { schemaVersion: 1, blueprints: [summary] };
+  }
+
+  async getMockMcpBlueprint(
+    blueprintId: MockMcpBlueprintId,
+    _context: MockosToolRequestContext
+  ): Promise<MockMcpBlueprint> {
+    this.mockMcpBlueprintCalls.push(`get:${blueprintId}`);
+    if (blueprintId !== MOCK_MCP_BLUEPRINT_ID) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-blueprint-not-found",
+        title: "Mock MCP blueprint not found",
+        status: 404,
+        code: "MOCK_MCP_BLUEPRINT_NOT_FOUND",
+      });
+    }
+    return mockMcpBlueprint();
+  }
+
   async putMockLlmServer(
     environmentId: string,
     server: MockLlmServerWrite,
@@ -727,6 +818,16 @@ describe("registerMockosTools", () => {
         },
       },
     });
+    for (const name of ["put_mock_mcp_server", "install_mock_mcp_blueprint"] as const) {
+      expect(
+        listed.tools.find(({ name: toolName }) => toolName === name)?.annotations
+      ).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
     for (const name of ["delete_mock_mcp_server", "reset_mock_mcp_state"] as const) {
       const inputSchema = listed.tools.find(({ name: toolName }) => toolName === name)
         ?.inputSchema as JsonSchema;
@@ -739,6 +840,199 @@ describe("registerMockosTools", () => {
         },
       });
     }
+  });
+
+  it("reads the blueprint catalog without an environment and installs through CAS", async () => {
+    const { client, dependencies } = await createHarness();
+    dependencies.getCurrentEnvironmentId = async () => {
+      throw new Error("Catalog reads must not resolve the environment cursor.");
+    };
+
+    const catalog = await callData<MockMcpBlueprintCatalog>(
+      client,
+      "list_mock_mcp_blueprints",
+      {}
+    );
+    expect(catalog).toMatchObject({
+      schemaVersion: 1,
+      blueprints: [
+        {
+          id: MOCK_MCP_BLUEPRINT_ID,
+          blueprintVersion: 1,
+          fidelity: {
+            behavior: "deterministic-synthetic",
+            providerNetwork: false,
+            outputWireParity: "unqualified",
+          },
+        },
+      ],
+    });
+    const blueprint = await callData<MockMcpBlueprint>(
+      client,
+      "get_mock_mcp_blueprint",
+      { blueprintId: MOCK_MCP_BLUEPRINT_ID }
+    );
+    expect(blueprint.server.slug).toBe(blueprint.defaultSlug);
+    expect(dependencies.mockMcpBlueprintCalls).toEqual([
+      "list",
+      `get:${MOCK_MCP_BLUEPRINT_ID}`,
+    ]);
+
+    const missing = await client.callTool({
+      name: "get_mock_mcp_blueprint",
+      arguments: { blueprintId: "salesforce/hosted-mcp/unknown" },
+    });
+    expect(missing.isError).toBe(true);
+    expect(missing._meta?.["mockos/problem"]).toMatchObject({
+      status: 404,
+      code: "MOCK_MCP_BLUEPRINT_NOT_FOUND",
+    });
+
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "Blueprint install",
+      provider: "entra",
+    });
+    const installed = await callData<MockMcpBlueprintInstallResult>(
+      client,
+      "install_mock_mcp_blueprint",
+      {
+        environmentId: ENVIRONMENT_ID,
+        blueprintId: MOCK_MCP_BLUEPRINT_ID,
+        slug: "salesforce-fixture",
+        expectedRevision: null,
+      }
+    );
+    expect(installed).toMatchObject({
+      schemaVersion: 1,
+      blueprintId: MOCK_MCP_BLUEPRINT_ID,
+      blueprintVersion: 1,
+      server: {
+        revision: 1,
+        spec: {
+          slug: "salesforce-fixture",
+          authentication: { mode: "none" },
+        },
+      },
+    });
+  });
+
+  it("fails closed on mismatched, mutated, or credentialed blueprint install output", async () => {
+    const { client, dependencies } = await createHarness();
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "Blueprint output validation",
+      provider: "entra",
+    });
+    dependencies.getMockMcpBlueprint = async () =>
+      ({
+        ...mockMcpBlueprint(),
+        id: "salesforce/hosted-mcp/other",
+      }) as MockMcpBlueprint;
+    for (const name of [
+      "get_mock_mcp_blueprint",
+      "install_mock_mcp_blueprint",
+    ] as const) {
+      const result = await client.callTool({
+        name,
+        arguments:
+          name === "get_mock_mcp_blueprint"
+            ? { blueprintId: MOCK_MCP_BLUEPRINT_ID }
+            : {
+                environmentId: ENVIRONMENT_ID,
+                blueprintId: MOCK_MCP_BLUEPRINT_ID,
+                slug: "validated-blueprint",
+                expectedRevision: null,
+              },
+      });
+      expect(result.isError).toBe(true);
+      expect(result._meta?.["mockos/problem"]).toMatchObject({
+        status: 500,
+        code: "INTERNAL_ERROR",
+      });
+    }
+
+    dependencies.getMockMcpBlueprint = async () => mockMcpBlueprint();
+    const selectedServer = {
+      ...mockMcpBlueprint().server,
+      slug: "validated-blueprint",
+    };
+    const safeView: MockMcpServerView = {
+      spec: selectedServer,
+      revision: 1,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    };
+    const unexpectedTool = {
+      name: "unexpectedTool",
+      inputSchema: { type: "object" as const, additionalProperties: false },
+      behavior: {
+        version: 1 as const,
+        type: "static" as const,
+        value: {
+          content: [{ type: "text" as const, text: "Unexpected dependency output" }],
+        },
+      },
+    };
+    for (const maliciousView of [
+      {
+        ...safeView,
+        spec: { ...safeView.spec, slug: "wrong-slug" },
+      },
+      {
+        ...safeView,
+        spec: {
+          ...safeView.spec,
+          authentication: { mode: "bearer", configured: true },
+        },
+      },
+      {
+        ...safeView,
+        spec: {
+          ...safeView.spec,
+          tools: [...safeView.spec.tools, unexpectedTool],
+        },
+      },
+    ] as MockMcpServerView[]) {
+      dependencies.putMockMcpServer = async () => maliciousView;
+      const result = await client.callTool({
+        name: "install_mock_mcp_blueprint",
+        arguments: {
+          environmentId: ENVIRONMENT_ID,
+          blueprintId: MOCK_MCP_BLUEPRINT_ID,
+          slug: "validated-blueprint",
+          expectedRevision: null,
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(result._meta?.["mockos/problem"]).toMatchObject({
+        status: 500,
+        code: "INTERNAL_ERROR",
+      });
+    }
+
+    dependencies.putMockMcpServer = async (_environmentId, server) => {
+      server.tools.push(unexpectedTool);
+      return {
+        ...safeView,
+        spec: {
+          ...safeView.spec,
+          tools: server.tools,
+        },
+      } as MockMcpServerView;
+    };
+    const mutatedInput = await client.callTool({
+      name: "install_mock_mcp_blueprint",
+      arguments: {
+        environmentId: ENVIRONMENT_ID,
+        blueprintId: MOCK_MCP_BLUEPRINT_ID,
+        slug: "validated-blueprint",
+        expectedRevision: null,
+      },
+    });
+    expect(mutatedInput.isError).toBe(true);
+    expect(mutatedInput._meta?.["mockos/problem"]).toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
   });
 
   it("advertises conditional application inputs and exact registration outputs", async () => {
@@ -1373,11 +1667,12 @@ describe("registerMockosTools", () => {
       receivedPutRevision = expectedRevision;
       const credential =
         server.authentication.mode === "bearer" ? server.authentication.token : "";
+      const verifier = await sha256Hex(credential);
       throw new MockosToolError({
         type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
         title: "Mock MCP server revision conflict",
         status: 409,
-        detail: `Rejected ${credential}.`,
+        detail: `Rejected ${credential} and ${verifier}.`,
         code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
       });
     };
@@ -1394,9 +1689,12 @@ describe("registerMockosTools", () => {
     expect(putResult._meta?.["mockos/problem"]).toMatchObject({
       status: 409,
       code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
-      detail: "Rejected [REDACTED].",
+      detail: "Rejected [REDACTED] and [REDACTED].",
     });
     expect(JSON.stringify(putResult)).not.toContain(MOCK_MCP_CREDENTIAL);
+    expect(JSON.stringify(putResult)).not.toContain(
+      await sha256Hex(MOCK_MCP_CREDENTIAL)
+    );
 
     let receivedDeleteRevision: number | undefined;
     dependencies.deleteMockMcpServer = async (
@@ -1431,6 +1729,46 @@ describe("registerMockosTools", () => {
       })
     ).resolves.toEqual({ slug: "crm-sandbox", cleared: 3 });
     expect(receivedResetRevision).toBe(12);
+  });
+
+  it("fails closed when a mock-MCP dependency reflects a write-only credential", async () => {
+    const { client, dependencies } = await createHarness();
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "Malicious MCP dependency",
+      provider: "entra",
+    });
+    const server = mockMcpServerWrite();
+    if (server.authentication.mode !== "bearer") {
+      throw new Error("The test server must use bearer authentication.");
+    }
+    const credential = server.authentication.token;
+    const verifier = await sha256Hex(credential);
+    dependencies.putMockMcpServer = async () => ({
+      spec: {
+        ...server,
+        instructions: `A malicious dependency reflected ${verifier}.`,
+        authentication: { mode: "bearer", configured: true },
+      },
+      revision: 1,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    });
+
+    const result = await client.callTool({
+      name: "put_mock_mcp_server",
+      arguments: {
+        expectedRevision: null,
+        server,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.["mockos/problem"]).toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+    expect(JSON.stringify(result)).not.toContain(credential);
+    expect(JSON.stringify(result)).not.toContain(verifier);
   });
 
   it("forwards mock-LLM CAS inputs and redacts both provider credentials", async () => {

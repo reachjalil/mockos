@@ -22,15 +22,25 @@ import {
   type MockMcpServerList,
   type MockMcpServerView,
   mockMcpCapabilityNameSchema,
+  mockMcpExpectedRevisionSchema,
   mockMcpRevisionSchema,
   mockMcpServerWriteSchema,
   mockMcpSlugSchema,
 } from "./mock-mcp";
+import {
+  type getMockMcpBlueprintToolInputSchema,
+  type listMockMcpBlueprintsToolInputSchema,
+  type MockMcpBlueprint,
+  type MockMcpBlueprintCatalog,
+  type MockMcpBlueprintInstallResult,
+  mockMcpBlueprintIdSchema,
+} from "./mock-mcp-blueprint";
 import type { ProvisioningRun, RunProvisioningCycleToolInput } from "./provisioning";
 
 export * from "./mock-llm";
 export * from "./mock-llm-server";
 export * from "./mock-mcp";
+export * from "./mock-mcp-blueprint";
 export * from "./provisioning";
 export * from "./scim";
 
@@ -1097,9 +1107,6 @@ export const wellKnownUrlsSchema = z
   .strict();
 export type WellKnownUrls = z.infer<typeof wellKnownUrlsSchema>;
 
-export const mockMcpExpectedRevisionSchema = z.union([z.null(), mockMcpRevisionSchema]);
-export type MockMcpExpectedRevision = z.infer<typeof mockMcpExpectedRevisionSchema>;
-
 // MCP validates tool input before the handler can register the bearer credential
 // with its response redactor. Collapse every nested definition failure to one
 // credential-free issue while retaining the complete public schema for discovery
@@ -1175,6 +1182,18 @@ export type DeleteMockMcpServerToolInput = z.infer<
 export const resetMockMcpStateToolInputSchema = mockMcpMutationRefToolInputSchema;
 export type ResetMockMcpStateToolInput = z.infer<
   typeof resetMockMcpStateToolInputSchema
+>;
+
+export const installMockMcpBlueprintToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    blueprintId: mockMcpBlueprintIdSchema,
+    slug: mockMcpSlugSchema.optional(),
+    expectedRevision: mockMcpExpectedRevisionSchema,
+  })
+  .strict();
+export type InstallMockMcpBlueprintToolInput = z.infer<
+  typeof installMockMcpBlueprintToolInputSchema
 >;
 
 export const mockLlmRevisionSchema = z.number().int().safe().min(1);
@@ -1284,6 +1303,9 @@ export const mockosMcpToolNames = [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "list_mock_mcp_blueprints",
+  "get_mock_mcp_blueprint",
+  "install_mock_mcp_blueprint",
   "put_mock_llm_server",
   "list_mock_llm_servers",
   "get_mock_llm_server",
@@ -1312,6 +1334,9 @@ export type MockosMcpToolInputs = {
   get_mock_mcp_server: GetMockMcpServerToolInput;
   delete_mock_mcp_server: DeleteMockMcpServerToolInput;
   reset_mock_mcp_state: ResetMockMcpStateToolInput;
+  list_mock_mcp_blueprints: z.infer<typeof listMockMcpBlueprintsToolInputSchema>;
+  get_mock_mcp_blueprint: z.infer<typeof getMockMcpBlueprintToolInputSchema>;
+  install_mock_mcp_blueprint: InstallMockMcpBlueprintToolInput;
   put_mock_llm_server: PutMockLlmServerToolInput;
   list_mock_llm_servers: ListMockLlmServersToolInput;
   get_mock_llm_server: GetMockLlmServerToolInput;
@@ -1339,6 +1364,9 @@ export type MockosMcpToolData = {
   get_mock_mcp_server: MockMcpServerView;
   delete_mock_mcp_server: MockMcpDeleteServerResult;
   reset_mock_mcp_state: MockMcpResetStateResult;
+  list_mock_mcp_blueprints: MockMcpBlueprintCatalog;
+  get_mock_mcp_blueprint: MockMcpBlueprint;
+  install_mock_mcp_blueprint: MockMcpBlueprintInstallResult;
   put_mock_llm_server: MockLlmServerView;
   list_mock_llm_servers: MockLlmServerList;
   get_mock_llm_server: MockLlmServerView;

@@ -14,7 +14,7 @@
           "proofRefs": [],
           "qualification": "unqualified",
           "revisionRelation": "current",
-          "scope": "current-24-tool-cloud-pin"
+          "scope": "current-27-tool-registry-not-cloud-qualified"
         },
         "deployed": {
           "contextRefs": [],
@@ -42,7 +42,7 @@
           ],
           "qualification": "qualified",
           "revisionRelation": "current",
-          "scope": "current-24-tool-source-registry"
+          "scope": "current-27-tool-source-registry"
         },
         "verifiedLive": {
           "contextRefs": [],
@@ -77,7 +77,7 @@
         ]
       },
       "role": "management-plane",
-      "scope": "current-24-tool-registry",
+      "scope": "current-27-tool-registry",
       "specificationRef": "docs/reference/management-operations.v1.json#/managementMcp",
       "support": "supported",
       "title": "Management MCP"
@@ -165,7 +165,7 @@
       "documentation": {
         "guide": "docs/mock-mcp.md",
         "limitations": "docs/known-limitations.md",
-        "quickstart": "docs/mock-mcp.md",
+        "quickstart": "docs/blueprints/salesforce-sobject-reads.md",
         "reference": "docs/reference/management-tools.md"
       },
       "evidence": {
@@ -199,10 +199,12 @@
           "proofRefs": [
             "packages/contracts/src/operations/management.test.ts",
             "packages/core/src/mock-mcp/foundation.test.ts",
+            "packages/core/src/mock-mcp/blueprints.test.ts",
             "packages/mcp/src/index.test.ts",
             "packages/mcp-mock/src/sdk-conformance.test.ts",
             "packages/mcp-mock/src/repository-integration.test.ts",
-            "apps/worker/test/mock-mcp.integration.test.ts"
+            "apps/worker/test/mock-mcp.integration.test.ts",
+            "apps/worker/test/mock-mcp-blueprint.integration.test.ts"
           ],
           "qualification": "qualified",
           "revisionRelation": "current",
@@ -229,6 +231,16 @@
             "export": "MOCK_MCP_PROTOCOL_VERSION",
             "kind": "contract",
             "path": "packages/contracts/src/mock-mcp.ts"
+          },
+          {
+            "export": "mockMcpBlueprintSchema",
+            "kind": "contract",
+            "path": "packages/contracts/src/mock-mcp-blueprint.ts"
+          },
+          {
+            "export": "listMockMcpBlueprints",
+            "kind": "runtime",
+            "path": "packages/core/src/mock-mcp/blueprints.ts"
           },
           {
             "export": "createMockMcpFetchHandler",
@@ -563,6 +575,8 @@
       {
         "authorityRefs": [
           "packages/contracts/src/mock-mcp.ts",
+          "packages/contracts/src/mock-mcp-blueprint.ts",
+          "packages/core/src/mock-mcp/blueprints.ts",
           "packages/mcp-mock/src/index.ts",
           "packages/llm-mock/src/openai-http.ts",
           "packages/llm-mock/src/anthropic-http.ts",
@@ -619,6 +633,7 @@
     },
     "relatedArtifacts": [
       "docs/reference/management-operations.v1.json",
+      "docs/reference/mock-mcp-blueprints.v1.json",
       "docs/reference/mock-llm-openai.v1.json",
       "docs/reference/mock-llm-anthropic.v1.json"
     ]

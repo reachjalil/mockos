@@ -659,12 +659,15 @@ describe("wire contracts", () => {
       "get_mock_mcp_server",
       "delete_mock_mcp_server",
       "reset_mock_mcp_state",
+      "list_mock_mcp_blueprints",
+      "get_mock_mcp_blueprint",
+      "install_mock_mcp_blueprint",
       "put_mock_llm_server",
       "list_mock_llm_servers",
       "get_mock_llm_server",
       "delete_mock_llm_server",
     ]);
-    expect(mockosMcpToolNames).toHaveLength(24);
+    expect(mockosMcpToolNames).toHaveLength(27);
   });
 
   it("locks mock-MCP mutation intent to create-or-current-revision CAS", () => {
