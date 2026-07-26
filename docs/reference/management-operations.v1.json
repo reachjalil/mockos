@@ -745,7 +745,7 @@
         "title": "List mock identity environments"
       },
       {
-        "description": "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; HTTP always requires it.",
+        "description": "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.",
         "effect": "destructive",
         "http": {
           "method": "DELETE",
@@ -757,7 +757,7 @@
         "mcp": {
           "annotations": {
             "destructiveHint": true,
-            "idempotentHint": false,
+            "idempotentHint": true,
             "openWorldHint": false,
             "readOnlyHint": false
           },

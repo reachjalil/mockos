@@ -23,6 +23,14 @@ describe("management operation registry", () => {
     expect(entries).toHaveLength(27);
   });
 
+  it("aligns safe and idempotent retry policies with MCP annotations", () => {
+    for (const operation of Object.values(mockosManagementOperations)) {
+      if (operation.retry === "safe" || operation.retry === "idempotent") {
+        expect(operation.mcp.annotations.idempotentHint).toBe(true);
+      }
+    }
+  });
+
   it("describes only live self-hosted HTTP management routes", () => {
     const declaredHttpOperationIds = Object.values(mockosManagementOperations)
       .filter((operation) => "http" in operation)

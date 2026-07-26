@@ -163,7 +163,7 @@ export const mockosManagementOperations = {
     operationId: "delete_environment",
     title: "Delete mock identity environment",
     description:
-      "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; HTTP always requires it.",
+      "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.",
     requiredScopes: ["env:rw"],
     effect: "destructive",
     retry: "idempotent",
@@ -172,7 +172,7 @@ export const mockosManagementOperations = {
     mcp: {
       inputSchema: environmentRefToolInputSchema,
       outputSchema: envelopeSchema(deleteEnvironmentResultSchema),
-      annotations: destructiveAnnotations,
+      annotations: idempotentDestructiveAnnotations,
     },
     http: {
       operationId: "delete_environment",

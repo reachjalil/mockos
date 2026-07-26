@@ -363,14 +363,14 @@ invented HTTP path.
 
 ### `delete_environment`
 
-**Delete mock identity environment.** Permanently deletes an environment. MCP may omit environmentId to target the session cursor; HTTP always requires it.
+**Delete mock identity environment.** Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.
 
 - Scope metadata: `env:rw`
 - Effect: `destructive`
 - Retry policy: `idempotent`
 - Secret handling: none
 - HTTP: `DELETE /__mockos/v1/environments/{environmentId}`
-- MCP annotations: read-only `false`, destructive `true`, idempotent `false`, open-world `false`
+- MCP annotations: read-only `false`, destructive `true`, idempotent `true`, open-world `false`
 
 <details>
 <summary>Input JSON Schema</summary>

@@ -578,10 +578,19 @@ describe("management MCP", () => {
       sessionId
     );
     const [listMessage] = await parseMessages(listResponse);
-    const tools = (listMessage?.result?.tools ?? []) as Array<{ name: string }>;
+    const tools = (listMessage?.result?.tools ?? []) as Array<{
+      name: string;
+      description?: string;
+      annotations?: { idempotentHint?: boolean };
+    }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(
       [...mockosMcpToolNames].sort()
     );
+    expect(tools.find(({ name }) => name === "delete_environment")).toMatchObject({
+      description:
+        "Permanently deletes an environment. MCP may omit environmentId to target the session cursor; a successful cursor-targeted delete clears that cursor, so retry with the deleted environmentId explicitly. HTTP always requires environmentId.",
+      annotations: { idempotentHint: true },
+    });
 
     const created = await callTool(sessionId, 3, "create_environment", {
       name: "MCP integration environment",
