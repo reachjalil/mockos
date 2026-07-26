@@ -52,10 +52,11 @@ P.
   the incompatibility by activating after the observed pending poll. This is an exact
   pinned-client behavior boundary, not permission to omit `slow_down` from other
   protocol tests.
-- Entra device registrations remain subject to the shared application contract's
-  non-empty redirect-URI list even though device code never redirects. Tests use an
-  inert synthetic URI. Device-only configuration without any registered redirect URI
-  is not supported by the current management contract.
+- Redirect-free registration is deliberately narrow: a secret-free public
+  device-only application uses `redirectUris: []`. Any application that includes
+  `authorization_code`, including a mixed authorization-code/device client, still
+  requires at least one real, exact callback URI. This does not add native-app loopback
+  discovery, custom-URI policy, or browser redirect qualification.
 - The only official Okta identity-client qualification is
   `@okta/okta-auth-js` 8.0.1 for one public application, custom authorization server,
   authorization code with S256 PKCE, Node `parseFromUrl` using the exact

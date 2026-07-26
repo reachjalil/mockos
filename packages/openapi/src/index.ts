@@ -38,6 +38,7 @@ import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-sc
 import { z } from "zod";
 
 type JsonObject = Record<string, unknown>;
+type OpenApiSchemaComponents = Record<string, JsonObject>;
 
 export type MockosHttpOperationManifestEntry = {
   operationId: string;
@@ -946,18 +947,143 @@ export const generateMockLlmAnthropicProviderDocumentation =
     },
   });
 
-const openApiJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
-  JSON.parse(
-    JSON.stringify(
-      z.toJSONSchema(schema, {
-        target: "openapi-3.0",
-        io,
-        cycles: "ref",
-        reused: "inline",
-        unrepresentable: "any",
-      })
+const openApiComponentStem = (namespace: string): string => {
+  const stem = namespace
+    .split(/[^A-Za-z0-9]+/u)
+    .filter((segment) => segment.length > 0)
+    .map(
+      (segment) =>
+        `${segment.slice(0, 1).toUpperCase()}${segment.slice(1).toLowerCase()}`
     )
-  ) as JsonObject;
+    .join("");
+  return stem.length > 0 ? stem : "Generated";
+};
+
+const decodeJsonPointerToken = (token: string): string =>
+  token.replaceAll("~1", "/").replaceAll("~0", "~");
+
+const encodeJsonPointerToken = (token: string): string =>
+  token.replaceAll("~", "~0").replaceAll("/", "~1");
+
+const containsNestedDefinitions = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(containsNestedDefinitions);
+  }
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  const object = value as JsonObject;
+  return (
+    Object.hasOwn(object, "$defs") ||
+    Object.values(object).some(containsNestedDefinitions)
+  );
+};
+
+const rebaseDefinitionRefs = (
+  value: unknown,
+  definitionComponents: ReadonlyMap<string, string>
+): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => rebaseDefinitionRefs(entry, definitionComponents));
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const rebased: JsonObject = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (
+      key === "$ref" &&
+      typeof entry === "string" &&
+      (entry === "#/$defs" || entry.startsWith("#/$defs/"))
+    ) {
+      if (entry === "#/$defs") {
+        throw new Error("Generated OpenAPI schemas cannot reference the $defs map.");
+      }
+      const definitionPointer = entry.slice("#/$defs/".length);
+      const separator = definitionPointer.indexOf("/");
+      const encodedDefinitionName =
+        separator === -1 ? definitionPointer : definitionPointer.slice(0, separator);
+      const suffix = separator === -1 ? "" : definitionPointer.slice(separator);
+      const definitionName = decodeJsonPointerToken(encodedDefinitionName);
+      const componentName = definitionComponents.get(definitionName);
+      if (!componentName) {
+        throw new Error(
+          `Generated OpenAPI schema references unknown definition ${JSON.stringify(definitionName)}.`
+        );
+      }
+      rebased[key] =
+        `#/components/schemas/${encodeJsonPointerToken(componentName)}${suffix}`;
+    } else {
+      rebased[key] = rebaseDefinitionRefs(entry, definitionComponents);
+    }
+  }
+  return rebased;
+};
+
+const openApiJsonSchema = (
+  schema: z.ZodType,
+  io: "input" | "output",
+  namespace: string,
+  components: OpenApiSchemaComponents
+): JsonObject => {
+  const converted = z.toJSONSchema(schema, {
+    target: "draft-2020-12",
+    io,
+    cycles: "ref",
+    reused: "inline",
+    unrepresentable: "any",
+  }) as JsonObject;
+  delete converted.$schema;
+
+  const rawDefinitions = converted.$defs;
+  delete converted.$defs;
+  if (containsNestedDefinitions(converted)) {
+    throw new Error("Generated OpenAPI schemas cannot contain nested $defs.");
+  }
+  if (rawDefinitions === undefined) {
+    return rebaseDefinitionRefs(converted, new Map()) as JsonObject;
+  }
+  if (
+    rawDefinitions === null ||
+    typeof rawDefinitions !== "object" ||
+    Array.isArray(rawDefinitions)
+  ) {
+    throw new Error("Generated OpenAPI schema $defs must be an object.");
+  }
+
+  const definitions = rawDefinitions as JsonObject;
+  if (containsNestedDefinitions(definitions)) {
+    throw new Error("Generated OpenAPI definitions cannot contain nested $defs.");
+  }
+  const definitionComponents = new Map<string, string>();
+  const componentStem = openApiComponentStem(namespace);
+  const definitionEntries = Object.entries(definitions).sort(([left], [right]) =>
+    left.localeCompare(right)
+  );
+  for (const [index, [definitionName]] of definitionEntries.entries()) {
+    const componentName = `${componentStem}Definition${index + 1}`;
+    if (Object.hasOwn(components, componentName)) {
+      throw new Error(
+        `Generated OpenAPI component name ${JSON.stringify(componentName)} is not unique.`
+      );
+    }
+    definitionComponents.set(definitionName, componentName);
+  }
+  for (const [definitionName, definition] of definitionEntries) {
+    const componentName = definitionComponents.get(definitionName);
+    if (!componentName) {
+      throw new Error(
+        `Generated OpenAPI definition ${JSON.stringify(definitionName)} has no component name.`
+      );
+    }
+    components[componentName] = rebaseDefinitionRefs(
+      definition,
+      definitionComponents
+    ) as JsonObject;
+  }
+  return rebaseDefinitionRefs(converted, definitionComponents) as JsonObject;
+};
 
 const mcpJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
   JSON.parse(
@@ -971,10 +1097,12 @@ const mcpJsonSchema = (schema: z.ZodType, io: "input" | "output"): JsonObject =>
 
 const schemaParameters = (
   schema: z.ZodType | undefined,
-  location: "path" | "query"
+  location: "path" | "query",
+  namespace: string,
+  components: OpenApiSchemaComponents
 ): JsonObject[] => {
   if (!schema) return [];
-  const converted = openApiJsonSchema(schema, "input");
+  const converted = openApiJsonSchema(schema, "input", namespace, components);
   const properties =
     converted.properties &&
     typeof converted.properties === "object" &&
@@ -1880,13 +2008,24 @@ export const generateMockosProductCapabilityIndex =
 
 export const generateMockosManagementOpenApi = (): JsonObject => {
   const paths: Record<string, Record<string, JsonObject>> = {};
+  const schemaComponents: OpenApiSchemaComponents = {};
 
   for (const operationId of [...mockosHttpOperationIds].sort()) {
     const operation = mockosHttpOperations[operationId];
     const http = operation.http as MockosHttpOperation;
     const parameters = [
-      ...schemaParameters(http.pathSchema, "path"),
-      ...schemaParameters(http.querySchema, "query"),
+      ...schemaParameters(
+        http.pathSchema,
+        "path",
+        `${http.operationId}_path`,
+        schemaComponents
+      ),
+      ...schemaParameters(
+        http.querySchema,
+        "query",
+        `${http.operationId}_query`,
+        schemaComponents
+      ),
     ];
     const responses: Record<string, JsonObject> = {
       [String(http.successStatus)]:
@@ -1896,7 +2035,12 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
               description: "The operation completed successfully.",
               content: {
                 "application/json": {
-                  schema: openApiJsonSchema(http.responseSchema, "output"),
+                  schema: openApiJsonSchema(
+                    http.responseSchema,
+                    "output",
+                    `${http.operationId}_response_${http.successStatus}`,
+                    schemaComponents
+                  ),
                 },
               },
             },
@@ -1929,7 +2073,12 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
               required: true,
               content: {
                 "application/json": {
-                  schema: openApiJsonSchema(http.bodySchema, "input"),
+                  schema: openApiJsonSchema(
+                    http.bodySchema,
+                    "input",
+                    `${http.operationId}_request`,
+                    schemaComponents
+                  ),
                 },
               },
             },
@@ -1943,8 +2092,22 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
     paths[http.path] = pathItem;
   }
 
+  const problemComponent = openApiJsonSchema(
+    problemSchema,
+    "output",
+    "problem",
+    schemaComponents
+  );
+  const schemas = Object.fromEntries(
+    Object.entries({
+      ...schemaComponents,
+      Problem: problemComponent,
+    }).sort(([left], [right]) => left.localeCompare(right))
+  );
+
   return {
-    openapi: "3.0.3",
+    openapi: "3.1.0",
+    jsonSchemaDialect: "https://spec.openapis.org/oas/3.1/dialect/base",
     info: {
       title: "mockOS management API",
       version: "0.1.0",
@@ -1962,9 +2125,7 @@ export const generateMockosManagementOpenApi = (): JsonObject => {
           bearerFormat: "mockOS Access Key",
         },
       },
-      schemas: {
-        Problem: openApiJsonSchema(problemSchema, "output"),
-      },
+      schemas,
     },
   };
 };

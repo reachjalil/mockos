@@ -478,7 +478,7 @@ const renderSelfHostedHttp = (
   lines.push(
     "",
     "The deterministic",
-    "[OpenAPI 3.0 document](../../packages/openapi/openapi/mockos-management.v1.json)",
+    "[OpenAPI 3.1 document](../../packages/openapi/openapi/mockos-management.v1.json)",
     "contains the exact request, response, path, and query schemas. The generated",
     "`@mockos/client` skeleton authorizes only this operation map.",
     "",

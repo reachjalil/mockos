@@ -5,6 +5,8 @@ import {
   mockosHttpOperationIds,
   mockosHttpOperations,
 } from "@mockos/contracts/operations";
+import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import {
   generateMockLlmAnthropicProviderDocumentation,
@@ -15,7 +17,275 @@ import {
   generateMockosProductCapabilityIndex,
 } from "../src/index";
 
+type JsonSchema = Record<string, unknown>;
+
+type CreateApplicationHttpOperation = {
+  requestBody: {
+    content: {
+      "application/json": {
+        schema: JsonSchema;
+      };
+    };
+  };
+  responses: Record<
+    string,
+    {
+      content?: {
+        "application/json"?: {
+          schema: JsonSchema;
+        };
+      };
+    }
+  >;
+};
+
+const deviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code" as const;
+
+type RedirectPolicyCase = {
+  name: string;
+  clientType?: "confidential" | "public";
+  grantTypes?: Array<
+    "authorization_code" | "refresh_token" | typeof deviceCodeGrantType
+  >;
+};
+
+const validPublicDeviceCase: RedirectPolicyCase = {
+  name: "public device-only application",
+  clientType: "public",
+  grantTypes: [deviceCodeGrantType],
+};
+
+const invalidEmptyRedirectCases: RedirectPolicyCase[] = [
+  {
+    name: "default confidential authorization-code application",
+  },
+  {
+    name: "explicit confidential device application",
+    clientType: "confidential",
+    grantTypes: [deviceCodeGrantType],
+  },
+  {
+    name: "public authorization-code application",
+    clientType: "public",
+    grantTypes: ["authorization_code"],
+  },
+  {
+    name: "public mixed authorization-code and device application",
+    clientType: "public",
+    grantTypes: ["authorization_code", deviceCodeGrantType],
+  },
+  {
+    name: "public refresh-only application",
+    clientType: "public",
+    grantTypes: ["refresh_token"],
+  },
+];
+
+const createApplicationHttpOperation = (
+  document: ReturnType<typeof generateMockosManagementOpenApi>
+): CreateApplicationHttpOperation => {
+  const paths = document.paths as Record<
+    string,
+    { post?: CreateApplicationHttpOperation }
+  >;
+  const operation = paths["/environments/{environmentId}/applications"]?.post;
+  if (!operation) {
+    throw new Error("The generated create_application HTTP operation is missing.");
+  }
+  return operation;
+};
+
+const compileOpenApiSchema = (schema: JsonSchema) => {
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  addFormats(ajv);
+  return ajv.compile(schema);
+};
+
+const collectLocalDocumentRefs = (
+  value: unknown,
+  path = "#"
+): Array<{ path: string; ref: string }> => {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      collectLocalDocumentRefs(entry, `${path}/${index}`)
+    );
+  }
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, entry]) => {
+    const entryPath = `${path}/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`;
+    if (key === "$ref" && typeof entry === "string" && entry.startsWith("#")) {
+      return [{ path: entryPath, ref: entry }];
+    }
+    return collectLocalDocumentRefs(entry, entryPath);
+  });
+};
+
+const resolveLocalDocumentRef = (document: JsonSchema, reference: string): unknown => {
+  if (reference === "#") {
+    return document;
+  }
+  if (!reference.startsWith("#/")) {
+    throw new Error(`Reference ${JSON.stringify(reference)} is not document-local.`);
+  }
+  const pointer = decodeURIComponent(reference.slice(1));
+  let current: unknown = document;
+  for (const encodedToken of pointer.slice(1).split("/")) {
+    if (current === null || typeof current !== "object") {
+      throw new Error(
+        `Reference ${JSON.stringify(reference)} traverses a non-object value.`
+      );
+    }
+    const token = encodedToken.replaceAll("~1", "/").replaceAll("~0", "~");
+    const object = current as Record<string, unknown>;
+    if (!Object.hasOwn(object, token)) {
+      throw new Error(
+        `Reference ${JSON.stringify(reference)} has no token ${JSON.stringify(token)}.`
+      );
+    }
+    current = object[token];
+  }
+  return current;
+};
+
+const compileOpenApiDocumentSchema = (document: JsonSchema, schemaReference: string) =>
+  compileOpenApiSchema({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    ...document,
+    $ref: schemaReference,
+  });
+
+const emptyRedirectApplicationInput = (testCase: RedirectPolicyCase) => ({
+  name: testCase.name,
+  redirectUris: [],
+  ...(testCase.clientType === undefined ? {} : { clientType: testCase.clientType }),
+  ...(testCase.grantTypes === undefined ? {} : { grantTypes: testCase.grantTypes }),
+});
+
+const emptyRedirectApplicationRegistration = (testCase: RedirectPolicyCase) => ({
+  name: "Device application",
+  id: "app-device",
+  clientId: "client-device",
+  redirectUris: [],
+  appRoles: [],
+  groupClaimsMode: "none",
+  createdAt: "2026-07-26T00:00:00Z",
+  ...(testCase.clientType === undefined ? {} : { clientType: testCase.clientType }),
+  ...(testCase.clientType === "confidential" ? { clientSecret: "secret-device" } : {}),
+  ...(testCase.grantTypes === undefined ? {} : { grantTypes: testCase.grantTypes }),
+});
+
 describe("management OpenAPI generation", () => {
+  it("emits OpenAPI 3.1 Schema Objects governed by the OAS base dialect", () => {
+    const document = generateMockosManagementOpenApi();
+    const serialized = JSON.stringify(document);
+
+    expect(document).toMatchObject({
+      openapi: "3.1.0",
+      jsonSchemaDialect: "https://spec.openapis.org/oas/3.1/dialect/base",
+    });
+    expect(serialized).not.toContain('"$schema"');
+    expect(serialized).not.toContain('"$defs"');
+    expect(serialized).not.toContain('"nullable"');
+    expect(serialized).toContain('"if"');
+    expect(serialized).toContain('"else"');
+    expect(serialized).toContain('"contains"');
+    expect(serialized).toContain('"const"');
+  });
+
+  it("resolves every local ref from the full OpenAPI document and preserves recursive JSON values", () => {
+    const document = generateMockosManagementOpenApi();
+    const localRefs = collectLocalDocumentRefs(document);
+    const recursiveComponentRef =
+      "#/components/schemas/GetEnvironmentDiscoveryResponse200Definition1";
+
+    expect(localRefs.length).toBeGreaterThan(0);
+    for (const reference of localRefs) {
+      expect(
+        () => resolveLocalDocumentRef(document, reference.ref),
+        `${reference.path} -> ${reference.ref}`
+      ).not.toThrow();
+    }
+    expect(localRefs.map(({ ref }) => ref)).toContain(recursiveComponentRef);
+    expect(
+      collectLocalDocumentRefs(
+        resolveLocalDocumentRef(document, recursiveComponentRef)
+      ).map(({ ref }) => ref)
+    ).toContain(recursiveComponentRef);
+
+    const wellKnownResponseRef =
+      "#/paths/~1environments~1{environmentId}~1well-known/get/responses/200/content/application~1json/schema";
+    const validate = compileOpenApiDocumentSchema(document, wellKnownResponseRef);
+    const response = {
+      data: {
+        issuer: "https://mock.example/e/env-device",
+        authorization_endpoint:
+          "https://mock.example/e/env-device/oauth2/v2.0/authorize",
+        token_endpoint: "https://mock.example/e/env-device/oauth2/v2.0/token",
+        jwks_uri: "https://mock.example/e/env-device/.well-known/jwks.json",
+        response_types_supported: ["code"],
+        response_modes_supported: ["query"],
+        subject_types_supported: ["public"],
+        id_token_signing_alg_values_supported: ["RS256"],
+        scopes_supported: ["openid"],
+        token_endpoint_auth_methods_supported: ["client_secret_post"],
+        claims_supported: ["sub"],
+        grant_types_supported: ["authorization_code"],
+        code_challenge_methods_supported: ["S256"],
+        mockos_nested_extension: {
+          values: [null, true, 42, "recursive", { deeper: ["value"] }],
+        },
+      },
+      meta: { requestId: "request-openapi-document" },
+    };
+
+    expect(validate(response), JSON.stringify(validate.errors)).toBe(true);
+  });
+
+  it("enforces redirect-free device-only semantics in the HTTP request Schema Object", () => {
+    const operation = createApplicationHttpOperation(generateMockosManagementOpenApi());
+    const validate = compileOpenApiSchema(
+      operation.requestBody.content["application/json"].schema
+    );
+
+    expect(
+      validate(emptyRedirectApplicationInput(validPublicDeviceCase)),
+      JSON.stringify(validate.errors)
+    ).toBe(true);
+    for (const testCase of invalidEmptyRedirectCases) {
+      expect(
+        validate(emptyRedirectApplicationInput(testCase)),
+        `${testCase.name}: ${JSON.stringify(validate.errors)}`
+      ).toBe(false);
+    }
+  });
+
+  it("enforces redirect-free device-only semantics in the HTTP response Schema Object", () => {
+    const operation = createApplicationHttpOperation(generateMockosManagementOpenApi());
+    const responseSchema =
+      operation.responses["201"]?.content?.["application/json"]?.schema;
+    if (!responseSchema) {
+      throw new Error("The create_application 201 response Schema Object is missing.");
+    }
+    const validate = compileOpenApiSchema(responseSchema);
+    const envelope = (data: Record<string, unknown>) => ({
+      data,
+      meta: { requestId: "request-openapi-31" },
+    });
+
+    expect(
+      validate(envelope(emptyRedirectApplicationRegistration(validPublicDeviceCase))),
+      JSON.stringify(validate.errors)
+    ).toBe(true);
+    for (const testCase of invalidEmptyRedirectCases) {
+      expect(
+        validate(envelope(emptyRedirectApplicationRegistration(testCase))),
+        `${testCase.name}: ${JSON.stringify(validate.errors)}`
+      ).toBe(false);
+    }
+  });
+
   it("contains exactly the live HTTP operation registry", () => {
     const document = generateMockosManagementOpenApi();
     const paths = document.paths as Record<

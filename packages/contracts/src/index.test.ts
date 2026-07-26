@@ -10,6 +10,7 @@ import {
   type CreateApplicationInput,
   type CreateApplicationToolInput,
   configureEnvironmentToolInputSchema,
+  createApplicationInputSchema,
   createApplicationToolInputSchema,
   deleteMockMcpServerToolInputSchema,
   environmentConfigSchema,
@@ -486,6 +487,140 @@ describe("wire contracts", () => {
         ),
       })
     ).toThrow();
+  });
+
+  it("allows empty redirects only for public device-only applications", () => {
+    const deviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
+    const redirectlessDeviceInput = {
+      name: "Redirectless public device client",
+      clientType: "public" as const,
+      redirectUris: [],
+      grantTypes: [deviceGrant, "refresh_token"] as const,
+    };
+    expect(createApplicationInputSchema.parse(redirectlessDeviceInput)).toMatchObject(
+      redirectlessDeviceInput
+    );
+    expect(
+      createApplicationToolInputSchema.parse({
+        ...redirectlessDeviceInput,
+        environmentId: "env_device",
+      })
+    ).toMatchObject({
+      ...redirectlessDeviceInput,
+      environmentId: "env_device",
+    });
+
+    for (const input of [
+      {
+        name: "Default confidential device client",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      },
+      {
+        name: "Explicit confidential device client",
+        clientType: "confidential",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      },
+      {
+        name: "Public authorization-code client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["authorization_code"],
+      },
+      {
+        name: "Public mixed code and device client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["authorization_code", deviceGrant, "refresh_token"],
+      },
+      {
+        name: "Public refresh-only client",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["refresh_token"],
+      },
+    ]) {
+      const inputResult = createApplicationInputSchema.safeParse(input);
+      expect(inputResult.success).toBe(false);
+      if (inputResult.success) {
+        throw new Error("Invalid redirect policy unexpectedly passed input parsing.");
+      }
+      expect(inputResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["redirectUris"],
+            message: expect.stringMatching(/At least one redirect URI/),
+          }),
+        ])
+      );
+
+      const toolResult = createApplicationToolInputSchema.safeParse({
+        ...input,
+        environmentId: "env_device",
+      });
+      expect(toolResult.success).toBe(false);
+      if (toolResult.success) {
+        throw new Error("Invalid redirect policy unexpectedly passed tool parsing.");
+      }
+      expect(toolResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["redirectUris"],
+            message: expect.stringMatching(/At least one redirect URI/),
+          }),
+        ])
+      );
+    }
+
+    const publicDeviceRegistration = {
+      id: "app_device",
+      name: "Redirectless public device client",
+      clientId: "device-client",
+      clientType: "public" as const,
+      redirectUris: [],
+      grantTypes: [deviceGrant, "refresh_token"],
+      appRoles: [],
+      groupClaimsMode: "none" as const,
+      createdAt: "2026-07-26T12:00:00.000Z",
+    };
+    expect(applicationRegistrationSchema.parse(publicDeviceRegistration)).toEqual(
+      publicDeviceRegistration
+    );
+    expect(applicationSummarySchema.parse(publicDeviceRegistration)).toEqual(
+      publicDeviceRegistration
+    );
+    expect(
+      applicationListPageSchema.parse({
+        applications: [publicDeviceRegistration],
+      }).applications
+    ).toEqual([publicDeviceRegistration]);
+
+    expect(() =>
+      applicationRegistrationSchema.parse({
+        ...publicDeviceRegistration,
+        clientType: "confidential",
+        clientSecret: "display-once-secret",
+      })
+    ).toThrow(/At least one redirect URI/);
+    for (const grantTypes of [
+      ["authorization_code"],
+      ["authorization_code", deviceGrant],
+      ["refresh_token"],
+    ]) {
+      expect(() =>
+        applicationRegistrationSchema.parse({
+          ...publicDeviceRegistration,
+          grantTypes,
+        })
+      ).toThrow(/At least one redirect URI/);
+      expect(() =>
+        applicationSummarySchema.parse({
+          ...publicDeviceRegistration,
+          grantTypes,
+        })
+      ).toThrow(/At least one redirect URI/);
+    }
   });
 
   it("rejects ambiguous or empty assertion count contracts", () => {

@@ -171,22 +171,31 @@ A public registration:
 - requires `clientType: "public"`;
 - rejects `clientSecret` rather than ignoring or storing it;
 - rejects the `client_credentials` grant;
+- accepts `redirectUris: []` only for a device-only registration that does not
+  include `authorization_code`;
+- requires at least one real, exact callback URI when `authorization_code` is
+  present, including a mixed authorization-code/device registration;
 - returns `clientType: "public"` with no `clientSecret`; and
 - authenticates bounded code and refresh grants with a known client ID and no secret.
 
 Do not invent or persist an empty placeholder secret for a public client. A spurious
-secret makes token authentication fail.
+secret makes token authentication fail. Do not invent a callback URI for a device-only
+client either: send the required `redirectUris` field as an empty array. A client that
+can run authorization code must instead register the callback it will actually use.
 
 This conditional is machine-readable in the SDK 1.29 `tools/list` result using JSON
-Schema Draft-7 `if`/`then`. The input is a strict object with only `name` and
-`redirectUris` unconditionally required.
+Schema Draft-7 conditionals. The input is a strict object with only `name` and
+`redirectUris` unconditionally required; the array may be empty only for the bounded
+public device-only shape.
 `clientType`, `grantTypes`, `appRoles`, and `groupClaimsMode` retain advertised
 defaults without being placed in `required`. An `allOf` `if`/`then` branch for
 `clientType: "public"` forbids `clientSecret` and narrows `grantTypes` so
-`client_credentials` is not an allowed item. The output envelope's `data` uses exact
-confidential/public branches: the confidential branch requires `clientSecret`, while
-the public branch has no such property. Runtime Zod validation and discovery therefore
-describe the same bounded contract.
+`client_credentials` is not an allowed item. The registration schema separately
+requires a non-empty redirect list for every shape outside the bounded public
+device-only case, including whenever `authorization_code` is present. The output
+envelope's `data` uses exact confidential/public branches: the confidential branch
+requires `clientSecret`, while the public branch has no such property. Runtime Zod
+validation and discovery therefore describe the same bounded contract.
 
 For the Okta profile, discovery advertises `none` for token and revocation endpoint
 authentication. Introspection deliberately remains confidential and advertises only

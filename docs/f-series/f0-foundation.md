@@ -20,7 +20,7 @@ effect/retry/secret metadata, and optional HTTP metadata.
 management operation registry
 ├── @mockos/mcp registration metadata
 ├── Worker paths and HTTP request schemas (five live routes only)
-├── OpenAPI 3.0 document
+├── OpenAPI 3.1 document
 ├── @mockos/client generated authorization map and typed requests
 └── human and machine management-reference artifacts
 ```

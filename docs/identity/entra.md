@@ -56,10 +56,11 @@ for secret-free public applications:
   boundaries.
 
 Only a `clientType: "public"` registration can start this Entra flow; no client secret
-is accepted or returned. The existing application contract still requires at least one
-registered redirect URI even when a test uses device code only. Use a clearly inert
-synthetic URI and do not expect the device flow to call it. Register the RFC device
-grant plus `refresh_token` when testing rotation.
+is accepted or returned. A device-only registration uses `redirectUris: []` because
+the flow has no callback. Do not invent a URI. If the registration also includes
+`authorization_code`, it is mixed and must register at least one real, exact callback
+URI for that code flow. Register the RFC device grant plus `refresh_token` when
+testing rotation.
 
 MSAL Node invokes its device callback once and polls immediately. The mock returns
 `authorization_pending` for that first poll. Polling faster than the current interval

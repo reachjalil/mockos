@@ -16,6 +16,8 @@ catalog:
   "@sentry/cloudflare": 10.65.0
   "@types/node": 26.1.1
   agents: 0.17.4
+  ajv: 8.20.0
+  ajv-formats: 3.0.1
   hono: 4.12.31
   openai: 6.49.0
   sharp: 0.35.3

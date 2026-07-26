@@ -125,8 +125,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - An Entra public-client device path covering
   `POST /<tenant>/oauth2/v2.0/devicecode`, credential-gated approve or deny at
   `GET`/`POST /devicelogin`, immediate pending polling, public refresh rotation,
-  lifecycle rejection, and Entra error names. It returns a 900-second lifetime and
-  five-second interval without `verification_uri_complete`
+  lifecycle rejection, and Entra error names. Device-only public registrations use
+  `redirectUris: []`; authorization-code and mixed registrations retain real callback
+  URIs. The device response returns a 900-second lifetime and five-second interval
+  without `verification_uri_complete`
 - Explicit confidential and public OAuth application registrations. Public clients
   have no stored or returned secret, cannot use `client_credentials`, can redeem code
   and refresh grants without a secret, and can revoke only their own tokens;

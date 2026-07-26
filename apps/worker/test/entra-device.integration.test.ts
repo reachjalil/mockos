@@ -100,7 +100,7 @@ describe("Entra device authorization mounted flow", () => {
             name: "Entra device public client",
             clientId,
             clientType: "public",
-            redirectUris: ["http://localhost"],
+            redirectUris: [],
             grantTypes: [deviceGrant, "refresh_token"],
             appRoles: [],
             groupClaimsMode: "none",
@@ -108,6 +108,16 @@ describe("Entra device authorization mounted flow", () => {
         }
       );
       expect(application.status, await application.clone().text()).toBe(201);
+      expect(
+        await application.json<{
+          data: { clientType: string; redirectUris: string[] };
+        }>()
+      ).toMatchObject({
+        data: {
+          clientType: "public",
+          redirectUris: [],
+        },
+      });
 
       const publicBase = `${publicOrigin}/e/${environmentId}`;
       const issuer = `${publicBase}/${tenantId}/v2.0`;

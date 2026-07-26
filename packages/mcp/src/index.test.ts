@@ -745,6 +745,11 @@ type JsonSchema = {
   allOf?: JsonSchema[];
   oneOf?: JsonSchema[];
   not?: JsonSchema;
+  contains?: JsonSchema;
+  else?: JsonSchema;
+  if?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
   additionalProperties?: boolean;
 };
 
@@ -1059,8 +1064,13 @@ describe("registerMockosTools", () => {
         appRoles: { type: "array", default: [] },
         groupClaimsMode: { type: "string", default: "none" },
         clientSecret: { type: "string" },
+        redirectUris: {
+          type: "array",
+          maxItems: 50,
+        },
       },
     });
+    expect(inputSchema.properties?.redirectUris).not.toHaveProperty("minItems");
     expect(inputSchema.required).not.toContain("clientType");
     expect(inputSchema.required).not.toContain("grantTypes");
     expect(inputSchema.required).not.toContain("appRoles");
@@ -1088,9 +1098,43 @@ describe("registerMockosTools", () => {
         },
       },
     });
+    const redirectPolicy = inputSchema.allOf?.[1];
+    expect(redirectPolicy).toMatchObject({
+      if: {
+        properties: {
+          clientType: { const: "public" },
+          grantTypes: {
+            allOf: [
+              {
+                contains: {
+                  const: "urn:ietf:params:oauth:grant-type:device_code",
+                },
+              },
+              {
+                not: {
+                  contains: {
+                    const: "authorization_code",
+                  },
+                },
+              },
+            ],
+          },
+        },
+        required: ["clientType", "grantTypes"],
+      },
+      else: {
+        properties: {
+          redirectUris: { minItems: 1 },
+        },
+      },
+    });
+    if (!redirectPolicy) {
+      throw new Error("Application redirect policy was missing from MCP discovery.");
+    }
 
     const outputSchema = tool?.outputSchema as JsonSchema;
     const registrationSchema = outputSchema.properties?.data as JsonSchema;
+    expect(registrationSchema.allOf?.[0]).toEqual(redirectPolicy);
     expect(registrationSchema.oneOf).toHaveLength(2);
     const confidentialRegistration = registrationSchema.oneOf?.find(
       (branch) =>
@@ -1250,6 +1294,71 @@ describe("registerMockosTools", () => {
       grantTypes: ["authorization_code", "refresh_token"],
     });
     expect(publicApplication).not.toHaveProperty("clientSecret");
+    const publicDeviceApplication = await callData<ApplicationRegistration>(
+      client,
+      "create_application",
+      {
+        name: "Redirectless public device app",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+      }
+    );
+    expect(publicDeviceApplication).toMatchObject({
+      clientId: "client_test",
+      clientType: "public",
+      redirectUris: [],
+      grantTypes: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+    });
+    expect(publicDeviceApplication).not.toHaveProperty("clientSecret");
+
+    const applicationCallsBeforeInvalidRedirects = dependencies.calls.filter(
+      ({ operation }) => operation === "create-application"
+    ).length;
+    for (const arguments_ of [
+      {
+        name: "Default confidential device app",
+        redirectUris: [],
+        grantTypes: ["urn:ietf:params:oauth:grant-type:device_code"],
+      },
+      {
+        name: "Explicit confidential device app",
+        clientType: "confidential",
+        redirectUris: [],
+        grantTypes: ["urn:ietf:params:oauth:grant-type:device_code"],
+      },
+      {
+        name: "Public authorization-code app",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["authorization_code"],
+      },
+      {
+        name: "Public mixed code and device app",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: [
+          "authorization_code",
+          "urn:ietf:params:oauth:grant-type:device_code",
+        ],
+      },
+      {
+        name: "Public refresh-only app",
+        clientType: "public",
+        redirectUris: [],
+        grantTypes: ["refresh_token"],
+      },
+    ]) {
+      const invalidRedirects = await client.callTool({
+        name: "create_application",
+        arguments: arguments_,
+      });
+      expect(invalidRedirects.isError).toBe(true);
+    }
+    expect(
+      dependencies.calls.filter(({ operation }) => operation === "create-application")
+    ).toHaveLength(applicationCallsBeforeInvalidRedirects);
+
     const rejectedPublicSecret = "must-not-be accepted!";
     const invalidPublicApplication = await client.callTool({
       name: "create_application",
@@ -1467,6 +1576,7 @@ describe("registerMockosTools", () => {
     expect(dependencies.calls.map(({ operation }) => operation)).toEqual([
       "configure",
       "seed",
+      "create-application",
       "create-application",
       "create-application",
       "run-provisioning",

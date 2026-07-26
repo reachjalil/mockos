@@ -11,11 +11,13 @@ refresh. `@modelcontextprotocol/sdk` 1.29.0 manages the disposable environment o
 Streamable HTTP.
 
 The earlier confidential-only run was captured on branch `codex/entra-market-fit` and
-later rerun through the shared harness. The combined public-device expansion was run
-from the `codex/entra-device-code` source candidate based on committed revision
-`a4b6d0e810de524ba5abb6dbd69cdde2d0f69f0c`. The device changes were not yet an
-immutable commit at run time. This is a local source record, not hosted-CI,
-deployment, or release evidence.
+later rerun through the shared harness. The combined public-device expansion was
+initially run from the `codex/entra-device-code` source candidate based on committed
+revision `a4b6d0e810de524ba5abb6dbd69cdde2d0f69f0c`. The redirect-free registration
+variant documented here was subsequently run from the same branch based on committed
+revision `fa591da73f6b0eb58cee42d8965d9daaaadb599d`; its contract and harness changes
+were not yet an immutable commit at run time. This is a local source record, not
+hosted-CI, deployment, or release evidence.
 
 ## Eight-level evidence boundary
 
@@ -115,8 +117,11 @@ classification. It does not remove the local loopback transient.
 The acceptance client therefore makes one ownership-checked `GET /health` halfway
 through the five-second wait. The probe is local-harness liveness only: it neither
 enters the provider request log nor retries token redemption, changes Entra's
-five-second policy, or exists in deployed product behavior. Eight consecutive complete
-runs passed with the probe and the exact 14-request provider sequence unchanged.
+five-second policy, or exists in deployed product behavior. The earlier stability
+campaign recorded eight consecutive complete runs with the probe and the exact
+14-request provider sequence unchanged. After the registration contract changed, one
+fresh final-verification run using `redirectUris: []` passed with that same exact
+sequence.
 
 ## Exact MSAL configuration
 
@@ -140,8 +145,9 @@ this claim. The client did not use Microsoft-owned authority aliases or static
 metadata.
 
 The device client was a separate public registration with the canonical RFC device
-grant plus `refresh_token`, no secret, and an inert synthetic redirect URI retained
-only because the application contract still requires one:
+grant plus `refresh_token`, no secret, and `redirectUris: []`. Device authorization
+has no callback; the confidential authorization-code application separately retained
+the real callback URI used by its code flow:
 
 ```js
 const app = new PublicClientApplication({

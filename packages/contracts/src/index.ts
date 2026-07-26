@@ -142,9 +142,10 @@ const publicOAuthGrantTypeSchema = z.enum([
   "refresh_token",
   "urn:ietf:params:oauth:grant-type:device_code",
 ]);
+const deviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code" as const;
 const defaultApplicationGrantTypes = ["authorization_code", "refresh_token"] as const;
 const applicationNameSchema = z.string().trim().min(1).max(120);
-const applicationRedirectUrisSchema = z.array(z.url()).min(1).max(50);
+const applicationRedirectUrisSchema = z.array(z.url()).max(50);
 const applicationAppRolesSchema = z.array(z.string().min(1).max(128)).max(100);
 const applicationGroupClaimsModeSchema = z.enum(["none", "security", "all"]);
 const applicationInputShape = {
@@ -169,6 +170,11 @@ type ApplicationInputCommon = Omit<
 type PublicGrantType = z.infer<typeof publicOAuthGrantTypeSchema>;
 type OAuthGrantType = z.infer<typeof oauthGrantTypeSchema>;
 type GroupClaimsMode = z.infer<typeof applicationGroupClaimsModeSchema>;
+type ApplicationRedirectPolicyInput = {
+  readonly clientType?: OAuthClientType;
+  readonly grantTypes?: readonly OAuthGrantType[];
+  readonly redirectUris: readonly string[];
+};
 
 export type CreateApplicationInput =
   | (ApplicationInputCommon & {
@@ -203,6 +209,7 @@ const validateApplicationAuthentication = (
   input: RawCreateApplicationInput,
   context: z.RefinementCtx
 ) => {
+  validateApplicationRedirectUris(input, context);
   if (input.clientType !== "public") return;
   if (input.clientSecret !== undefined) {
     context.addIssue({
@@ -218,6 +225,48 @@ const validateApplicationAuthentication = (
       message: "Public OAuth clients cannot use client_credentials.",
     });
   }
+};
+
+const allowsEmptyApplicationRedirectUris = (
+  input: ApplicationRedirectPolicyInput
+): boolean =>
+  input.clientType === "public" &&
+  input.grantTypes?.includes(deviceCodeGrantType) === true &&
+  !input.grantTypes.includes("authorization_code");
+
+const validateApplicationRedirectUris = (
+  input: ApplicationRedirectPolicyInput,
+  context: z.RefinementCtx
+): void => {
+  if (input.redirectUris.length > 0 || allowsEmptyApplicationRedirectUris(input)) {
+    return;
+  }
+  context.addIssue({
+    code: "custom",
+    path: ["redirectUris"],
+    message:
+      "At least one redirect URI is required unless a public device-only application excludes authorization_code.",
+  });
+};
+
+const applicationRedirectPolicyJsonSchema = {
+  if: {
+    properties: {
+      clientType: { const: "public" },
+      grantTypes: {
+        allOf: [
+          { contains: { const: deviceCodeGrantType } },
+          { not: { contains: { const: "authorization_code" } } },
+        ],
+      },
+    },
+    required: ["clientType", "grantTypes"],
+  },
+  else: {
+    properties: {
+      redirectUris: { minItems: 1 },
+    },
+  },
 };
 
 const applicationInputConditionalJsonSchema = {
@@ -239,6 +288,7 @@ const applicationInputConditionalJsonSchema = {
         },
       },
     },
+    applicationRedirectPolicyJsonSchema,
   ],
 };
 
@@ -274,29 +324,35 @@ const publicApplicationRegistrationSchema = z
   })
   .strict();
 
-export const applicationRegistrationSchema = z.discriminatedUnion("clientType", [
-  confidentialApplicationRegistrationSchema,
-  publicApplicationRegistrationSchema,
-]);
+export const applicationRegistrationSchema = z
+  .discriminatedUnion("clientType", [
+    confidentialApplicationRegistrationSchema,
+    publicApplicationRegistrationSchema,
+  ])
+  .superRefine(validateApplicationRedirectUris)
+  .meta({ allOf: [applicationRedirectPolicyJsonSchema] });
 export type ApplicationRegistration = z.infer<typeof applicationRegistrationSchema>;
 
 /** Persisted application metadata. Client secrets are creation-only. */
-export const applicationSummarySchema = z.discriminatedUnion("clientType", [
-  z
-    .object({
-      ...applicationRegistrationCommonShape,
-      clientType: z.literal("confidential"),
-      grantTypes: z.array(oauthGrantTypeSchema).min(1),
-    })
-    .strict(),
-  z
-    .object({
-      ...applicationRegistrationCommonShape,
-      clientType: z.literal("public"),
-      grantTypes: z.array(publicOAuthGrantTypeSchema).min(1),
-    })
-    .strict(),
-]);
+export const applicationSummarySchema = z
+  .discriminatedUnion("clientType", [
+    z
+      .object({
+        ...applicationRegistrationCommonShape,
+        clientType: z.literal("confidential"),
+        grantTypes: z.array(oauthGrantTypeSchema).min(1),
+      })
+      .strict(),
+    z
+      .object({
+        ...applicationRegistrationCommonShape,
+        clientType: z.literal("public"),
+        grantTypes: z.array(publicOAuthGrantTypeSchema).min(1),
+      })
+      .strict(),
+  ])
+  .superRefine(validateApplicationRedirectUris)
+  .meta({ allOf: [applicationRedirectPolicyJsonSchema] });
 export type ApplicationSummary = z.infer<typeof applicationSummarySchema>;
 
 export const semanticErrorCodeSchema = z.enum([

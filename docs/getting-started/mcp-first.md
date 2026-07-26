@@ -111,9 +111,11 @@ a stale session cursor from selecting the wrong test state.
 
 For a bounded Entra device test, create a separate public application through MCP with
 the canonical `urn:ietf:params:oauth:grant-type:device_code` and `refresh_token`
-grants. The current application contract still requires a redirect URI even though
-device code does not use it; register a clearly inert synthetic URI. Then use the
-returned `deviceAuthorizationEndpoint` and `issuer`, never a reconstructed URL.
+grants, no secret, and `redirectUris: []`. Device authorization has no callback, so do
+not invent one. If the same registration also includes `authorization_code`, it is a
+mixed application and must instead register at least one real, exact callback URI.
+Then use the returned `deviceAuthorizationEndpoint` and `issuer`, never a
+reconstructed URL.
 
 The application under test calls
 `POST /<tenant-guid>/oauth2/v2.0/devicecode`, receives a 900-second lifetime and

@@ -94,9 +94,9 @@ confidential client's returned secret only in memory or a test secret store and 
 it exactly once. For a public client it requires `clientType: "public"`, omits
 `clientSecret`, rejects `client_credentials`, and requires the response to omit the
 secret. It treats public refresh tokens as bearer credentials rather than as proof of
-client authentication. The shared contract still requires at least one redirect URI
-for a device-only Entra application; the skill uses a clearly inert synthetic URI and
-does not claim the device flow calls it.
+client authentication. For a device-only Entra public application the skill sends
+`redirectUris: []` and does not invent a callback. If `authorization_code` is also
+registered, the skill requires the real, exact callback URI used by that mixed flow.
 
 For the MSAL and Auth JS log claims, it parses exact exercised fields as `[REDACTED]`
 and checks raw, `encodeURIComponent`, and URL-form-encoded credential/token

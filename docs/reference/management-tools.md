@@ -877,6 +877,42 @@ invented HTTP path.
           }
         }
       }
+    },
+    {
+      "else": {
+        "properties": {
+          "redirectUris": {
+            "minItems": 1
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "clientType": {
+            "const": "public"
+          },
+          "grantTypes": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "urn:ietf:params:oauth:grant-type:device_code"
+                }
+              },
+              {
+                "not": {
+                  "contains": {
+                    "const": "authorization_code"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "clientType",
+          "grantTypes"
+        ]
+      }
     }
   ],
   "properties": {
@@ -951,7 +987,6 @@ invented HTTP path.
         "type": "string"
       },
       "maxItems": 50,
-      "minItems": 1,
       "type": "array"
     }
   },
@@ -974,6 +1009,44 @@ invented HTTP path.
   "additionalProperties": false,
   "properties": {
     "data": {
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "redirectUris": {
+                "minItems": 1
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "clientType": {
+                "const": "public"
+              },
+              "grantTypes": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "const": "urn:ietf:params:oauth:grant-type:device_code"
+                    }
+                  },
+                  {
+                    "not": {
+                      "contains": {
+                        "const": "authorization_code"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "required": [
+              "clientType",
+              "grantTypes"
+            ]
+          }
+        }
+      ],
       "oneOf": [
         {
           "additionalProperties": false,
@@ -1040,7 +1113,6 @@ invented HTTP path.
                 "type": "string"
               },
               "maxItems": 50,
-              "minItems": 1,
               "type": "array"
             }
           },
@@ -1118,7 +1190,6 @@ invented HTTP path.
                 "type": "string"
               },
               "maxItems": 50,
-              "minItems": 1,
               "type": "array"
             }
           },

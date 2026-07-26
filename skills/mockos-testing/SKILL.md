@@ -122,9 +122,10 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
    it only on creation.
    For `public`, pass `clientType: "public"`, omit `clientSecret`, reject
    `client_credentials`, and require the response to omit the secret. Never fabricate
-   an empty placeholder secret. The current shared contract still requires a
-   non-empty redirect URI list for a device-only Entra application; use a clearly
-   inert synthetic URI and do not claim the device flow calls it.
+   an empty placeholder secret. For a device-only Entra application, pass
+   `redirectUris: []` and do not invent a callback URI. If the registration includes
+   `authorization_code`, including a mixed code/device application, require at least
+   one real, exact callback URI used by that flow.
    For SDK 1.29 discovery, require the strict tools-list input to keep defaulted fields
    optional and expose a Draft-7 `if`/`then` public branch that forbids `clientSecret`
    and narrows grants. Require exact public/confidential output branches, with no
@@ -337,8 +338,8 @@ For a bounded Entra public-device follow-on:
 
 1. Create a separate `clientType: "public"` application with the canonical
    `urn:ietf:params:oauth:grant-type:device_code` and `refresh_token` grants, no
-   secret, and one inert synthetic redirect URI required by the shared registration
-   contract.
+   secret, and `redirectUris: []`. A mixed registration that also includes
+   `authorization_code` must instead provide the real callback URI used by that flow.
 2. Start device authorization at the returned
    `/<tenant>/oauth2/v2.0/devicecode` endpoint. Require `expires_in: 900`,
    `interval: 5`, an owned clean `/devicelogin` verification URI, and no

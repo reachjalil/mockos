@@ -1265,6 +1265,42 @@
                     }
                   }
                 }
+              },
+              {
+                "else": {
+                  "properties": {
+                    "redirectUris": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "clientType": {
+                      "const": "public"
+                    },
+                    "grantTypes": {
+                      "allOf": [
+                        {
+                          "contains": {
+                            "const": "urn:ietf:params:oauth:grant-type:device_code"
+                          }
+                        },
+                        {
+                          "not": {
+                            "contains": {
+                              "const": "authorization_code"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "clientType",
+                    "grantTypes"
+                  ]
+                }
               }
             ],
             "properties": {
@@ -1339,7 +1375,6 @@
                   "type": "string"
                 },
                 "maxItems": 50,
-                "minItems": 1,
                 "type": "array"
               }
             },
@@ -1354,6 +1389,44 @@
             "additionalProperties": false,
             "properties": {
               "data": {
+                "allOf": [
+                  {
+                    "else": {
+                      "properties": {
+                        "redirectUris": {
+                          "minItems": 1
+                        }
+                      }
+                    },
+                    "if": {
+                      "properties": {
+                        "clientType": {
+                          "const": "public"
+                        },
+                        "grantTypes": {
+                          "allOf": [
+                            {
+                              "contains": {
+                                "const": "urn:ietf:params:oauth:grant-type:device_code"
+                              }
+                            },
+                            {
+                              "not": {
+                                "contains": {
+                                  "const": "authorization_code"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "clientType",
+                        "grantTypes"
+                      ]
+                    }
+                  }
+                ],
                 "oneOf": [
                   {
                     "additionalProperties": false,
@@ -1420,7 +1493,6 @@
                           "type": "string"
                         },
                         "maxItems": 50,
-                        "minItems": 1,
                         "type": "array"
                       }
                     },
@@ -1498,7 +1570,6 @@
                           "type": "string"
                         },
                         "maxItems": 50,
-                        "minItems": 1,
                         "type": "array"
                       }
                     },

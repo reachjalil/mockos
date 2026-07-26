@@ -80,8 +80,9 @@ request-derived `/<tenant-guid>/oauth2/v2.0/devicecode` endpoint, with activatio
 `/devicelogin`. Create a separate `clientType: "public"` application through
 management MCP, register the canonical
 `urn:ietf:params:oauth:grant-type:device_code` and `refresh_token` grants, omit a
-secret, and retain one inert synthetic redirect URI because the current application
-contract still requires registration even though this flow does not use it.
+secret, and send `redirectUris: []`. Device authorization has no callback. A mixed
+registration that also includes `authorization_code` must instead supply the real,
+exact callback URI used by the code flow.
 
 The device response has a 900-second lifetime and five-second polling interval, omits
 `verification_uri_complete`, and requires the seeded username/password for both

@@ -210,15 +210,17 @@ try {
     environmentId,
     name: "Pinned MSAL Node public device client",
     clientType: "public",
-    redirectUris: ["https://client.example.test/mockos-msal-device-unused"],
+    redirectUris: [],
     grantTypes: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
     appRoles: [],
     groupClaimsMode: "none",
   });
   assert(
     deviceApplication.clientType === "public" &&
-      deviceApplication.clientSecret === undefined,
-    "The MSAL device application was not a secret-free public client."
+      deviceApplication.clientSecret === undefined &&
+      Array.isArray(deviceApplication.redirectUris) &&
+      deviceApplication.redirectUris.length === 0,
+    "The MSAL device application was not a redirect-free, secret-free public client."
   );
   const deviceClientId = requireString(
     deviceApplication.clientId,

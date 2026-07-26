@@ -214,7 +214,7 @@ Create a second application through MCP with:
 ```json
 {
   "clientType": "public",
-  "redirectUris": ["https://client.example.test/mockos-msal-device-unused"],
+  "redirectUris": [],
   "grantTypes": [
     "urn:ietf:params:oauth:grant-type:device_code",
     "refresh_token"
@@ -222,10 +222,11 @@ Create a second application through MCP with:
 }
 ```
 
-The application contract still requires a redirect URI even though this device flow
-never redirects to it. Use an inert synthetic URI, keep it registered for contract
-compatibility, and do not expose a production callback. The canonical discovery and
-registration grant is the RFC URN; MSAL Node 5.4.2 sends
+This separate public registration is device-only, so it has no callback and must not
+invent one. Keep `redirectUris: []`. If you add `authorization_code` to the same
+application, it becomes a mixed registration and must include the real callback URI
+used by that flow. The canonical discovery and registration grant is the RFC URN;
+MSAL Node 5.4.2 sends
 `grant_type=device_code` on the token wire, which mockOS normalizes internally.
 
 Configure `PublicClientApplication` with the same returned authority and host-only
@@ -331,7 +332,8 @@ attempts the same environment cleanup if a provider assertion fails.
 - If code redemption fails, confirm the redirect URI, scopes, authorization code, and
   PKCE verifier belong to the same attempt. Codes are short-lived and one-time.
 - If device creation fails, require a public application with the RFC device grant and
-  no secret. Keep the inert registered redirect URI even though it is unused.
+  no secret. Keep `redirectUris: []` for a device-only registration; add a real
+  callback URI only if the registration also includes `authorization_code`.
 - If activation fails, submit the exact user code plus a seeded synthetic username and
   password. Denial is credential-gated too.
 - If MSAL reports a post-request failure after `slow_down`, restart the disposable

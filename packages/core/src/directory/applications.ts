@@ -21,6 +21,7 @@ export type OAuthGrantType =
   | "refresh_token"
   | "client_credentials"
   | "urn:ietf:params:oauth:grant-type:device_code";
+const deviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code" as const;
 
 export type GroupClaimsMode = "none" | "security" | "all";
 
@@ -99,9 +100,20 @@ const toApplicationSummary = (row: ApplicationRow): ApplicationSummary => {
   });
 };
 
-const validateRedirectUris = (redirectUris: readonly string[]): string[] => {
-  if (redirectUris.length === 0)
-    throw new Error("At least one redirect URI is required.");
+const validateRedirectUris = (
+  redirectUris: readonly string[],
+  clientType: OAuthClientType,
+  grantTypes: readonly OAuthGrantType[]
+): string[] => {
+  const allowsEmptyRedirectUris =
+    clientType === "public" &&
+    grantTypes.includes(deviceCodeGrantType) &&
+    !grantTypes.includes("authorization_code");
+  if (redirectUris.length === 0 && !allowsEmptyRedirectUris) {
+    throw new Error(
+      "At least one redirect URI is required unless a public device-only application excludes authorization_code."
+    );
+  }
   for (const value of redirectUris) new URL(value);
   return [...new Set(redirectUris)];
 };
@@ -133,13 +145,19 @@ export class ApplicationRepository {
     if (clientSecret !== undefined && clientSecret.length < 8) {
       throw new Error("Client secret is too short.");
     }
-    const redirectUris = validateRedirectUris(input.redirectUris);
     const grantTypes = [
-      ...new Set(input.grantTypes ?? ["authorization_code", "refresh_token"]),
+      ...new Set<OAuthGrantType>(
+        input.grantTypes ?? ["authorization_code", "refresh_token"]
+      ),
     ];
     if (clientType === "public" && grantTypes.includes("client_credentials")) {
       throw new Error("Public OAuth clients cannot use client_credentials.");
     }
+    const redirectUris = validateRedirectUris(
+      input.redirectUris,
+      clientType,
+      grantTypes
+    );
     const now = this.#clock.now().toISOString();
     this.#store.run(
       `INSERT INTO applications (

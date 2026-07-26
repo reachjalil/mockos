@@ -104,14 +104,21 @@ const setup = async (options: {
     displayName: "Ada Lovelace",
   });
   const clientType = options.clientType ?? "public";
+  const grantTypes = options.grantTypes ?? [deviceGrant, "refresh_token"];
+  const redirectUris =
+    clientType === "public" &&
+    grantTypes.includes(deviceGrant) &&
+    !grantTypes.includes("authorization_code")
+      ? []
+      : ["https://client.example/callback"];
   const application = await applications.create({
     id: "app_device_client",
     name: "Device client",
     clientId: "device-client",
     clientType,
     ...(clientType === "confidential" ? { clientSecret: "device-client-secret" } : {}),
-    redirectUris: ["https://client.example/callback"],
-    grantTypes: options.grantTypes ?? [deviceGrant, "refresh_token"],
+    redirectUris,
+    grantTypes,
     groupClaimsMode: "all",
   });
   const oauth = new OAuthService({
@@ -199,6 +206,81 @@ describe("provider-owned device authorization policy", () => {
 });
 
 describe("Entra device authorization", () => {
+  it("persists empty redirects only for public device-only applications", async () => {
+    const { application, applications } = await setup({});
+    expect(application.redirectUris).toEqual([]);
+    expect(applications.requireByClientId(application.clientId).redirectUris).toEqual(
+      []
+    );
+
+    const invalidRegistrations = [
+      {
+        id: "app_confidential_device",
+        name: "Confidential device client",
+        clientId: "confidential-device-client",
+        clientType: "confidential" as const,
+        clientSecret: "confidential-device-secret",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      },
+      {
+        id: "app_public_code",
+        name: "Public code client",
+        clientId: "public-code-client",
+        clientType: "public" as const,
+        redirectUris: [],
+        grantTypes: ["authorization_code" as const],
+      },
+      {
+        id: "app_public_mixed",
+        name: "Public mixed client",
+        clientId: "public-mixed-client",
+        clientType: "public" as const,
+        redirectUris: [],
+        grantTypes: [
+          "authorization_code" as const,
+          deviceGrant,
+          "refresh_token" as const,
+        ],
+      },
+      {
+        id: "app_public_refresh",
+        name: "Public refresh-only client",
+        clientId: "public-refresh-client",
+        clientType: "public" as const,
+        redirectUris: [],
+        grantTypes: ["refresh_token" as const],
+      },
+    ];
+    for (const registration of invalidRegistrations) {
+      await expect(applications.create(registration)).rejects.toThrow(
+        /At least one redirect URI/
+      );
+      expect(applications.findByClientId(registration.clientId)).toBeUndefined();
+    }
+
+    await expect(
+      applications.create({
+        id: "app_default_confidential_device",
+        name: "Default confidential device client",
+        clientId: "default-confidential-device-client",
+        clientSecret: "default-confidential-device-secret",
+        redirectUris: [],
+        grantTypes: [deviceGrant],
+      })
+    ).rejects.toThrow(/At least one redirect URI/);
+
+    const mixedWithRedirect = await applications.create({
+      id: "app_public_mixed_redirect",
+      name: "Public mixed client with redirect",
+      clientId: "public-mixed-client-with-redirect",
+      clientType: "public",
+      redirectUris: ["https://client.example/callback"],
+      grantTypes: ["authorization_code", deviceGrant, "refresh_token"],
+    });
+    expect(mixedWithRedirect.redirectUris).toEqual(["https://client.example/callback"]);
+  });
+
   it("handles pending, slow-down, approval, denial, expiry, and one-time use", async () => {
     const { application, clock, oauth, store, user } = await setup({});
     const authorization = await createAuthorization(oauth);

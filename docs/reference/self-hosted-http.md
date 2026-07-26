@@ -20,7 +20,7 @@ Exactly **5 routes** are implemented:
 | `seed_identities` | `seed_identities` | `POST /__mockos/v1/environments/{environmentId}/identities:seed` | `200` |
 
 The deterministic
-[OpenAPI 3.0 document](../../packages/openapi/openapi/mockos-management.v1.json)
+[OpenAPI 3.1 document](../../packages/openapi/openapi/mockos-management.v1.json)
 contains the exact request, response, path, and query schemas. The generated
 `@mockos/client` skeleton authorizes only this operation map.
 

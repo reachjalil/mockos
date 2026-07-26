@@ -87,9 +87,10 @@ synthetic secret exactly once. A public registration must explicitly use
 `clientType: "public"`, omit `clientSecret`, and cannot request
 `client_credentials`; it returns no secret. Public code and refresh grants omit a
 secret, public Okta revocation is owner-bound, and introspection remains confidential.
-An Entra device-only public registration must still include one inert synthetic
-redirect URI because the shared application contract requires a non-empty list; the
-device flow does not call it.
+An Entra device-only public registration uses `redirectUris: []`; the device flow has
+no callback and needs no synthetic workaround. Authorization-code and mixed
+authorization-code/device registrations still require at least one real, exact
+callback URI.
 
 After installing dependencies, reproduce the two local official-client paths with:
 
