@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  directoryBaseUrlForEnvironment,
   forwardEnvironmentRequest,
   graphBaseUrlForEnvironment,
   resolveEnvironmentRequest,
@@ -15,6 +16,7 @@ describe("resolveEnvironmentRequest", () => {
       { hostingMode: "path" }
     );
     expect(result).toMatchObject({
+      directoryBaseUrl: `https://mockos.example/e/${environmentId}`,
       environmentId,
       forwardedPath: `/${tenantId}/oauth2/v2.0/authorize`,
       graphBaseUrl: `https://mockos.example/e/${environmentId}/graph/v1.0`,
@@ -55,6 +57,30 @@ describe("resolveEnvironmentRequest", () => {
       forwardedPath: "/activate",
       issuerBase: `https://mockos.example/e/${environmentId}/oauth2/default`,
       provider: "okta",
+    });
+  });
+
+  it("routes Entra device creation and activation through the environment", () => {
+    const deviceCode = resolveEnvironmentRequest(
+      `https://mockos.example/e/${environmentId}/${tenantId}/oauth2/v2.0/devicecode`,
+      { hostingMode: "path" }
+    );
+    expect(deviceCode).toMatchObject({
+      directoryBaseUrl: `https://mockos.example/e/${environmentId}`,
+      environmentId,
+      forwardedPath: `/${tenantId}/oauth2/v2.0/devicecode`,
+      provider: "entra",
+    });
+
+    const activation = resolveEnvironmentRequest(
+      `https://mockos.example/e/${environmentId}/devicelogin?user_code=ABCD2345`,
+      { hostingMode: "path" }
+    );
+    expect(activation).toMatchObject({
+      directoryBaseUrl: `https://mockos.example/e/${environmentId}`,
+      environmentId,
+      forwardedPath: "/devicelogin",
+      provider: "entra",
     });
   });
 
@@ -110,6 +136,34 @@ describe("resolveEnvironmentRequest", () => {
         baseDomain: "id.mockos.live",
       })
     ).toBe(`https://${environmentId}.id.mockos.live/graph/v1.0`);
+    expect(
+      directoryBaseUrlForEnvironment(result, environmentId, {
+        hostingMode: "subdomain",
+        baseDomain: "id.mockos.live",
+      })
+    ).toBe(`https://${environmentId}.id.mockos.live`);
+  });
+
+  it("routes Entra device activation on the environment subdomain", () => {
+    const result = resolveEnvironmentRequest(
+      `https://${environmentId}.id.mockos.live/devicelogin`,
+      { hostingMode: "subdomain", baseDomain: "id.mockos.live" }
+    );
+    expect(result).toMatchObject({
+      directoryBaseUrl: `https://${environmentId}.id.mockos.live`,
+      environmentId,
+      forwardedPath: "/devicelogin",
+      provider: "entra",
+    });
+  });
+
+  it("keeps tenant-scoped Entra protocol routes on the configured Entra host", () => {
+    expect(
+      resolveEnvironmentRequest(
+        `https://${environmentId}.id.mockos.live/${tenantId}/oauth2/v2.0/token`,
+        { hostingMode: "subdomain", baseDomain: "id.mockos.live" }
+      )
+    ).toBeUndefined();
   });
 
   it("resolves mock MCP endpoints without identity-provider metadata", () => {
@@ -250,6 +304,7 @@ describe("resolveEnvironmentRequest", () => {
         method: "POST",
         headers: {
           "x-mockos-env": "attacker-env",
+          "x-mockos-directory-base": "https://attacker.example",
           "x-mockos-graph-base": "https://attacker.example/graph/v1.0",
           "x-mockos-issuer-base": "https://attacker.example",
           "x-mockos-public-path": "/spoofed",
@@ -272,6 +327,9 @@ describe("resolveEnvironmentRequest", () => {
     );
     expect(forwarded.headers.get("x-mockos-public-path")).toBe(
       `/e/${environmentId}/${tenantId}/oauth2/v2.0/token`
+    );
+    expect(forwarded.headers.get("x-mockos-directory-base")).toBe(
+      `https://mockos.example/e/${environmentId}`
     );
     expect(forwarded.headers.get("x-mockos-graph-base")).toBe(
       `https://mockos.example/e/${environmentId}/graph/v1.0`

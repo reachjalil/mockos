@@ -19,6 +19,7 @@ export type EnvironmentLocator =
 
 export type ResolvedIdentityRequest = {
   kind: "identity";
+  directoryBaseUrl?: string;
   environmentId?: string;
   forwardedPath: string;
   graphBaseUrl?: string;
@@ -70,6 +71,9 @@ const classifyPath = (pathname: string) => {
   const first = segments[0];
   if (first && UUID_PATTERN.test(first)) {
     return { provider: "entra" as const, tenantId: first.toLowerCase() };
+  }
+  if (pathname === "/devicelogin") {
+    return { provider: "entra" as const, tenantId: undefined };
   }
   if (
     pathname === "/activate" ||
@@ -164,12 +168,15 @@ const pathModeResolution = (
   if (!classification) return undefined;
   const issuerBase =
     classification.provider === "entra"
-      ? `${publicBase}/${classification.tenantId}/v2.0`
+      ? classification.tenantId
+        ? `${publicBase}/${classification.tenantId}/v2.0`
+        : publicBase
       : classification.provider === "okta"
         ? `${publicBase}/oauth2/default`
         : publicBase;
   return {
     kind: "identity",
+    directoryBaseUrl: publicBase,
     environmentId,
     forwardedPath,
     ...(classification.provider === "entra"
@@ -195,7 +202,9 @@ const subdomainModeResolution = (
   const entraHost = normalizeHost(config.entraHost ?? `login.${baseDomain}`);
   const classification = classifyPath(url.pathname);
   if (hostname === entraHost) {
-    if (classification?.provider !== "entra") return undefined;
+    if (classification?.provider !== "entra" || !classification.tenantId) {
+      return undefined;
+    }
     return {
       kind: "identity",
       forwardedPath: url.pathname,
@@ -232,9 +241,15 @@ const subdomainModeResolution = (
       ...mockLlm,
     };
   }
-  if (!classification || classification.provider === "entra") return undefined;
+  if (
+    !classification ||
+    (classification.provider === "entra" && classification.tenantId)
+  ) {
+    return undefined;
+  }
   return {
     kind: "identity",
+    directoryBaseUrl: url.origin,
     environmentId,
     forwardedPath: url.pathname,
     issuerBase:
@@ -285,6 +300,25 @@ export const graphBaseUrlForEnvironment = (
   return `${new URL(resolution.issuerBase).protocol}//${environmentId}.${baseDomain}/graph/v1.0`;
 };
 
+export const directoryBaseUrlForEnvironment = (
+  resolution: ResolvedEnvironmentRequest,
+  environmentId: string,
+  config: HostResolverConfig
+): string | undefined => {
+  if (resolution.kind !== "identity") return undefined;
+  if (!environmentIdSchema.safeParse(environmentId).success) {
+    throw new Error("A valid environment ID is required for the directory base URL.");
+  }
+  if (config.hostingMode === "path") {
+    return resolution.directoryBaseUrl ?? resolution.publicBase;
+  }
+  const baseDomain = config.baseDomain && normalizeHost(config.baseDomain);
+  if (!baseDomain) {
+    throw new Error("baseDomain is required in subdomain hosting mode.");
+  }
+  return `${new URL(resolution.issuerBase).protocol}//${environmentId}.${baseDomain}`;
+};
+
 export const forwardEnvironmentRequest = (
   request: Request,
   resolution: ResolvedEnvironmentRequest,
@@ -300,6 +334,9 @@ export const forwardEnvironmentRequest = (
   headers.set("x-mockos-public-path", new URL(request.url).pathname);
   if (resolution.kind === "identity") {
     headers.set("x-mockos-issuer-base", resolution.issuerBase);
+    if (resolution.directoryBaseUrl) {
+      headers.set("x-mockos-directory-base", resolution.directoryBaseUrl);
+    }
     if (resolution.graphBaseUrl) {
       headers.set("x-mockos-graph-base", resolution.graphBaseUrl);
     }

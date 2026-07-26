@@ -1,7 +1,7 @@
 # Entra ID behavior
 
-Status: Accepted bounded M3/M5 Entra slices and sampled M6 deployment; bounded MSAL Node 5.4.2 local X/Q qualification added
-Last reviewed: 2026-07-25
+Status: Accepted bounded M3/M5 Entra slices and sampled M6 deployment; bounded MSAL Node 5.4.2 authorization-code and public-device local X/Q qualification added
+Last reviewed: 2026-07-26
 
 mockOS models a tenant-specific Microsoft identity platform authority. In path hosting,
 the target authority is:
@@ -35,15 +35,62 @@ attempt fails with Entra-shaped `invalid_grant` / `AADSTS50057` behavior. This h
 focused core, adapter, and Worker coverage, and the M3 deployed smoke sampled the
 rotation/lifecycle path.
 
+## Public-client device authorization
+
+The current source also implements a bounded Microsoft identity platform device path
+for secret-free public applications:
+
+- discovery exposes `POST /<tenant-guid>/oauth2/v2.0/devicecode`;
+- device authorization returns `device_code`, `user_code`, `verification_uri`,
+  `expires_in: 900`, `interval: 5`, and a human message;
+- Entra deliberately omits `verification_uri_complete`;
+- `GET /devicelogin` renders the activation form, and `POST /devicelogin` accepts an
+  explicit `approve` or `deny` decision only after the supplied synthetic username and
+  password authenticate;
+- the token endpoint accepts MSAL Node 5.4.2's wire
+  `grant_type=device_code` as well as the discovery/registration RFC value
+  `urn:ietf:params:oauth:grant-type:device_code`, normalizing both to the canonical
+  core grant; and
+- polling returns `authorization_pending`, `authorization_declined`,
+  `bad_verification_code`, `expired_token`, or `slow_down` at the implemented
+  boundaries.
+
+Only a `clientType: "public"` registration can start this Entra flow; no client secret
+is accepted or returned. The existing application contract still requires at least one
+registered redirect URI even when a test uses device code only. Use a clearly inert
+synthetic URI and do not expect the device flow to call it. Register the RFC device
+grant plus `refresh_token` when testing rotation.
+
+MSAL Node invokes its device callback once and polls immediately. The mock returns
+`authorization_pending` for that first poll. Polling faster than the current interval
+produces `slow_down` and increases the interval by five seconds; MSAL Node 5.4.2 does
+not retry `slow_down`, so a qualification run must activate after observing the first
+pending poll rather than deliberately triggering the throttle.
+
+Approval prepares tokens and atomically commits device-code consumption with access,
+ID, and refresh-token persistence. A signing, Graph-overage, or persistence failure
+does not burn the code; concurrent successful polls have one winner. The token path
+uses the trusted request-derived Graph base for the 201-group claim-source fallback.
+Entra access and ID tokens receive distinct Microsoft-shaped `uti` values, public
+refresh tokens rotate, and disabling the User revokes both the authorization-code and
+device-flow credential families.
+
+Core, HTTP fixture, mounted Worker, and actual-network MSAL Node 5.4.2 tests qualify
+this bounded path through D/I/S/X/Q locally. There is no hosted Worker or Cloud smoke,
+real-Entra comparison, broad MSAL/version matrix, or production-ready evidence, so
+H/V/P remain open.
+
 ## Pinned MSAL Node client boundary
 
-The current source candidate qualifies one official-client slice through a real local
-HTTPS socket: `@azure/msal-node` 5.4.2 runs as a confidential client against a
+The current source candidate qualifies two coordinated official-client slices through
+one real local HTTPS socket: `@azure/msal-node` 5.4.2 runs a confidential
+authorization-code client and a separate public device client against the same
 tenant-specific mockOS custom authority. The official MCP SDK 1.29.0 first creates,
-seeds, configures, observes, and deletes the disposable environment. MSAL then drives
-authorization URL construction, authorization-code redemption with S256 PKCE, and
-`acquireTokenSilent({ forceRefresh: true })`. After MCP lifecycle disable, another
-forced refresh surfaces `invalid_grant` with `AADSTS50057`.
+seeds, configures, observes, and deletes the disposable environment. MSAL drives
+authorization URL construction, authorization-code redemption with S256 PKCE,
+`acquireTokenByDeviceCode`, and a forced refresh for each account. After MCP lifecycle
+disable, both clients' next forced refresh surface `invalid_grant`; the confidential
+path also asserts `AADSTS50057`.
 
 The client must use the exact `issuer` returned by `get_wellknown_urls`, trust the
 authority host explicitly, and select generic OIDC behavior:
@@ -69,11 +116,18 @@ standard Node trust, then independently requires an HTTPS `localhost` origin and
 same nonce. TLS verification remains enabled, the temporary mode-`0600` CA file is
 removed during cleanup, and no alternate-certificate rejection is qualified.
 
-The exact provider sequence—discovery, login GET/POST, successful code redemption,
-successful forced refresh, and rejected post-disable forced refresh—is asserted from
-the durable request log. The same tranche closes a credential-evidence gap by redacting
-OAuth passwords, client secrets, authorization codes, PKCE verifiers, token response
-fields, and redirect `Location` query/fragment secrets before persistence.
+The exact 14-request provider sequence covers confidential discovery, login GET/POST,
+successful code redemption and refresh, separate public-client discovery, device
+authorization, immediate pending poll, activation GET/POST, successful device
+redemption, one successful device refresh, and one lifecycle-rejected refresh for each
+client. The seven token responses are four 200s, one `authorization_pending`, and two
+lifecycle 400s. A single ownership-checked `/health` request bridges the local Wrangler
+loopback during MSAL's five-second wait; it is neither a provider request nor a retry.
+Durable evidence redacts OAuth passwords, client secrets, authorization/device/user
+codes, PKCE verifiers, activation credentials, token response fields, the repeated
+device message, and redirect `Location` query/fragment secrets. The actual-network
+harness rejects raw, URI-encoded, and form-encoded representations of every exercised
+credential and token.
 
 Normal completion deletes the MCP environment and stops the client, Wrangler process
 group, and temporary state. A separate local cleanup probe interrupts a ready parent
@@ -140,14 +194,18 @@ Graph require a non-empty synthetic Bearer value for protocol testing. That chec
 not validate a Microsoft access token, and the MCP/control Access Key must never be
 used as the directory credential.
 
-The [OIDC fixture corpus](../../packages/testkit/fixtures/entra/oidc) records additional
-documented behavior, including client credentials, device flow, UserInfo, and selected
-AADSTS cases, plus eight implemented M6 token-edge fixtures executed through an
-authenticated [Worker fixture runner](../../apps/worker/test/token-fixtures.integration.test.ts).
+The [OIDC fixture corpus](../../packages/testkit/fixtures/entra/oidc) contains 38
+source-reviewed cases: 25 documented targets and 13 implemented cases. Fixtures 23–27
+execute device start, pending, credential-gated denial, unknown-code, and deterministic
+expiry behavior through a core-backed HTTP executor. Mounted Worker coverage exercises
+creation, pending/`slow_down`, credential-gated denial, approval/token/refresh/
+consumption, and unknown-code handling; deterministic expiry is not mounted. Eight M6
+token-edge fixtures execute through an authenticated
+[Worker fixture runner](../../apps/worker/test/token-fixtures.integration.test.ts).
 A fixture's own status controls its evidence level; a documented case is not promoted
 by adjacency to an implemented case. The separate [SCIM corpus](../../packages/testkit/fixtures/entra/scim) contains
 source-reviewed source-implemented cases but is not a live capture or a corpus-wide Worker
-conformance run. Client credentials, device flow, UserInfo, exact Microsoft UI,
+conformance run. Client credentials, UserInfo, exact Microsoft UI,
 localization, risk policy, Conditional Access, and tenant administration remain outside
 the implemented boundary.
 
@@ -169,14 +227,15 @@ case and is not verified-live Entra ID evidence.
 
 ## SDK note
 
-The only qualified SDK is `@azure/msal-node` 5.4.2 in the confidential-client,
-authorization-code + S256 PKCE, forced-refresh flow above. It requires the explicit
-request-derived authority, `knownAuthorities: [new URL(authority).host]`, and
+The only qualified SDK is `@azure/msal-node` 5.4.2 in the coordinated
+confidential-client authorization-code + S256 PKCE and public-client device-code flows
+above. Both require the explicit request-derived authority,
+`knownAuthorities: [new URL(authority).host]`, and
 `system.protocolMode: ProtocolMode.OIDC`. This local Wrangler proof does not qualify
 workers.dev or Cloud deployment behavior.
 
 Do not use `common`, `organizations`, or `consumers` as proof of multi-tenant parity;
-deterministic mock tenants are the supported test unit. `@azure/msal-browser`, device
-and client-credential grants, public-client interactive helpers, on-behalf-of,
+deterministic mock tenants are the supported test unit. `@azure/msal-browser`,
+client-credential grants, public-client browser helpers, on-behalf-of,
 Microsoft Graph SDK calls, and SDKs that require Microsoft-owned hosts or
 unimplemented Graph operations remain outside the compatibility claim.

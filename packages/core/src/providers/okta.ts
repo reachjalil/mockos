@@ -278,4 +278,10 @@ export const oktaProfile: ProviderProfile = {
     accessTokenIdPrefix: "AT.",
     idTokenIdPrefix: "ID.",
   },
+  deviceAuthorizationPolicy: {
+    lifetimeSeconds: 600,
+    intervalSeconds: 5,
+    includeVerificationUriComplete: true,
+    allowedClientTypes: ["public", "confidential"],
+  },
 };

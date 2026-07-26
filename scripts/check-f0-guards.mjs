@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 const root = process.cwd();
@@ -11,7 +11,7 @@ const expectedPins = new Map([
   ["@cloudflare/codemode", "0.4.3"],
   ["agents", "0.17.4"],
   ["@modelcontextprotocol/sdk", "1.29.0"],
-  ["wrangler", "4.112.0"],
+  ["wrangler", "4.114.0"],
 ]);
 
 for (const [name, version] of expectedPins) {

@@ -320,6 +320,13 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   provider-shaped data disclosure. Deactivating lifecycle transitions and SCIM
   password changes remove outstanding Authn capabilities atomically so reactivation
   cannot restore them.
+- Entra device authorization accepts only a known public application. Both approve
+  and deny at `/devicelogin` authenticate the seeded synthetic username/password
+  before changing status; denial is not an unauthenticated invalidation primitive.
+  Successful polling prepares signed tokens first, then rechecks approval and User
+  lifecycle and atomically consumes the device code with access/ID/refresh
+  persistence. Signing, trusted Graph-overage construction, or persistence failure
+  before commit does not burn the code, and concurrent polls have one winner.
 - Structured request-log capture recursively redacts password, passcode, secret, token,
   credential, code, code-verifier, client-assertion, API-key, private-key, and related
   form/JSON keys. It redacts sensitive authorization, proxy-authorization,
@@ -359,8 +366,9 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   most 201 IDs. SCIM additionally bounds filter tokens/depth/nodes and PATCH
   operations/depth/nodes.
 - The edge removes every caller-supplied `x-mockos-*` header before adding trusted
-  issuer, environment, public-path, and Graph-base routing context. Entra group-overage
-  endpoints are derived from that context and never from a caller-provided URL.
+  issuer, directory-base, environment, public-path, and Graph-base routing context.
+  Entra device verification URLs and group-overage endpoints are derived from that
+  context and never from a caller-provided URL.
 - Request-log capture redacts authenticated control credentials. A logging failure is
   not allowed to make an otherwise valid identity-protocol response unavailable.
 - The MSAL and Okta Auth JS wrappers configure one shared local official-client
@@ -405,10 +413,13 @@ storage, retention, concurrency, and denial assertion above.
 
 The [MSAL Node local record](../evidence/entra-msal-node-local-qualification.md)
 separately exercises a real local HTTPS socket with pinned `@azure/msal-node` 5.4.2
-and the official MCP SDK. The exact code/refresh/disabled-refresh sequence passes, and
-the harness plus focused lifecycle Worker test prove that its password, client secret,
-authorization code, PKCE verifier, issued tokens, and redirect code are absent from
-durable evidence. This is local S/X/Q evidence, not H, a penetration test, V, or P.
+and the official MCP SDK. Its confidential code/refresh and public
+device/activation/refresh paths both pass before lifecycle rejection. The harness and
+focused Worker tests prove that password, client secret, authorization/device/user
+codes, repeated device message, PKCE verifier, issued tokens, activation credentials,
+and redirect code are structurally redacted and absent in raw, URI-encoded, or
+form-encoded representations. This is bounded local S/X/Q evidence, not arbitrary
+encoding classification, H, a penetration test, V, or P.
 
 The [Okta Auth JS local record](../evidence/okta-auth-js-local-qualification.md)
 separately exercises a real local HTTPS socket with pinned

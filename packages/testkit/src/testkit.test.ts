@@ -75,7 +75,7 @@ describe("conformance fixtures", () => {
     expect(fixtures.every(({ status }) => status === "implemented")).toBe(true);
   });
 
-  it("loads documented Entra OIDC fixtures plus implemented M6 token edges", async () => {
+  it("loads documented Entra OIDC fixtures plus implemented device and M6 token edges", async () => {
     const directory = fileURLToPath(new URL("../fixtures/entra/oidc", import.meta.url));
     const files = (await readdir(directory))
       .filter((file) => file.endsWith(".json"))
@@ -88,6 +88,11 @@ describe("conformance fixtures", () => {
     expect(
       fixtures.filter(({ status }) => status === "implemented").map(({ name }) => name)
     ).toEqual([
+      "Start device authorization",
+      "Device authorization pending",
+      "Device authorization declined",
+      "Invalid device code",
+      "Expired device code",
       "Deterministic expired token",
       "Deterministic wrong-audience token",
       "Deterministic not-yet-valid token",

@@ -12,6 +12,7 @@ import {
 } from "@mockos/llm-mock";
 import type { EnvironmentDurableObject } from "./environment-do";
 import {
+  directoryBaseUrlForEnvironment,
   forwardEnvironmentRequest,
   graphBaseUrlForEnvironment,
   type HostResolverConfig,
@@ -212,6 +213,11 @@ export const routeEnvironmentRequest = async (
       ? resolution
       : {
           ...resolution,
+          directoryBaseUrl: directoryBaseUrlForEnvironment(
+            resolution,
+            environmentId,
+            config
+          ),
           environmentId,
           graphBaseUrl: graphBaseUrlForEnvironment(resolution, environmentId, config),
         };

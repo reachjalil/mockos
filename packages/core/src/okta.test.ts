@@ -838,10 +838,12 @@ describe("Okta device authorization", () => {
       "urn:ietf:params:oauth:grant-type:device_code",
     ]);
     const issuer = "https://id.mockos.test/e/acme/oauth2/default";
+    const directoryBaseUrl = "https://id.mockos.test/e/acme";
     const authorization = await engine.oauth.createDeviceAuthorization({
       clientId: application.clientId,
       scope: "openid profile offline_access",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     expect(authorization).toMatchObject({
       expiresIn: 600,
@@ -884,6 +886,7 @@ describe("Okta device authorization", () => {
       clientId: application.clientId,
       scope: "openid",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     engine.oauth.denyDeviceAuthorization(denied.userCode);
     await expect(
@@ -898,6 +901,7 @@ describe("Okta device authorization", () => {
       clientId: application.clientId,
       scope: "openid",
       issuerBase: issuer,
+      directoryBaseUrl,
     });
     clock.advance(601_000);
     await expect(

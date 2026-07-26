@@ -332,6 +332,7 @@ describe("Okta HTTP adapter", () => {
     });
     expect(engine.createDeviceAuthorization).toHaveBeenCalledWith({
       clientId: "0oaMockClient",
+      directoryBaseUrl: "https://id.mockos.test/e/acme",
       issuerBase: issuer,
       scope: "openid profile offline_access",
     });

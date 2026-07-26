@@ -1,8 +1,8 @@
 # Hosting modes
 
 Status: Bounded M6 path-mode sample deployed; F1 and partial OpenAI/Anthropic F2
-routes are source-only; MSAL/Auth JS path authorities are qualified only over local
-HTTPS; wildcard/subdomain live mode remains open
+routes are source-only; MSAL code/public-device and Auth JS path authorities are
+qualified only over local HTTPS; wildcard/subdomain live mode remains open
 Last reviewed: 2026-07-26
 
 ## Path mode
@@ -22,6 +22,8 @@ Provider traffic is routed beneath an environment segment. Current examples are:
 
 - Entra discovery:
   `/e/<env>/<tenant-guid>/v2.0/.well-known/openid-configuration`
+- Entra public device authorization and activation:
+  `/e/<env>/<tenant-guid>/oauth2/v2.0/devicecode` and `/e/<env>/devicelogin`
 - Entra Microsoft Graph reads:
   `/e/<env>/graph/v1.0/users`
 - Okta authorization:
@@ -54,6 +56,11 @@ non-empty synthetic SSWS value. Those directory checks validate scheme and prese
 not a real provider token. Never send the MCP/control Access Key, real identities, or
 production credentials to these endpoints.
 
+The bounded Entra device route accepts public clients only. It returns an
+environment-owned `/devicelogin` URI, and both approval and denial require the seeded
+synthetic username/password. The edge strips caller-supplied `x-mockos-*` values and
+supplies the trusted directory and Graph bases used for activation and token claims.
+
 The F1 mock MCP route accepts no credential or the separate Bearer Mock Credential
 configured for that slug. It negotiates MCP `2025-11-25` over POST-only Streamable
 HTTP. The path resolver and local Worker integration are source evidence only; neither
@@ -76,7 +83,8 @@ and cleanup checks recorded for both live origins are in the M3 and latest
 [M6 workers.dev smoke evidence](./evidence/m6-workers-dev-smoke.md).
 
 Two pinned clients separately pass path-mode authorities over an owned local Wrangler
-HTTPS socket: `@azure/msal-node` 5.4.2 as an Entra confidential client and
+HTTPS socket: `@azure/msal-node` 5.4.2 as an Entra confidential authorization-code
+client plus a separate public device client, and
 `@okta/okta-auth-js` 8.0.1 as an Okta public client. These are local D/I/S/X/Q records,
 not H for either workers.dev origin. See the
 [MSAL Node](./evidence/entra-msal-node-local-qualification.md) and
@@ -102,6 +110,7 @@ For Entra, the request-derived OIDC issuer is
 `https://login.<base-domain>/<tenant-guid>/v2.0`, while directory URLs remain scoped to
 the resolved environment:
 
+- `https://<environment>.<base-domain>/devicelogin`
 - `https://<environment>.<base-domain>/scim/v2`
 - `https://<environment>.<base-domain>/graph/v1.0`
 - `https://<environment>.<base-domain>/mcp-mock/<slug>`

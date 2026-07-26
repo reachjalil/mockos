@@ -87,8 +87,9 @@ Keep every returned ID and use an explicit `environmentId` in saved automation:
 2. Call `seed_identities` with only synthetic Users, Groups, memberships, passwords,
    roles, and lifecycle inputs.
 3. Call `create_application` with the exact redirect URIs and grant types the
-   application under test expects. Keep its display-once synthetic client secret out
-   of logs and reports.
+   application under test expects. A confidential application returns a display-once
+   synthetic client secret; keep it out of logs and reports. A public application must
+   use `clientType: "public"`, omit the secret, and receive no secret.
 4. Call `get_wellknown_urls` with the explicit environment ID. Configure the
    application from the returned issuer, discovery, OAuth/OIDC, JWKS, SCIM, and
    provider-specific directory URLs. Never reconstruct an absolute URL from memory,
@@ -105,6 +106,28 @@ Keep every returned ID and use an explicit `environmentId` in saved automation:
 `set_current_environment` is useful in an interactive session, but its cursor does not
 cross transports. An explicit environment ID makes automation reviewable and prevents
 a stale session cursor from selecting the wrong test state.
+
+### Entra public-device variant
+
+For a bounded Entra device test, create a separate public application through MCP with
+the canonical `urn:ietf:params:oauth:grant-type:device_code` and `refresh_token`
+grants. The current application contract still requires a redirect URI even though
+device code does not use it; register a clearly inert synthetic URI. Then use the
+returned `deviceAuthorizationEndpoint` and `issuer`, never a reconstructed URL.
+
+The application under test calls
+`POST /<tenant-guid>/oauth2/v2.0/devicecode`, receives a 900-second lifetime and
+five-second interval without `verification_uri_complete`, and sends the user to
+`/devicelogin`. Both approve and deny require the seeded synthetic username/password.
+The token endpoint accepts pinned MSAL Node 5.4.2's short wire
+`grant_type=device_code` while the management/discovery contract remains the RFC URN.
+After one immediate `authorization_pending` poll, activate, redeem, force a public
+refresh, disable the User through MCP, and require the next refresh to fail with
+`invalid_grant`.
+
+Use [the MSAL Node guide](../quickstarts/entra-msal-node.md) for exact callback,
+error, `slow_down`, redaction, and evidence rules. That flow is local D/I/S/X/Q only;
+it has no hosted, live-provider, or production-ready result.
 
 ## Start from the source CLI
 

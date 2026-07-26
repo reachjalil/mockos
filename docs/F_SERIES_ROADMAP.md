@@ -225,12 +225,12 @@ the legacy transport.
 
 ### Code Mode and Dynamic Workers
 
-The reviewed package baseline on July 22, 2026 is:
+The reviewed package baseline on July 26, 2026 is:
 
 - `@cloudflare/codemode` `0.4.3` (experimental);
 - `agents` `0.17.4`;
 - `@modelcontextprotocol/sdk` `1.29.0`;
-- repository pin `wrangler` `4.112.0`, while `4.113.0` is published.
+- repository pin `wrangler` `4.114.0`.
 
 F0 records exact pins after M2. Upgrades require wrapper tests and a non-blocking
 canary before the catalog changes.

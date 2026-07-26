@@ -1,7 +1,8 @@
 # mockOS testing skill
 
 Status: Accepted identity workflow plus bounded M6, F1 mock-MCP, F2
-mock-OpenAI/Anthropic, and MSAL/Okta Auth JS local official-client guidance
+mock-OpenAI/Anthropic, and MSAL authorization-code/public-device plus Okta Auth JS
+local official-client guidance
 Last reviewed: 2026-07-26
 
 The repository skill at [skills/mockos-testing](../skills/mockos-testing/SKILL.md)
@@ -16,9 +17,10 @@ with no secret.
 The workflow covers the accepted M5 slice plus bounded M6 recipes:
 
 - authorization code with required S256 PKCE for Entra ID or Okta;
-- bounded local official-client recipes for `@azure/msal-node` 5.4.2 as a confidential
-  Entra client and `@okta/okta-auth-js` 8.0.1 as a public Okta client, both using MCP
-  for setup, observation, lifecycle, and cleanup over owned Wrangler HTTPS;
+- bounded local official-client recipes for `@azure/msal-node` 5.4.2 as one
+  confidential authorization-code and one separate public device Entra client, plus
+  `@okta/okta-auth-js` 8.0.1 as a public Okta client, all using MCP for setup,
+  observation, lifecycle, and cleanup over owned Wrangler HTTPS;
 - SDK 1.29 tools-list verification that the Draft-7 public/confidential input
   conditional and exact result branches match runtime validation;
 - rotating refresh grants with scope narrowing, replay cautions, and provider-correct
@@ -28,6 +30,9 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
   postcondition, while introspection remains confidential-client-only;
 - Okta device authorization, activation, introspection, and revocation within the
   implemented authorization-server boundary;
+- Entra public device authorization with a 900-second/five-second policy, no complete
+  verification URI, credential-gated approve and deny, MSAL's immediate pending poll,
+  public refresh rotation, lifecycle rejection, and strict device evidence redaction;
 - SCIM discovery and versioned synthetic User/Group CRUD/PATCH with weak ETags;
 - bounded Entra Graph reads and Okta Users/Groups/lifecycle API checks using separate
   test-only credential schemes;
@@ -89,11 +94,15 @@ confidential client's returned secret only in memory or a test secret store and 
 it exactly once. For a public client it requires `clientType: "public"`, omits
 `clientSecret`, rejects `client_credentials`, and requires the response to omit the
 secret. It treats public refresh tokens as bearer credentials rather than as proof of
-client authentication.
+client authentication. The shared contract still requires at least one redirect URI
+for a device-only Entra application; the skill uses a clearly inert synthetic URI and
+does not claim the device flow calls it.
 
-For the Auth JS log claim, it parses exact exercised fields as `[REDACTED]` and checks
-raw, `encodeURIComponent`, and URL-form-encoded credential/token representations. The
-skill does not promote that bounded proof to arbitrary-encoding classification. The
+For the MSAL and Auth JS log claims, it parses exact exercised fields as `[REDACTED]`
+and checks raw, `encodeURIComponent`, and URL-form-encoded credential/token
+representations. The MSAL path includes device/user codes, the repeated device
+message, activation credentials, and device tokens. The skill does not promote that
+bounded proof to arbitrary-encoding classification. The
 shared official-client parent and cleanup verifier also reject inherited
 `NODE_TLS_REJECT_UNAUTHORIZED=0`, use distinct provider/inspector ports, and require
 both ports to be released.

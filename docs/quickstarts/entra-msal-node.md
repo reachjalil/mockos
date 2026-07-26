@@ -1,20 +1,21 @@
-# Test Entra authorization code with MSAL Node
+# Test Entra authorization code and public device code with MSAL Node
 
-Status: Bounded `@azure/msal-node` 5.4.2 local actual-network and official-client qualification; no hosted, live-provider, or production-readiness claim
+Status: Bounded `@azure/msal-node` 5.4.2 confidential-code and public-device local actual-network qualification; no hosted, live-provider, or production-readiness claim
 Last reviewed: 2026-07-26
 
-Use this guide to qualify one exact application path: a confidential MSAL Node client
-uses a deterministic mockOS Entra tenant, authorization code with S256 PKCE, and the
-MSAL token cache for a forced refresh. Management stays on MCP; the application under
-test sends only provider traffic to the URLs returned by mockOS.
+Use this guide to qualify one exact combined application path. A confidential MSAL
+Node client uses authorization code with S256 PKCE, while a separate secret-free
+public client uses device code against the same deterministic mockOS Entra tenant.
+Both use the MSAL token cache for forced refresh. Management stays on MCP; the
+application under test sends only provider traffic to the URLs returned by mockOS.
 
 The qualification level for this exact slice is:
 
 | Level | Result | Exact meaning |
 | --- | --- | --- |
-| Designed (D) | Yes | The custom-authority confidential-client flow and its negative boundary are explicit. |
-| Implemented (I) | Yes | The public Worker, local acceptance client, and durable OAuth log redaction implement the flow. |
-| Source-tested (S) | Yes | Focused Worker redaction/lifecycle coverage passes locally. |
+| Designed (D) | Yes | The custom-authority confidential-code and public-device flows and their negative boundaries are explicit. |
+| Implemented (I) | Yes | Core policy, HTTP/Worker routes, local acceptance client, atomic device consumption, and durable OAuth/device redaction implement the flow. |
+| Source-tested (S) | Yes | Focused core, core-backed fixture, HTTP, Worker, redaction, lifecycle, and concurrency coverage passes locally; deterministic expiry remains an HTTP-fixture boundary rather than a mounted Worker case. |
 | Integration-tested (X) | Yes | The exact clients traverse an actual HTTPS socket into a local `wrangler dev` Worker and its Durable Objects. |
 | SDK/client-qualified (Q) | Yes | `@azure/msal-node` 5.4.2 and `@modelcontextprotocol/sdk` 1.29.0 execute the bounded flow. |
 | Hosted-smoke (H) | No | No exact remote Worker version or Cloud endpoint has run this client. |
@@ -76,15 +77,21 @@ A successful run ends with one JSON object similar to:
 ```json
 {
   "ok": true,
-  "claim": "msal-node-custom-authority-authorization-code-pkce",
+  "claim": "msal-node-custom-authority-authorization-code-pkce-and-public-device-code",
   "msalVersion": "5.4.2",
   "protocolMode": "OIDC",
   "networkBoundary": "wrangler-dev-https",
   "managementInterface": "mcp-streamable-http",
   "environmentDeleted": true,
   "providerSequenceMatched": 1,
-  "tokenStatuses": [200, 200, 400],
-  "lifecycleErrorCode": "invalid_grant"
+  "tokenStatuses": [200, 200, 200, 200, 400, 400, 400],
+  "lifecycleErrorCode": "invalid_grant",
+  "deviceCallbackCount": 1,
+  "devicePendingPolls": 1,
+  "deviceActivationStatus": 200,
+  "deviceRefreshStatus": 200,
+  "deviceLifecycleErrorCode": "invalid_grant",
+  "logRedaction": "raw-url-form-encoded-and-structural-sensitive-field-verification"
 }
 ```
 
@@ -106,16 +113,17 @@ uses the management Access Key only on that transport. It discovers the registry
 
 1. `create_environment`;
 2. `seed_identities`;
-3. `create_application`;
+3. `create_application` for one confidential code client and one public device client;
 4. `get_wellknown_urls`;
 5. `assert_requests` and `get_request_log`;
 6. `simulate_lifecycle`; and
 7. `delete_environment`.
 
-The Access Key must never be forwarded to the Entra authority, hosted sign-in form, or
-token endpoint. This guide creates a confidential application, so
-`create_application` returns its synthetic client secret once; keep it in process
-memory or a test secret store and do not write it to source or logs.
+The Access Key must never be forwarded to the Entra authority, hosted sign-in form,
+device activation form, or token endpoint. The confidential application returns its
+synthetic client secret once; keep it in process memory or a test secret store. The
+device application uses `clientType: "public"`, returns no secret, and rejects any
+supplied secret.
 
 ## Configure the custom authority exactly
 
@@ -199,6 +207,70 @@ User through `simulate_lifecycle` and forces another silent acquisition. That re
 must fail with MSAL error code `invalid_grant` and an Entra-shaped message containing
 `AADSTS50057`.
 
+## Exercise the public device flow
+
+Create a second application through MCP with:
+
+```json
+{
+  "clientType": "public",
+  "redirectUris": ["https://client.example.test/mockos-msal-device-unused"],
+  "grantTypes": [
+    "urn:ietf:params:oauth:grant-type:device_code",
+    "refresh_token"
+  ]
+}
+```
+
+The application contract still requires a redirect URI even though this device flow
+never redirects to it. Use an inert synthetic URI, keep it registered for contract
+compatibility, and do not expose a production callback. The canonical discovery and
+registration grant is the RFC URN; MSAL Node 5.4.2 sends
+`grant_type=device_code` on the token wire, which mockOS normalizes internally.
+
+Configure `PublicClientApplication` with the same returned authority and host-only
+trust boundary:
+
+```js
+import { ProtocolMode, PublicClientApplication } from "@azure/msal-node";
+
+const deviceClient = new PublicClientApplication({
+  auth: {
+    authority,
+    clientId: deviceApplication.clientId,
+    knownAuthorities: [new URL(authority).host],
+  },
+  system: { protocolMode: ProtocolMode.OIDC },
+});
+
+const deviceResult = await deviceClient.acquireTokenByDeviceCode({
+  scopes: ["openid", "profile", "email", "offline_access"],
+  deviceCodeCallback(response) {
+    // Show response.userCode, response.verificationUri, and response.message
+    // only in the disposable test UI. Never persist them.
+  },
+});
+```
+
+The callback must run exactly once and report a 900-second lifetime, five-second
+interval, a clean owned `/devicelogin` URL, and no
+`verification_uri_complete`. MSAL polls immediately; the first token response is
+`authorization_pending`. Open the returned verification URI, submit the displayed
+user code plus the seeded synthetic username/password, and choose `approve`. Both
+approval and denial authenticate the supplied identity first.
+
+After approval, MSAL receives access, ID, and rotating refresh credentials. The
+acceptance client validates account username/tenant, `tid`, `oid`, non-empty tokens,
+and a changed access token after forced refresh. Entra access and ID tokens use
+distinct `uti` values. After the same MCP lifecycle disable, the device account's
+forced refresh must also fail with `invalid_grant`.
+
+mockOS implements `slow_down` and increases the current interval by five seconds when
+a client polls too quickly. Pinned MSAL Node 5.4.2 retries
+`authorization_pending` but does not retry `slow_down`; the qualification therefore
+activates after observing the immediate pending poll and does not intentionally
+trigger throttling.
+
 ## Inspect evidence without exposing credentials
 
 The exact ordered assertion is:
@@ -207,14 +279,30 @@ The exact ordered assertion is:
 2. authorization `GET` → `200`;
 3. hosted sign-in `POST` → `302`;
 4. authorization-code token `POST` → `200`;
-5. forced-refresh token `POST` → `200`;
-6. post-disable forced-refresh token `POST` → `400`.
+5. confidential forced-refresh token `POST` → `200`;
+6. public-client discovery `GET` → `200`;
+7. public device authorization `POST` → `200`;
+8. immediate device token poll `POST` → `400 authorization_pending`;
+9. device activation `GET` → `200`;
+10. credential-gated device activation `POST` → `200`;
+11. approved device token poll `POST` → `200`;
+12. device forced-refresh token `POST` → `200`;
+13. post-disable confidential forced refresh `POST` → `400`;
+14. post-disable device forced refresh `POST` → `400`.
+
+The local harness makes one ownership-checked `GET /health` halfway through MSAL's
+required five-second polling wait. This is a Wrangler-local loopback liveness probe,
+not a provider request or a token retry, so it is absent from the 14-call provider
+sequence and does not shorten or relax Entra polling policy.
 
 The durable request log must not contain the synthetic password, client secret,
-authorization code, PKCE verifier, access token, ID token, or refreshed access token.
-Structured form and JSON bodies redact secret-bearing OAuth fields, token responses
-replace token values, and redirect `Location` query or fragment secrets are redacted.
-The retained method, path, status, and safe structure remain assertable.
+authorization code, PKCE verifier, device code, user code, repeated device message,
+access token, ID token, refresh token, or refreshed access token. Structured form and
+JSON bodies redact secret-bearing OAuth/device fields, token responses replace token
+values, device authorization redacts its code/user/message fields, and redirect
+`Location` query or fragment secrets are redacted. The harness rejects raw,
+`encodeURIComponent`, and URL-form-encoded representations while retaining method,
+path, status, decision, and safe structure for assertions.
 
 This was a compatibility bug found by the official-client qualification: authorization
 codes and token material could otherwise survive in durable provider evidence even when
@@ -242,14 +330,21 @@ attempts the same environment cleanup if a provider assertion fails.
   `MOCKOS_ENTRA_MSAL_E2E_PORT=8795 pnpm e2e:entra-msal`.
 - If code redemption fails, confirm the redirect URI, scopes, authorization code, and
   PKCE verifier belong to the same attempt. Codes are short-lived and one-time.
+- If device creation fails, require a public application with the RFC device grant and
+  no secret. Keep the inert registered redirect URI even though it is unused.
+- If activation fails, submit the exact user code plus a seeded synthetic username and
+  password. Denial is credential-gated too.
+- If MSAL reports a post-request failure after `slow_down`, restart the disposable
+  flow and activate after the first pending poll; 5.4.2 does not retry that error.
 - `invalid_grant` containing `AADSTS50057` is expected only after the test disables the
   User. An earlier occurrence indicates an unexpected lifecycle state.
 
 ## Deliberately unsupported by this qualification
 
-This record does not qualify `@azure/msal-browser`, public-client interactive helpers,
-device code, client credentials, on-behalf-of, `common`/`organizations`/`consumers`,
-Microsoft Graph SDK calls, UserInfo, a hosted Cloud endpoint, a real Entra tenant,
-custom-domain behavior, or production readiness. See the
+This record does not qualify `@azure/msal-browser`, public-client browser helpers,
+client credentials, on-behalf-of, `common`/`organizations`/`consumers`, Microsoft
+Graph SDK calls, UserInfo, a hosted Cloud endpoint, a real Entra tenant, other MSAL
+versions, custom-domain behavior, or production readiness. It also does not claim a
+broad RFC 8628 or Microsoft error/UI/localization matrix beyond the named cases. See the
 [Entra behavior ledger](../identity/entra.md) and
 [provider parity matrix](../conformance/parity-matrix.md) before expanding the claim.

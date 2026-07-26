@@ -1,7 +1,7 @@
 # Test Entra SSO
 
-Status: Accepted raw-protocol M3 Entra workers.dev flow; separate bounded MSAL Node local X/Q guide available; live parity unclaimed
-Last reviewed: 2026-07-25
+Status: Accepted raw-protocol M3 Entra workers.dev flow; separate bounded MSAL Node authorization-code/public-device local X/Q guide available; live parity unclaimed
+Last reviewed: 2026-07-26
 
 1. Choose a local Worker or a live workers.dev origin from
    [hosting modes](../hosting-modes.md). A live control session requires an
@@ -73,6 +73,25 @@ offers `/e/<environment>/scim/v2` for inbound SCIM and
 non-empty synthetic Bearer values for those test surfaces, never the MCP Access Key.
 The [curl walkthrough](./curl.md) contains concise probes.
 
+## Local public-device follow-on
+
+The source candidate also exposes a bounded Entra public-client device flow at the
+request-derived `/<tenant-guid>/oauth2/v2.0/devicecode` endpoint, with activation at
+`/devicelogin`. Create a separate `clientType: "public"` application through
+management MCP, register the canonical
+`urn:ietf:params:oauth:grant-type:device_code` and `refresh_token` grants, omit a
+secret, and retain one inert synthetic redirect URI because the current application
+contract still requires registration even though this flow does not use it.
+
+The device response has a 900-second lifetime and five-second polling interval, omits
+`verification_uri_complete`, and requires the seeded username/password for both
+approval and denial. Pinned MSAL Node 5.4.2 polls immediately with the shorter
+wire-level `grant_type=device_code`; mockOS normalizes it and returns
+`authorization_pending` before activation. See the
+[MSAL Node guide](./entra-msal-node.md) for the exact callback, activation, refresh,
+lifecycle, redaction, and cleanup sequence. That path is local D/I/S/X/Q only: it has
+no workers.dev, hosted Cloud, real-Entra, or production-ready evidence.
+
 Do not use real passwords, tenants, or tokens. The repository
 [integration test](../../apps/worker/test/oidc.integration.test.ts) demonstrates these
 steps under the Cloudflare Workers test runtime. The
@@ -82,6 +101,6 @@ directory samples, and cleanup. This evidence does not claim arbitrary Entra cli
 SDK compatibility or live-provider parity. The separate
 [MSAL Node guide](./entra-msal-node.md) qualifies only pinned
 `@azure/msal-node` 5.4.2 over local Wrangler HTTPS; it has no hosted-smoke,
-verified-live, or production-ready evidence. Client credentials, device flow, UserInfo,
-the separately accepted M5 hosted outbound-provisioning flow, and provider-shaped
-custom domains remain outside this quickstart.
+verified-live, or production-ready evidence. Client credentials, UserInfo, device-flow
+behavior beyond the bounded local recipe, the separately accepted M5 hosted outbound-
+provisioning flow, and provider-shaped custom domains remain outside this quickstart.

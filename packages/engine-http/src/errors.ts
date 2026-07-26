@@ -7,6 +7,35 @@ type ErrorDefinition = {
   status: number;
 };
 
+const deviceAuthorizationErrors = new Set([
+  "access_denied",
+  "authorization_pending",
+  "expired_token",
+  "invalid_client",
+  "invalid_grant",
+  "invalid_scope",
+  "slow_down",
+  "unsupported_grant_type",
+]);
+
+const entraDeviceErrorCode = (code: string): string => {
+  if (code === "access_denied") return "authorization_declined";
+  if (code === "invalid_grant") return "bad_verification_code";
+  return code;
+};
+
+const entraDeviceErrorDescription: Readonly<Record<string, string>> = {
+  authorization_declined: "The end user denied the authorization request.",
+  authorization_pending: "Authorization is pending. Continue polling.",
+  bad_verification_code: "The device code is not recognized.",
+  expired_token: "The device code has expired.",
+  invalid_client: "The client is invalid.",
+  invalid_scope: "The requested scope is invalid.",
+  slow_down: "Polling is occurring too frequently. Slow down requests.",
+  unsupported_grant_type:
+    "The client is not registered for the device authorization grant.",
+};
+
 const errorDefinitions: Record<SemanticErrorCode, ErrorDefinition> = {
   BAD_CLIENT_SECRET: {
     aadsts: 7000215,
@@ -142,6 +171,35 @@ export type RenderedEntraError = {
   body: EntraErrorBody;
   semanticCode: SemanticErrorCode;
   status: number;
+};
+
+export type RenderedEntraDeviceAuthorizationError = {
+  body: Readonly<{
+    error: string;
+    error_description: string;
+  }>;
+  status: number;
+};
+
+export const renderEntraDeviceAuthorizationError = (
+  error: unknown
+): RenderedEntraDeviceAuthorizationError | undefined => {
+  if (!error || typeof error !== "object") return undefined;
+  const code = Reflect.get(error, "error");
+  if (typeof code !== "string" || !deviceAuthorizationErrors.has(code)) {
+    return undefined;
+  }
+  const entraCode = entraDeviceErrorCode(code);
+  const status = Reflect.get(error, "status");
+  return {
+    status: typeof status === "number" ? status : 400,
+    body: {
+      error: entraCode,
+      error_description:
+        entraDeviceErrorDescription[entraCode] ??
+        "The device authorization request could not be completed.",
+    },
+  };
 };
 
 export const renderEntraError = (

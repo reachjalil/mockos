@@ -244,17 +244,26 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
     }
   };
 
+  const authenticate = async (input: { username: string; password: string }) => {
+    const candidate = engine.users.findByUserName(input.username);
+    validateUserState(candidate);
+    const user = await engine.users.authenticate(input.username, input.password);
+    if (!user) throw new OAuthProtocolError("INVALID_GRANT");
+    return user;
+  };
+
   return {
     tenantId: engine.tenantId,
     discovery: (issuerBase) => engine.discovery(issuerBase),
     jwks: () => engine.jwks(),
     validateAuthorizationRequest,
+    async activateDeviceAuthorization(input) {
+      const user = await authenticate(input);
+      engine.oauth.activateDeviceAuthorization(input.userCode, user.id);
+    },
     async authorize(input: EntraAuthorizationLogin) {
       validateAuthorizationRequest(input);
-      const candidate = engine.users.findByUserName(input.username);
-      validateUserState(candidate);
-      const user = await engine.users.authenticate(input.username, input.password);
-      if (!user) throw new OAuthProtocolError("INVALID_GRANT");
+      const user = await authenticate(input);
       return engine.oauth.createAuthorizationCode({
         clientId: input.clientId,
         redirectUri: validatedUrl(input.redirectUri),
@@ -265,7 +274,20 @@ const createEntraHttpEngine = (engine: Engine): EntraHttpEngine => {
         nonce: input.nonce,
       });
     },
+    createDeviceAuthorization: (input) => engine.oauth.createDeviceAuthorization(input),
+    async denyDeviceAuthorization(input) {
+      await authenticate(input);
+      engine.oauth.denyDeviceAuthorization(input.userCode);
+    },
     async token(input: EntraTokenRequest) {
+      if (input.grantType === "urn:ietf:params:oauth:grant-type:device_code") {
+        return engine.oauth.pollDeviceAuthorization({
+          clientId: input.clientId,
+          deviceCode: input.deviceCode,
+          graphBaseUrl: input.graphBaseUrl,
+          issuerBase: input.issuerBase,
+        });
+      }
       if (input.grantType === "refresh_token") {
         return engine.oauth.redeemRefreshToken({
           refreshToken: input.refreshToken,
@@ -527,10 +549,17 @@ const injectionPointFor = (pathname: string): string => {
   ) {
     return "oauth.authorize";
   }
-  if (pathname.endsWith("/v1/device/authorize")) return "oauth.device";
+  if (
+    pathname.endsWith("/oauth2/v2.0/devicecode") ||
+    pathname.endsWith("/v1/device/authorize")
+  ) {
+    return "oauth.device";
+  }
   if (pathname.endsWith("/v1/introspect")) return "oauth.introspect";
   if (pathname.endsWith("/v1/revoke")) return "oauth.revoke";
-  if (pathname.endsWith("/activate")) return "oauth.device.activate";
+  if (pathname.endsWith("/activate") || pathname.endsWith("/devicelogin")) {
+    return "oauth.device.activate";
+  }
   return "http.request";
 };
 
@@ -540,8 +569,10 @@ const isOktaAuthnPath = (pathname: string): boolean =>
 const isCredentialBearingProtocolPath = (pathname: string): boolean =>
   isOktaAuthnPath(pathname) ||
   pathname === "/activate" ||
+  pathname === "/devicelogin" ||
   [
     "/oauth2/v2.0/authorize",
+    "/oauth2/v2.0/devicecode",
     "/oauth2/v2.0/token",
     "/v1/authorize",
     "/v1/token",
@@ -549,6 +580,10 @@ const isCredentialBearingProtocolPath = (pathname: string): boolean =>
     "/v1/introspect",
     "/v1/revoke",
   ].some((suffix) => pathname.endsWith(suffix));
+
+const isDeviceAuthorizationPath = (pathname: string): boolean =>
+  pathname.endsWith("/oauth2/v2.0/devicecode") ||
+  pathname.endsWith("/v1/device/authorize");
 
 const authenticationSecretKey = (key: string): boolean => {
   const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
@@ -632,6 +667,63 @@ const redactAuthenticationSecrets = (value: unknown): unknown => {
   );
 };
 
+const deviceAuthorizationSecretKey = (key: string): boolean => {
+  const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
+  return normalized === "devicecode" || normalized === "usercode";
+};
+
+const encodedSecretVariants = (secret: string): readonly string[] => {
+  const formEncoded = new URLSearchParams({ value: secret })
+    .toString()
+    .slice("value=".length);
+  return [...new Set([secret, encodeURIComponent(secret), formEncoded])].sort(
+    (left, right) => right.length - left.length
+  );
+};
+
+const redactDeviceAuthorizationResponse = (value: unknown): unknown => {
+  const secrets: string[] = [];
+  const collect = (candidate: unknown): void => {
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) collect(entry);
+      return;
+    }
+    if (!candidate || typeof candidate !== "object") return;
+    for (const [key, entry] of Object.entries(candidate as Record<string, unknown>)) {
+      if (deviceAuthorizationSecretKey(key) && typeof entry === "string" && entry) {
+        secrets.push(entry);
+      }
+      collect(entry);
+    }
+  };
+  collect(value);
+  const variants = [...new Set(secrets.flatMap(encodedSecretVariants))];
+  const redactString = (candidate: string): string => {
+    let result = candidate;
+    for (const secret of variants) {
+      result = result.replaceAll(secret, "[REDACTED]");
+    }
+    return result;
+  };
+  const redact = (candidate: unknown): unknown => {
+    if (typeof candidate === "string") return redactString(candidate);
+    if (Array.isArray(candidate)) return candidate.map(redact);
+    if (!candidate || typeof candidate !== "object") return candidate;
+    return Object.fromEntries(
+      Object.entries(candidate as Record<string, unknown>).map(([key, entry]) => {
+        const normalized = key.replaceAll(/[-_]/g, "").toLowerCase();
+        return [
+          key,
+          deviceAuthorizationSecretKey(key) || normalized === "message"
+            ? "[REDACTED]"
+            : redact(entry),
+        ];
+      })
+    );
+  };
+  return redact(value);
+};
+
 const structuredBodyForLog = (
   pathname: string,
   contentType: string | null,
@@ -662,6 +754,9 @@ const structuredBodyForLog = (
         return isCredentialBearingProtocolPath(pathname)
           ? "[REDACTED authentication body]"
           : "[REDACTED unstructured JSON request body]";
+      }
+      if (direction === "response" && isDeviceAuthorizationPath(pathname)) {
+        return JSON.stringify(redactDeviceAuthorizationResponse(parsed));
       }
       return containsAuthenticationSecret(parsed)
         ? JSON.stringify(redactAuthenticationSecrets(parsed))

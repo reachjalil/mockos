@@ -46,8 +46,10 @@ surfaces include SCIM for both provider
 profiles at `/e/<environment>/scim/v2`, bounded Entra Graph reads at
 `/e/<environment>/graph/v1.0`, and bounded Okta Users/Groups/lifecycle routes at
 `/e/<environment>/api/v1`. The bounded M6 implementation also mounts Okta Classic
-primary authentication at `/e/<environment>/api/v1/authn`. Entra and Okta token
-endpoints also have local refresh
+primary authentication at `/e/<environment>/api/v1/authn`. The current source also
+mounts bounded Entra public-device authorization at
+`/e/<environment>/<tenant>/oauth2/v2.0/devicecode` and credential-gated activation at
+`/e/<environment>/devicelogin`. Entra and Okta token endpoints also have local refresh
 redemption/rotation coverage. The bounded M3 subset has exact-revision hosted-CI and
 deployed evidence; M5 has a separate source-paired hosted acceptance record. The
 [M6 workers.dev record](./evidence/m6-workers-dev-smoke.md) samples the six bounded M6
@@ -85,6 +87,9 @@ synthetic secret exactly once. A public registration must explicitly use
 `clientType: "public"`, omit `clientSecret`, and cannot request
 `client_credentials`; it returns no secret. Public code and refresh grants omit a
 secret, public Okta revocation is owner-bound, and introspection remains confidential.
+An Entra device-only public registration must still include one inert synthetic
+redirect URI because the shared application contract requires a non-empty list; the
+device flow does not call it.
 
 After installing dependencies, reproduce the two local official-client paths with:
 
@@ -95,8 +100,9 @@ pnpm e2e:okta-authjs
 pnpm e2e:okta-authjs-cleanup
 ```
 
-These commands own local Wrangler HTTPS processes and temporary trust/state. They
-qualify only the exact versions and flows in the
+These commands own local Wrangler HTTPS processes and temporary trust/state. The MSAL
+path combines confidential authorization code and public device code; the Okta path is
+public authorization code. They qualify only the exact versions and flows in the
 [MSAL Node](./quickstarts/entra-msal-node.md) and
 [Okta Auth JS](./quickstarts/okta-auth-js-node.md) guides. They do not qualify the
 deployed Worker, a real provider, or production readiness.

@@ -14,6 +14,11 @@ The run was performed from branch `codex/okta-market-fit`, whose starting revisi
 candidate when this record was captured, so this is not an immutable revision,
 hosted-CI, deployment, or release record.
 
+The same exact client flow and focused signal-cleanup probe were rerun on 2026-07-26
+from the `codex/entra-device-code` source candidate after the repository Wrangler
+upgrade. Both remained green; this remains local source evidence rather than hosted or
+deployed evidence.
+
 ## Eight-level evidence boundary
 
 | Level | Result | Evidence |
@@ -69,9 +74,9 @@ recorded smoke.
 | --- | --- |
 | Date | 2026-07-26 |
 | Operating system | Darwin 25.5.0 arm64 |
-| Node.js | 24.18.0 |
+| Node.js | 26.4.0 for the current rerun; 24.18.0 for the original record |
 | pnpm | 10.30.2 |
-| Wrangler | Repository-pinned 4.112.0 |
+| Wrangler | Repository-pinned 4.114.0 for the current rerun; 4.112.0 for the original record |
 | Okta Auth JS | 8.0.1 |
 | MCP SDK | 1.29.0 |
 | Network | `https://localhost:8795` actual loopback socket |

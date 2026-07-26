@@ -59,6 +59,7 @@ export type OktaTokenResult = {
 
 export type OktaDeviceAuthorizationRequest = {
   clientId: string;
+  directoryBaseUrl: string;
   issuerBase: string;
   scope: string;
 };
@@ -69,7 +70,7 @@ export type OktaDeviceAuthorizationResult = {
   interval: number;
   userCode: string;
   verificationUri: string;
-  verificationUriComplete: string;
+  verificationUriComplete?: string;
 };
 
 export type OktaDeviceActivationRequest = {
@@ -139,6 +140,7 @@ export interface OktaHttpEngine {
 
 export type CreateOktaHttpAppOptions = {
   authorizationServerId?: string;
+  directoryBaseHeader?: string;
   engine: OktaHttpEngine;
   issuerHeader?: string;
   publicPathHeader?: string;

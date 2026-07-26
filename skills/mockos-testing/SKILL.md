@@ -8,7 +8,8 @@ description: >-
   mock MCP and mock LLM definitions, install and exercise the built-in Salesforce
   Hosted MCP SObject Reads preset, call model discovery, run OpenAI Chat Completions
   and Anthropic Messages as JSON or bounded SSE, exercise
-  PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
+  PKCE/refresh/lifecycle and bounded Entra public-device flows, exercise SCIM and
+  bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, qualify pinned MSAL Node or Okta Auth JS paths, and clean
@@ -59,12 +60,13 @@ an arbitrary server, every indexed case or fixture, or verified-live provider pa
    race, and narrow PATCH tolerances; signing-key rotation/JWKS overlap; claim-only
    clock skew; five broken-token variants; and Entra group claims inline through 200
    with same-environment Graph fallback at 201. Broad Graph/Okta parity, the remaining
-   Classic transitions, Entra UserInfo/client credentials/device flow, and SAML remain
+   Classic transitions, Entra UserInfo/client credentials, and SAML remain
    unavailable; never invent routes for them.
 4. When an official client matters, choose only a documented qualified path:
-   `@azure/msal-node` 5.4.2 confidential Entra or `@okta/okta-auth-js` 8.0.1 public
-   Okta. Both are local D/I/S/X/Q evidence with H/V/P no. Other versions and browser
-   paths require a new qualification record.
+   `@azure/msal-node` 5.4.2 for the combined confidential-code/public-device Entra
+   path or `@okta/okta-auth-js` 8.0.1 public Okta. Both records are local D/I/S/X/Q
+   evidence with H/V/P no. Other versions and browser paths require a new
+   qualification record.
 
 ## Connect to management MCP
 
@@ -120,7 +122,9 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
    it only on creation.
    For `public`, pass `clientType: "public"`, omit `clientSecret`, reject
    `client_credentials`, and require the response to omit the secret. Never fabricate
-   an empty placeholder secret.
+   an empty placeholder secret. The current shared contract still requires a
+   non-empty redirect URI list for a device-only Entra application; use a clearly
+   inert synthetic URI and do not claim the device flow calls it.
    For SDK 1.29 discovery, require the strict tools-list input to keep defaulted fields
    optional and expose a Draft-7 `if`/`then` public branch that forbids `clientSecret`
    and narrows grants. Require exact public/confidential output branches, with no
@@ -329,6 +333,37 @@ For both providers, run authorization code with S256 PKCE first. Preserve `state
 verify `nonce`, redeem the code once, fetch JWKS through discovery, and validate the
 signature, issuer, audience, timestamps, subject, and provider-specific claims.
 
+For a bounded Entra public-device follow-on:
+
+1. Create a separate `clientType: "public"` application with the canonical
+   `urn:ietf:params:oauth:grant-type:device_code` and `refresh_token` grants, no
+   secret, and one inert synthetic redirect URI required by the shared registration
+   contract.
+2. Start device authorization at the returned
+   `/<tenant>/oauth2/v2.0/devicecode` endpoint. Require `expires_in: 900`,
+   `interval: 5`, an owned clean `/devicelogin` verification URI, and no
+   `verification_uri_complete`.
+3. When testing pinned MSAL Node 5.4.2, accept its short token-wire
+   `grant_type=device_code` while retaining the RFC URN in discovery/registration.
+   Require one callback and observe its immediate token poll returning
+   `authorization_pending`.
+4. Load `/devicelogin`, then submit the exact user code, seeded synthetic username and
+   password, and `decision=approve`. Test denial separately and require the same
+   credential check before `authorization_declined`; an unauthenticated deny must
+   fail.
+5. Poll after approval and validate account/tenant, `tid`, `oid`, usable access/ID
+   tokens, and distinct Entra access/ID-token `uti` values. Force a public refresh and
+   require a changed access token.
+6. Disable the User through management MCP. Require the device account's next forced
+   refresh to return `invalid_grant`; do not infer hosted or real-provider evidence.
+7. Exercise `bad_verification_code` for an unknown or consumed code and
+   `expired_token` with the deterministic core-backed HTTP fixture when those cases
+   matter. Mounted Worker coverage does not include deterministic expiry.
+8. Keep `slow_down` in protocol tests: polling faster than the current interval raises
+   it and adds five seconds. MSAL Node 5.4.2 does not retry that error, so its qualified
+   actual-network flow activates after the first pending poll instead of deliberately
+   triggering throttling.
+
 For Okta, use only the `/oauth2/default` custom-authorization-server surface. Exercise
 the implemented flow as needed:
 
@@ -371,8 +406,26 @@ trust is not exclusive certificate pinning.
 
 For Entra, require the exact
 [MSAL Node recipe](../../docs/quickstarts/entra-msal-node.md): host-only
-`knownAuthorities`, `ProtocolMode.OIDC`, code + S256 PKCE, forced refresh, MCP disable,
-and `invalid_grant`/`AADSTS50057`.
+`knownAuthorities`, `ProtocolMode.OIDC`, confidential code + S256 PKCE, a separate
+secret-free public device client, one device callback/immediate pending poll,
+credential-gated activation, forced refresh for both accounts, MCP disable, and
+`invalid_grant` for both refresh families. Require `AADSTS50057` on the confidential
+path. Require exactly 14 provider method/path/status entries, including separate
+confidential and public discovery. The combined token statuses are
+`[200, 200, 200, 200, 400, 400, 400]`. Parse the password, client secret, code,
+verifier, device/user codes, repeated device message, activation credentials, and
+successful token fields as structurally redacted, then reject raw,
+`encodeURIComponent`, and `URLSearchParams` representations of every exercised
+sensitive value.
+
+The repository-pinned Wrangler 4.114.0 harness makes one ownership-checked `/health`
+request halfway through MSAL's required five-second wait. Keep that request strictly
+outside provider evidence. It de-phases an
+[open Wrangler local-proxy five-second keep-alive race](https://github.com/cloudflare/workers-sdk/issues/14641);
+it is not product behavior, a token retry, hosted evidence, or permission to change
+Entra's interval. If the approved POST still fails before entering mockOS, fail and
+rerun the entire isolated qualification flow. Never replay an ambiguous token POST:
+the first request could have committed even when its response was lost.
 
 For Okta, require the exact
 [Okta Auth JS recipe](../../docs/quickstarts/okta-auth-js-node.md):
@@ -755,10 +808,10 @@ cleanup.
 Report every case as passed, failed, or unavailable. Redact the management key,
 Authorization headers, cookies, client secrets, full tokens, and synthetic passwords.
 Structured secret-bearing request/response fields and redirect locations are redacted,
-but non-secret fields and some non-JSON bodies can remain. For the Auth JS recipe,
-report only the exact named-field plus raw/URI/form-encoded representations the harness
-checks; do not promote them to arbitrary-encoding classification. Quote only the
-minimum safe evidence. Confirm that outbound target Bearer values remain redacted.
+but non-secret fields and some non-JSON bodies can remain. For the MSAL and Auth JS
+recipes, report only the exact named-field plus raw/URI/form-encoded representations
+each harness checks; do not promote them to arbitrary-encoding classification. Quote
+only the minimum safe evidence. Confirm that outbound target Bearer values remain redacted.
 Report D/I/S/X/Q/H/V/P independently.
 
 Use only the exact-revision records linked by the implementation ledger as deployed

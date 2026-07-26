@@ -14,30 +14,48 @@ comparison. The bounded MSAL Node and Okta Auth JS slices are each D/I/S/X/Q yes
 H/V/P no. The bounded M6 slice has sampled H evidence, but no current fixture is V or
 P.
 
-- The Entra OIDC corpus has 30 source-reviewed expectations marked `documented` and
-  eight M6 token/key/overage cases marked `implemented` that execute through an
-  authenticated local Worker fixture runner. None has been validated against a live
-  tenant. The linked tests prove only their exercised slices, not corpus-wide parity.
+- The Entra OIDC corpus has 25 source-reviewed expectations marked `documented` and
+  13 marked `implemented`. Five device fixtures execute through a core-backed HTTP
+  executor; the mounted Worker covers creation, pending/slow-down, credential-gated
+  denial, approval/token/refresh/consumption, and unknown code, but not deterministic
+  expiry. Eight M6 token/key/overage cases execute through an authenticated local
+  Worker fixture runner. None has been validated against a live tenant. The linked
+  tests prove only their exercised slices, not corpus-wide parity.
 - The M3 deployed smoke exercises the Entra OIDC/refresh/lifecycle path and an Okta
   SCIM/directory subset. Okta discovery, authorization-code, PKCE, introspection,
   revocation, device flow, and lifecycle behavior pass local and hosted Worker tests
   but were not run in the deployed acceptance flow or compared with a live tenant.
-- Entra remains a narrow OIDC/OAuth slice. Authorization code and rotating refresh
-  grants have local evidence; client credentials, device flow, UserInfo, logout
-  fidelity, and SAML remain unimplemented or unqualified.
+- Entra remains a narrow OIDC/OAuth slice. Authorization code, rotating refresh, and
+  bounded public-client device grants have local evidence. Client credentials,
+  UserInfo, logout fidelity, and SAML remain unimplemented or unqualified. The device
+  path covers a 900-second/five-second policy, credential-gated approve and deny,
+  pending/slow-down/declined/invalid/expired errors, atomic redemption, refresh, and
+  lifecycle rejection; it is not a broad RFC 8628, Microsoft UI/localization, or
+  upstream error-catalog claim.
 - Entra and Okta OIDC discovery plus `get_wellknown_urls` intentionally omit UserInfo
   until an executable route exists. Entra fixtures 28 and 29 remain documented-only
   targets. This corrects capability discovery; it is not UserInfo implementation,
   qualification, hosted evidence, or provider parity.
 - The only official Entra identity-client qualification is `@azure/msal-node` 5.4.2
-  as a confidential client for one tenant-specific custom authority, authorization
-  code with S256 PKCE, and forced silent refresh. It uses host-only
-  `knownAuthorities` plus `ProtocolMode.OIDC` and passes through local Wrangler HTTPS.
-  The management path is separately driven by `@modelcontextprotocol/sdk` 1.29.0. This
-  is local X/Q evidence, not workers.dev, hosted Cloud, or custom-domain H. It does not
-  qualify `@azure/msal-browser`, public-client helpers, device or client-credential
-  grants, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real Entra
-  tenant, or P.
+  for one tenant-specific custom authority: a confidential authorization-code + S256
+  PKCE client and a separate secret-free public device client, each with forced silent
+  refresh and lifecycle rejection. Both use host-only `knownAuthorities` plus
+  `ProtocolMode.OIDC` and pass through local Wrangler HTTPS. The management path is
+  separately driven by `@modelcontextprotocol/sdk` 1.29.0. This is local X/Q evidence,
+  not workers.dev, hosted Cloud, or custom-domain H. It does not qualify
+  `@azure/msal-browser`, other versions, public-client browser helpers, client
+  credentials, on-behalf-of, `common`/`organizations`/`consumers`, Graph SDK, a real
+  Entra tenant, or P.
+- MSAL Node 5.4.2 polls the device token endpoint immediately and retries
+  `authorization_pending`, but it does not retry `slow_down`. mockOS implements the
+  throttle and increases the interval by five seconds; the qualified harness avoids
+  the incompatibility by activating after the observed pending poll. This is an exact
+  pinned-client behavior boundary, not permission to omit `slow_down` from other
+  protocol tests.
+- Entra device registrations remain subject to the shared application contract's
+  non-empty redirect-URI list even though device code never redirects. Tests use an
+  inert synthetic URI. Device-only configuration without any registered redirect URI
+  is not supported by the current management contract.
 - The only official Okta identity-client qualification is
   `@okta/okta-auth-js` 8.0.1 for one public application, custom authorization server,
   authorization code with S256 PKCE, Node `parseFromUrl` using the exact
@@ -411,8 +429,10 @@ P.
   are external publishing prerequisites.
 - The fixture runner compares HTTP status, exact selected headers, exact bodies, and
   object subsets. It executes all 113 SCIM fixtures against the local HTTP composition
-  and eight M6 Entra fixtures through the authenticated local Worker setup; it does not
-  execute every OIDC fixture or all 113 SCIM fixtures through the Worker runtime. The
+  and five Entra device fixtures against a core-backed HTTP composition. The device
+  Worker suite covers the non-expiry flow, while eight M6 Entra fixtures execute
+  through the authenticated local Worker setup. It does not execute device expiry,
+  every OIDC fixture, or all 113 SCIM fixtures through the Worker runtime. The
   runner does not yet understand JSONPath, regex, or arbitrary JWT-claim expressions.
   The M5 request-log assertion can count repeated non-overlapping ordered sequences,
   but that capability is separate from the fixture runner; the accepted M5 flow

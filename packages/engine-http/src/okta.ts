@@ -69,6 +69,40 @@ const issuerFromRequest = (request: Request, header: string) => {
   }
 };
 
+const directoryBaseFromRequest = (
+  request: Request,
+  directoryBaseHeader: string,
+  issuerHeader: string
+) => {
+  const value = request.headers.get(directoryBaseHeader)?.trim();
+  if (!value) {
+    const issuer = new URL(issuerFromRequest(request, issuerHeader));
+    issuer.pathname = issuer.pathname.replace(/\/oauth2\/[^/]+\/?$/, "");
+    return issuer.toString().replace(/\/$/, "");
+  }
+  try {
+    const directoryBase = new URL(value);
+    if (!hasTrustedPublicProtocol(directoryBase)) {
+      throw new Error("Directory base must use HTTPS.");
+    }
+    if (
+      directoryBase.username ||
+      directoryBase.password ||
+      directoryBase.search ||
+      directoryBase.hash
+    ) {
+      throw new Error(
+        "Directory base must not contain credentials, query, or fragment."
+      );
+    }
+    return directoryBase.toString().replace(/\/$/, "");
+  } catch (cause) {
+    throw new OAuthProtocolError("INVALID_REQUEST", "Invalid directory base URL.", {
+      cause,
+    });
+  }
+};
+
 const publicActionFromRequest = (request: Request, header: string) => {
   const routedPath = request.headers.get(header);
   if (!routedPath) return new URL(request.url).pathname;
@@ -310,6 +344,7 @@ export const renderOktaDeviceActivationPage = (
 
 export const createOktaHttpApp = ({
   authorizationServerId = "default",
+  directoryBaseHeader = "x-mockos-directory-base",
   engine,
   issuerHeader = "x-mockos-issuer-base",
   publicPathHeader = "x-mockos-public-path",
@@ -438,6 +473,11 @@ export const createOktaHttpApp = ({
       const { clientId } = clientCredentials(form, context.req.raw);
       const result = await engine.createDeviceAuthorization({
         clientId,
+        directoryBaseUrl: directoryBaseFromRequest(
+          context.req.raw,
+          directoryBaseHeader,
+          issuerHeader
+        ),
         issuerBase: issuerFromRequest(context.req.raw, issuerHeader),
         scope: required(formValue(form, "scope"), "scope"),
       });

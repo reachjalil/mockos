@@ -46,8 +46,10 @@
 > `requestHash` are not captured. Configured midstream errors, the OpenAI Responses
 > API, Anthropic betas, conversation state, actual-network/hosted qualification, and
 > complete F2 remain unavailable. Separate local official-client
-> candidates qualify `@azure/msal-node` 5.4.2 and `@okta/okta-auth-js` 8.0.1 through
-> D/I/S/X/Q only; neither has H/V/P evidence. The guarded GitHub promotion workflows
+> candidates qualify `@azure/msal-node` 5.4.2 for one combined confidential
+> authorization-code/public-device-code Entra path and `@okta/okta-auth-js` 8.0.1 for
+> one public-client Okta path through D/I/S/X/Q only; neither has H/V/P evidence. The
+> guarded GitHub promotion workflows
 > remain unqualified. This is not yet a stable npm release or a production-SLA
 > service. See the
 > [evidence ledger](./docs/IMPLEMENTATION_STATUS.md).
@@ -120,6 +122,11 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - An Okta OIDC profile covering discovery, hosted authorization code + S256 PKCE,
   refresh exchange, token introspection and revocation, and RFC 8628 device
   authorization in local tests
+- An Entra public-client device path covering
+  `POST /<tenant>/oauth2/v2.0/devicecode`, credential-gated approve or deny at
+  `GET`/`POST /devicelogin`, immediate pending polling, public refresh rotation,
+  lifecycle rejection, and Entra error names. It returns a 900-second lifetime and
+  five-second interval without `verification_uri_complete`
 - Explicit confidential and public OAuth application registrations. Public clients
   have no stored or returned secret, cannot use `client_credentials`, can redeem code
   and refresh grants without a secret, and can revoke only their own tokens;
@@ -132,8 +139,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
 - A synchronous `node:sqlite` test store
 - Deterministic test clock and RNG, persisted deterministic scenarios, bounded request
   logs, and request assertions
-- Fixture schema, loader, and runner; 38 source-reviewed Entra OIDC fixtures (30
-  documented and eight implemented M6 cases that execute through the local Worker);
+- Fixture schema, loader, and runner; 38 source-reviewed Entra OIDC fixtures (25
+  documented and 13 implemented cases, including five core-backed Entra device cases
+  plus eight M6 cases); mounted Worker coverage exercises the non-expiry device flow
+  and the M6 cases;
   22 documented Okta OIDC fixtures; and a locally and hosted-CI green 113-case
   RFC/Entra/Okta SCIM corpus
 - A bounded M6 implementation for deterministic signing-key rotation/JWKS overlap,
@@ -208,10 +217,11 @@ private control plane, licensing, billing, or a hosted mockOS account.
   Configured midstream errors, OpenAI Responses, Anthropic betas,
   runtime/conversation state, reset, Wrangler-network or deployed conformance, and
   Cloud pinning remain unavailable
-- Local actual-network official-client qualifications for MSAL Node 5.4.2 as an Entra
-  confidential client and Okta Auth JS 8.0.1 as an Okta public client. Both use MCP
-  for setup, observation, lifecycle, and cleanup and traverse an owned local Wrangler
-  HTTPS process; each is D/I/S/X/Q evidence only
+- Local actual-network official-client qualifications for MSAL Node 5.4.2 as both an
+  Entra confidential authorization-code client and a separate secret-free public
+  device client, plus Okta Auth JS 8.0.1 as an Okta public client. Both use MCP for
+  setup, observation, lifecycle, and cleanup and traverse an owned local Wrangler
+  HTTPS process; each named slice is D/I/S/X/Q evidence only
 - The unpublished `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
   negotiation
@@ -236,9 +246,12 @@ comparison but is not unauthenticated, while `strict` compares only the dialect'
 current verifier. Those are synthetic protocol boundaries, not production
 authorization; never forward the management key to them.
 
-Thirty Entra and all 22 Okta OIDC fixtures remain `documented`; eight Entra M6
-token/key/overage fixtures are `implemented` and execute through an authenticated local
-Worker fixture runner. No OIDC fixture is `verified-live`. The 113 accepted SCIM
+Twenty-five Entra and all 22 Okta OIDC fixtures remain `documented`; 13 Entra fixtures
+are `implemented`: five device-code cases execute through a core-backed HTTP fixture
+executor, with mounted Worker coverage for the non-expiry flow, and eight M6
+token/key/overage cases execute through an authenticated local Worker fixture runner.
+The deterministic device-expiry fixture has no mounted Worker execution. No OIDC fixture is
+`verified-live`. The 113 accepted SCIM
 fixtures and the separate M6 SCIM-edge corpus record source-implemented behavior; none
 is `verified-live`.
 The accepted M3 and M5 records remain distinct. M5 passed its

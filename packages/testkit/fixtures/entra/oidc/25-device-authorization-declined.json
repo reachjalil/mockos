@@ -23,7 +23,7 @@
   },
   "provenance": "official-docs",
   "sourceUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code",
-  "lastVerified": "2026-07-22",
-  "status": "documented",
-  "notes": "Source-reviewed target behavior only; not yet asserted against the M1 engine or a live Entra tenant."
+  "lastVerified": "2026-07-26",
+  "status": "implemented",
+  "notes": "Executed after credential-gated denial in the core-backed Entra HTTP composition and covered through the mounted Worker; no live Entra comparison is claimed."
 }

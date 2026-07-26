@@ -49,6 +49,7 @@ support, deployment, or provider-parity claim.
 | Inspect every current management tool | [Generated management-tool reference](./reference/management-tools.md) |
 | Call the smaller self-hosted HTTP surface | [Self-hosted HTTP reference](./reference/self-hosted-http.md) |
 | Run a concrete OIDC flow | [Entra SSO guide](./quickstarts/entra-sso.md) or [curl walkthrough](./quickstarts/curl.md) |
+| Qualify MSAL Node authorization code and public device code locally | [Entra MSAL Node guide](./quickstarts/entra-msal-node.md) |
 | Exercise outbound SCIM | [Provisioning-cycle guide](./quickstarts/provisioning-cycle.md) |
 | Deploy the public Worker | [Self-hosting](./self-hosting.md) and [hosting modes](./hosting-modes.md) |
 | Decide whether a behavior is supported | [Implementation status](./IMPLEMENTATION_STATUS.md), [limitations](./known-limitations.md), and [provider parity](./conformance/parity-matrix.md) |
@@ -102,9 +103,11 @@ authorities in this artifact.
 The current source carries two bounded official-client qualifications over the same
 owned local Wrangler HTTPS and focused signal-cleanup harnesses:
 
-- `@azure/msal-node` 5.4.2 uses a custom Entra authority as a confidential client for
-  authorization code with S256 PKCE, forced refresh, lifecycle disable, exact request
-  assertion, and durable credential-redaction checks. Read the
+- `@azure/msal-node` 5.4.2 uses one custom Entra authority for a confidential
+  authorization-code + S256 PKCE client and a separate secret-free public device
+  client. The combined local path covers forced refresh for both grants, credential-
+  gated device approval, lifecycle disable, exact request assertion, and durable raw/
+  URI/form credential and token-redaction checks. Read the
   [MSAL Node quickstart](./quickstarts/entra-msal-node.md) and
   [local record](./evidence/entra-msal-node-local-qualification.md).
 - `@okta/okta-auth-js` 8.0.1 uses an Okta custom authorization server as a public

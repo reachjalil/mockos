@@ -20,6 +20,7 @@ import {
 import {
   type CreateDeviceAuthorizationInput,
   type CreatedDeviceAuthorization,
+  DeviceAuthorizationError,
   DeviceAuthorizationService,
   type PollDeviceAuthorizationInput,
 } from "./device-authorization";
@@ -45,6 +46,8 @@ export interface PollDeviceAuthorizationForTokensInput
   extends PollDeviceAuthorizationInput {
   /** Request-derived final OIDC issuer. It is used for this response only. */
   readonly issuerBase: string;
+  /** Trusted request-derived Graph base used only for Entra group overage. */
+  readonly graphBaseUrl?: string;
 }
 
 export interface OAuthTokenResponse {
@@ -315,7 +318,28 @@ export class OAuthService {
     input: PollDeviceAuthorizationForTokensInput
   ): Promise<OAuthTokenResponse> {
     const grant = await this.#deviceAuthorizations.poll(input);
-    return this.#issueTokens({ ...grant, issuerBase: input.issuerBase });
+    const { prepared, user } = await this.#prepareTokenGrant({
+      ...grant,
+      issuerBase: input.issuerBase,
+      ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
+    });
+    const outcome = this.#store.transaction(() => {
+      const currentUser = this.#users.findById(user.id);
+      if (currentUser?.lifecycleState !== "active") {
+        throw new OAuthError("USER_DISABLED", "User account is disabled.");
+      }
+      const committed = this.#deviceAuthorizations.commit(grant);
+      if (committed !== "success") return committed;
+      this.#insertPreparedGrant(prepared);
+      return "success";
+    });
+    if (outcome === "expired") {
+      throw new DeviceAuthorizationError("expired_token");
+    }
+    if (outcome !== "success") {
+      throw new DeviceAuthorizationError("invalid_grant");
+    }
+    return this.#tokenResponse(prepared);
   }
 
   async introspectToken(
@@ -414,6 +438,25 @@ export class OAuthService {
     readonly graphBaseUrl?: string;
     readonly nonce?: string;
   }): Promise<OAuthTokenResponse> {
+    const { prepared, user } = await this.#prepareTokenGrant(input);
+    this.#store.transaction(() => {
+      const currentUser = this.#users.findById(user.id);
+      if (currentUser?.lifecycleState !== "active") {
+        throw new OAuthError("USER_DISABLED", "User account is disabled.");
+      }
+      this.#insertPreparedGrant(prepared);
+    });
+    return this.#tokenResponse(prepared);
+  }
+
+  async #prepareTokenGrant(input: {
+    readonly clientId: string;
+    readonly userId: string;
+    readonly scope: string;
+    readonly issuerBase: string;
+    readonly graphBaseUrl?: string;
+    readonly nonce?: string;
+  }): Promise<{ readonly prepared: PreparedTokenGrant; readonly user: UserRecord }> {
     const user = this.#users.requireById(input.userId);
     if (user.lifecycleState !== "active") this.#disabledUser();
     const application = this.#applications.requireByClientId(input.clientId);
@@ -426,14 +469,7 @@ export class OAuthService {
       ...(input.graphBaseUrl ? { graphBaseUrl: input.graphBaseUrl } : {}),
       ...(input.nonce ? { nonce: input.nonce } : {}),
     });
-    this.#store.transaction(() => {
-      const currentUser = this.#users.findById(user.id);
-      if (currentUser?.lifecycleState !== "active") {
-        throw new OAuthError("USER_DISABLED", "User account is disabled.");
-      }
-      this.#insertPreparedGrant(prepared);
-    });
-    return this.#tokenResponse(prepared);
+    return { prepared, user };
   }
 
   async #prepareTokens(input: {
