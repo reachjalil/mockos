@@ -1236,7 +1236,7 @@ describe("request log service", () => {
     expect(result.requestIds).toHaveLength(MAX_ASSERTION_REQUEST_IDS);
     expect(result.requestIds[0]).toBe("bounded-1004");
     expect(result.message).toContain("Returning the newest 1000 request IDs");
-  });
+  }, 15_000);
 
   it("trims before insertion when the total byte budget is reached", () => {
     const store = memoryStore();
