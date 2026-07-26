@@ -222,3 +222,41 @@ describe("mock LLM edge observation integration", () => {
     }
   });
 });
+
+describe("mock MCP platform-credential containment", () => {
+  it("marks a repeated-space platform Bearer before forwarding into the environment", async () => {
+    const platformApiKey = `mk_${"p".repeat(32)}`;
+    let forwardedRequest: Request | undefined;
+    const rpc = {
+      fetch: vi.fn(async (request: Request) => {
+        forwardedRequest = request;
+        return Response.json({ contained: true }, { status: 401 });
+      }),
+    };
+    const request = new Request(
+      `https://mockos.example/e/${environmentId}/mcp-mock/agent-tools`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer   ${platformApiKey}`,
+        },
+      }
+    );
+
+    const response = await routeEnvironmentRequest(
+      request,
+      {
+        ...routingBindings(rpc),
+        API_KEY: platformApiKey,
+      },
+      { hostingMode: "path" }
+    );
+
+    expect(response?.status).toBe(401);
+    expect(rpc.fetch).toHaveBeenCalledTimes(1);
+    expect(forwardedRequest?.headers.get("authorization")).toBe(
+      `Bearer   ${platformApiKey}`
+    );
+    expect(forwardedRequest?.headers.get("x-mockos-redact-authorization")).toBe("true");
+  });
+});

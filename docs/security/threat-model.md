@@ -84,6 +84,11 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
   `authentication.token`; its occurrence in every other definition key or string
   value is rejected. If an MCP dependency returns reflected credential material, the
   operation fails closed.
+- Before forwarding an environment-hosted mock-MCP request, the edge recognizes the
+  active platform key after a case-insensitive `Bearer` scheme and one or more literal
+  spaces, then sets a trusted internal rejection marker. The Environment Durable
+  Object rejects that carrier before invoking the mock-MCP parser; the original
+  request header is not rewritten.
 - Every mock-MCP definition mutation carries explicit compare-and-swap intent.
   `expectedRevision: null` is create-only; a changed put must name the positive
   current revision. Canonical replay is checked first, so an ambiguous successful

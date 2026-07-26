@@ -204,9 +204,9 @@ export const routeEnvironmentRequest = async (
       providerPath: resolution.providerPath,
     });
   }
-  const controlAuthorization = bindings.API_KEY
-    ? request.headers.get("authorization") === `Bearer ${bindings.API_KEY}`
-    : false;
+  const authorization = request.headers.get("authorization");
+  const bearer = authorization && /^Bearer +([^\s]+)$/i.exec(authorization)?.[1];
+  const controlAuthorization = bindings.API_KEY ? bearer === bindings.API_KEY : false;
   const routedResolution =
     resolution.kind === "mock-mcp"
       ? resolution
