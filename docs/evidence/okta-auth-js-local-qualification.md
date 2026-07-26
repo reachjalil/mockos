@@ -28,10 +28,11 @@ retains `acr: "urn:okta:loa:1fa:any"` and `amr: ["pwd"]`. This record may qualif
 transaction bridge through a verified factor, but it must not be cited as
 MFA-assurance-token evidence.
 
-The candidate starts from public revision
-`cf8457682776f49322a3dd57623641dbab2dc194` on branch
-`codex/okta-mfa-oidc`. It remains working-tree evidence until committed; this record
-is not an immutable revision, hosted-CI run, deployment, or release record.
+The runtime exercised by this record is immutable public implementation revision
+`2eaa7e66b64587e1e0af842bfcacf721a6c3934d` on branch
+`codex/okta-mfa-oidc`. The accepted client and cleanup runs plus the complete
+workspace gate passed against the source committed at that revision. This remains
+local evidence, not a hosted-CI run, deployment, or release record.
 
 ## Eight-level evidence boundary
 
@@ -39,7 +40,7 @@ is not an immutable revision, hosted-CI run, deployment, or release record.
 | --- | --- | --- |
 | Designed (D) | Yes | The bounded Classic factor, one-use session, public OIDC, management, network, lifecycle, observation, and cleanup contracts are explicit in the harness and [quickstart](../quickstarts/okta-auth-js-node.md). |
 | Implemented (I) | Yes | The mounted factor route and validation-before-consume one-use session-token authorization bridge completed the exact journey. |
-| Source-tested (S) | Yes | Focused core, HTTP-adapter, Worker, contract, type, lint, syntax, and diff checks passed. The complete repository gate was still pending when this record was finalized and remains a handoff gate. |
+| Source-tested (S) | Yes | Focused core, HTTP-adapter, Worker, contract, type, lint, syntax, and diff checks passed, followed by the complete `pnpm check` repository gate at immutable implementation revision `2eaa7e66b64587e1e0af842bfcacf721a6c3934d`. |
 | Integration-tested (X) | Yes | The real HTTPS loopback path traversed local Wrangler, MCP, routing, Durable Objects, and provider routes. |
 | SDK/client-qualified (Q) | Yes | Exact Okta Auth JS 8.0.1 and MCP SDK 1.29.0 clients completed the stated flow. |
 | Hosted-smoke (H) | No | No remote Worker, Cloud endpoint, or exact deployed version ran this journey. |
@@ -246,7 +247,7 @@ It separately requires exactly three token requests with statuses
 | Worker Okta integration | 1 file, 2 tests passed |
 | E2E contract | 3 tests passed |
 | Static checks | Core, engine-http, and worker-kit types passed; targeted Biome checks, module syntax checks, and `git diff --check` passed |
-| Complete workspace gate | Pending at record finalization; required before handoff |
+| Complete workspace gate | `pnpm check` passed at immutable public implementation revision `2eaa7e66b64587e1e0af842bfcacf721a6c3934d` |
 
 Hosted CI remains S and must be recorded separately. A green local gate does not
 become H, V, or release evidence.
@@ -346,5 +347,6 @@ This record does not qualify:
 - guarded promotion, rollback, package publication, uptime, durability, security
   audit, penetration test, or production readiness.
 
-Run [the quickstart](../quickstarts/okta-auth-js-node.md) to produce the evidence that
-finalizes this record.
+Run [the quickstart](../quickstarts/okta-auth-js-node.md) to reproduce the bounded
+local evidence recorded above. A new run does not inherit this result unless it
+matches the exact client, source, network, sequence, redaction, and cleanup boundary.

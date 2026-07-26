@@ -1296,6 +1296,7 @@ const publicMcpFiles = [
   "docs/mock-llm.md",
   "docs/quickstarts/openai-sdk.md",
   "docs/quickstarts/anthropic-sdk.md",
+  "docs/evidence/okta-auth-js-local-qualification.md",
   "docs/skill.md",
   "docs/f-series/f1-mcp-foundation.md",
   "docs/f-series/f2-llm-kernel.md",
@@ -1354,6 +1355,37 @@ if (
 }
 
 const mockMcpGuide = contents.find(([path]) => path === "docs/mock-mcp.md")?.[1];
+
+const oktaAuthJsEvidence = contents.find(
+  ([path]) => path === "docs/evidence/okta-auth-js-local-qualification.md"
+)?.[1];
+for (const required of [
+  "Status: Bounded local D/I/S/X/Q passed; H/V/P remain unqualified",
+  "`2eaa7e66b64587e1e0af842bfcacf721a6c3934d`",
+  "complete `pnpm check` repository gate",
+  "Complete workspace gate | `pnpm check` passed",
+  "local evidence, not a hosted-CI run, deployment, or release record",
+]) {
+  if (!oktaAuthJsEvidence?.includes(required)) {
+    failures.push(
+      `the Okta Auth JS qualification record must preserve finalized evidence phrase ${required}`
+    );
+  }
+}
+for (const stale of [
+  "cf8457682776f49322a3dd57623641dbab2dc194",
+  "It remains working-tree evidence until committed",
+  "complete repository gate was still pending",
+  "Pending at record finalization",
+  "finalizes this record",
+]) {
+  if (oktaAuthJsEvidence?.includes(stale)) {
+    failures.push(
+      `the Okta Auth JS qualification record contains stale pre-commit phrase ${stale}`
+    );
+  }
+}
+
 for (const required of [
   "put_mock_mcp_server",
   "list_mock_mcp_servers",
