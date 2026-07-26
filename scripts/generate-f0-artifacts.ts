@@ -1,5 +1,7 @@
 #!/usr/bin/env tsx
 
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, posix, resolve } from "node:path";
 import {
   generateMockLlmAnthropicProviderDocumentation,
   generateMockLlmOpenAiProviderDocumentation,
@@ -10,8 +12,6 @@ import {
   type MockosManagementDocumentationCatalog,
   type MockosManagementDocumentationTool,
 } from "../packages/openapi/src/index";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, posix, resolve } from "node:path";
 
 type JsonValue =
   | null
@@ -256,6 +256,16 @@ const renderManagementTools = (
     "",
     "- The five F1 management operations configure source-qualified mock MCP servers",
     "  inside an environment. They are MCP-only and add no self-hosted HTTP route.",
+    "- Every F1 mutation carries explicit revision intent: create with",
+    "  `expectedRevision: null`; replace, reset, or delete with the positive current",
+    "  revision. Canonically identical put replay succeeds before CAS validation.",
+    "- Replacement is a complete definition write. A bearer Mock Credential must be",
+    "  resupplied or rotated because the safe `{ configured: true }` read marker is",
+    "  not a valid replacement input.",
+    "- Reset atomically clears application state while preserving the definition,",
+    "  revision, and sessions. Delete atomically removes definition, state, and",
+    "  sessions. Missing servers return typed 404 errors; stale or ABA revisions",
+    "  return typed 409 conflicts.",
     `- The mock data plane implements protocol \`${catalog.future.mockMcpServers.testedProtocolVersion}\``,
     "  over POST-only Streamable HTTP. Path and subdomain endpoint templates are",
     `  \`${catalog.future.mockMcpServers.pathEndpoint}\` and`,
@@ -513,6 +523,9 @@ const renderLlmsIndex = (catalog: MockosManagementDocumentationCatalog): string 
     `  \`${catalog.future.mockMcpServers.pathEndpoint}\` or`,
     `  \`${catalog.future.mockMcpServers.subdomainEndpoint}\`; deployed acceptance is`,
     `  \`${catalog.future.mockMcpServers.deployedAcceptance}\`.`,
+    "- F1 mock MCP definition mutations are MCP-only atomic CAS operations:",
+    "  `put` requires null-create or positive-current-replace intent, canonical replay",
+    "  precedes CAS, and reset/delete require the positive current revision.",
     "- F2 mock LLM definitions: four MCP-only operations are source-implemented with",
     "  schema-v8 environment persistence and write-only provider Mock Credentials.",
     "- F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic",

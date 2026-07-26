@@ -2,10 +2,10 @@ import { DurableObject } from "cloudflare:workers";
 import {
   type ApplicationListPage,
   type ApplicationRegistration,
-  applicationRegistrationSchema,
   type AssertionResult,
   type AssertionSpec,
   applicationListPageSchema,
+  applicationRegistrationSchema,
   type ClearScenarioResult,
   type CreateApplicationInput,
   type EnvironmentConfig,
@@ -1101,22 +1101,28 @@ export class EnvironmentDurableObject extends DurableObject {
     return applicationRegistration(created);
   }
 
-  async putMockMcpServer(input: unknown): Promise<MockMcpServerView> {
+  async putMockMcpServer(
+    input: unknown,
+    expectedRevision: number | null
+  ): Promise<MockMcpServerView> {
     const server = mockMcpServerWriteSchema.parse(input);
     const { authentication, ...common } = server;
     if (authentication.mode === "bearer") {
       this.#assertNotPlatformCredential(authentication.token);
     }
-    const persisted = this.#mockMcp.put({
-      ...common,
-      authentication:
-        authentication.mode === "none"
-          ? authentication
-          : {
-              mode: "bearer",
-              tokenSha256: await hashSecret(authentication.token),
-            },
-    });
+    const persisted = this.#mockMcp.put(
+      {
+        ...common,
+        authentication:
+          authentication.mode === "none"
+            ? authentication
+            : {
+                mode: "bearer",
+                tokenSha256: await hashSecret(authentication.token),
+              },
+      },
+      expectedRevision
+    );
     await this.#touch();
     return toMockMcpServerView(persisted);
   }
@@ -1133,14 +1139,14 @@ export class EnvironmentDurableObject extends DurableObject {
     return server ? toMockMcpServerView(server) : undefined;
   }
 
-  async deleteMockMcpServer(slug: string): Promise<boolean> {
-    const deleted = this.#mockMcp.delete(slug);
-    if (deleted) await this.#touch();
+  async deleteMockMcpServer(slug: string, expectedRevision: number): Promise<true> {
+    const deleted = this.#mockMcp.delete(slug, expectedRevision);
+    await this.#touch();
     return deleted;
   }
 
-  async resetMockMcpState(slug: string): Promise<number> {
-    const cleared = this.#mockMcp.resetState(slug);
+  async resetMockMcpState(slug: string, expectedRevision: number): Promise<number> {
+    const cleared = this.#mockMcp.resetState(slug, expectedRevision);
     await this.#touch();
     return cleared;
   }

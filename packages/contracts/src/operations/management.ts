@@ -412,7 +412,7 @@ export const mockosManagementOperations = {
     operationId: "put_mock_mcp_server",
     title: "Create or replace a mock MCP server",
     description:
-      "Creates or atomically replaces one environment-local mock MCP server. Bearer Mock Credentials are accepted only in this write operation and are never returned.",
+      "Creates with expectedRevision null or atomically replaces one environment-local mock MCP server at its current positive revision. Canonical replay succeeds before the revision check. Replacement is a full definition write, so a bearer Mock Credential must be resupplied or rotated; credentials are accepted only in this write operation and are never returned.",
     requiredScopes: ["env:rw"],
     effect: "mutation",
     retry: "idempotent",
@@ -460,7 +460,7 @@ export const mockosManagementOperations = {
     operationId: "delete_mock_mcp_server",
     title: "Delete mock MCP server",
     description:
-      "Deletes a mock MCP server and its revision-bound sessions and application state.",
+      "Atomically deletes a mock MCP server, all of its sessions, and its application state only when expectedRevision matches the current positive revision. Success returns deleted true; a replay after success returns the typed not-found error.",
     requiredScopes: ["env:rw"],
     effect: "destructive",
     retry: "idempotent",
@@ -476,7 +476,7 @@ export const mockosManagementOperations = {
     operationId: "reset_mock_mcp_state",
     title: "Reset mock MCP application state",
     description:
-      "Deletes sequence cursors and other application state for one mock MCP server without changing its definition.",
+      "Deletes sequence cursors and other application state only when expectedRevision matches the current positive server revision, without changing its definition, revision, or sessions. An exact retry succeeds with cleared zero.",
     requiredScopes: ["env:rw"],
     effect: "destructive",
     retry: "idempotent",

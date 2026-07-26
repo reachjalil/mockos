@@ -1,7 +1,7 @@
 # Interface model
 
 Status: Current interface taxonomy including F1 and partial OpenAI/Anthropic F2
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 mockOS is MCP-first: agents and automation manage deterministic test state through
 the management MCP server, then an application under test connects to the
@@ -12,7 +12,7 @@ surface are supporting interfaces, not separate sources of product behavior.
 
 | Interface | Job | Current status |
 | --- | --- | --- |
-| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 classic tools in the current source |
+| Management MCP at `/mcp` | Create and configure environments, seed identities, register applications, define mock MCP and mock-LLM dependencies, inject scenarios, inspect traffic, and clean up | Implemented with 24 tools in the current source |
 | Environment-hosted mock MCP | Simulate tools, resources, templates, and prompts for an agent or MCP client under test | Bounded F1 source-qualified locally; no hosted/deployed acceptance |
 | Mock LLM definitions | Persist OpenAI/Anthropic model, behavior, cadence, and provider-key policy | Four MCP-only F2 operations source-implemented; sole configuration path |
 | Environment-hosted mock LLM | Simulate provider APIs for an application or agent SDK under test | Bounded OpenAI and Anthropic JSON/SSE Chat Completions/Messages/model subsets plus metadata-only observation/assertion source-qualified locally; configured midstream errors, Responses, Anthropic betas, state, audit-grade observation delivery, and deployment unavailable or unqualified |
@@ -60,6 +60,15 @@ compare-and-swap, write-only provider keys, schema-v8 persistence, provider requ
 metadata-only observation/query/assertion through the existing management MCP tools,
 and unsupported behavior.
 
+F1 definition writes are also revision-safe management operations. Put requires
+`expectedRevision: null` for create-only intent or the positive current revision for
+a changed, complete replacement. Canonical replay is checked before CAS. Reset and
+delete require the positive current revision; stale or delete/recreate ABA intent
+returns typed `409` without mutating the selected generation. Reset preserves the
+definition, revision, and sessions, while delete removes definition, state, and
+sessions. These control-plane guards are independent of the environment data plane's
+revision recheck for in-flight protocol calls.
+
 Future Code Mode `search` and `execute` tools are also a management-MCP experience.
 They remain disabled until F6 authorization, audit, sandbox, quota, and cost gates
 pass. Classic management tools remain the current interface.
@@ -95,7 +104,9 @@ different:
 
 - `/mcp` and self-hosted management HTTP require the configured management key;
 - a mock MCP server accepts no credential or its own write-only Bearer Mock
-  Credential, according to its definition;
+  Credential, according to its definition; a changed replacement must resupply or
+  rotate that raw value because the safe `configured: true` read marker is not a write
+  shape;
 - a mock-LLM definition accepts provider-scoped OpenAI/Anthropic Mock Credentials only
   on its management write;
 - the OpenAI data plane requires its own valid Bearer Mock Credential in both
@@ -111,9 +122,9 @@ Never send a management key to a provider-shaped or environment mock MCP endpoin
 The public Worker rejects the active platform key as a substring of a mock-MCP Bearer
 credential and anywhere in a bounded mock-LLM definition's JSON keys or string values.
 Mock credentials exercise synthetic protocol behavior; they are not real provider
-authorization. A mock-LLM safe-view `configured: true` marker is read-only; a
-full-definition replacement must resupply or rotate every enabled strict provider key
-from caller-owned secret storage.
+authorization. Both mock-MCP Bearer and mock-LLM provider safe-view
+`configured: true` markers are read-only. A full-definition replacement must resupply
+or rotate the corresponding raw credential from caller-owned secret storage.
 
 ## Evidence vocabulary
 

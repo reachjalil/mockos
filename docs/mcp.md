@@ -100,7 +100,22 @@ All five F1 and all four F2 operations are MCP-only. The self-hosted HTTP surfac
 remains exactly five routes, and the OpenAPI/typed client projections remain limited
 to those routes.
 `put_mock_mcp_server` is the only F1 operation that accepts a Bearer Mock Credential;
-the handler redacts it and every read view omits both token and verifier.
+the handler redacts it and every read view omits both token and verifier. It requires
+explicit `expectedRevision` intent: `null` is create-only and a positive current
+revision is changed-replacement intent. Canonical replay is checked before CAS and
+returns the existing record without changing revision, timestamps, state, or
+sessions. A replacement is a complete definition write, so a Bearer Mock Credential
+must be resupplied or rotated from caller-owned secret storage; the safe
+`configured: true` marker is not a write shape.
+`reset_mock_mcp_state` and `delete_mock_mcp_server` both require the positive current
+revision. Reset atomically clears current-revision application state while preserving
+the definition, revision, and sessions; an exact retry succeeds with `cleared: 0`.
+Delete atomically removes the definition, state, and all sessions and succeeds only as
+`deleted: true`; an absent row or retry after success returns
+`404 MOCK_MCP_SERVER_NOT_FOUND`. A stale or delete/recreate ABA expectation on any
+changed F1 mutation returns `409 MOCK_MCP_SERVER_REVISION_CONFLICT` without mutation.
+Clients must read and reconcile the current definition rather than incrementing or
+overwriting revisions blindly.
 `put_mock_llm_server` requires explicit `expectedRevision` compare-and-swap intent and
 accepts independent strict OpenAI/Anthropic Mock Credentials as write-only fields.
 They are hashed before persistence; safe put/get views expose only `configured: true`,
@@ -405,6 +420,13 @@ the official MCP SDK to exact local client versions and actual-network Wrangler 
 flows. They qualify only the tools and provider sequences each record names. Neither
 is a hosted MCP command matrix, remote Worker smoke, verified-live comparison, or
 production-readiness result.
+
+The F1 Worker integration separately uses `@modelcontextprotocol/sdk` `1.29.0` against
+the mounted Worker to discover the 24-tool registry and invoke create, canonical
+replay, reset, concurrent changed replacement, stale put/reset/delete, and delete
+through management MCP before exercising the environment data plane. That bounded
+management-CAS slice is D/I/S/X/Q locally. It is not an actual-network run and adds no
+H, P, hosted, Cloud-pin, deployment, or broad-client claim; V is not applicable.
 
 Source evidence means exact-revision local or hosted-CI execution. Deployed acceptance
 additionally binds that revision to an exact mockOS deployment/version and recorded

@@ -105,7 +105,7 @@ describe("mock MCP transport sessions", () => {
       clock,
       new SeededRng("mock-mcp-hash-only")
     );
-    const server = repository.put(serverSpec("one"));
+    const server = repository.put(serverSpec("one"), null);
 
     const created = await repository.createSession({
       serverSlug: "agent",
@@ -172,8 +172,8 @@ describe("mock MCP transport sessions", () => {
       clock,
       new SeededRng("mock-mcp-outcomes")
     );
-    const server = repository.put(serverSpec("one"));
-    repository.put(serverSpec("other", "other"));
+    const server = repository.put(serverSpec("one"), null);
+    repository.put(serverSpec("other", "other"), null);
     const created = await repository.createSession({
       serverSlug: "agent",
       serverRevision: server.revision,
@@ -277,7 +277,7 @@ describe("mock MCP transport sessions", () => {
       clock,
       new SeededRng("mock-mcp-replacement")
     );
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     repository.writeState("agent", first.revision, "cursor", 1);
     const created = await repository.createSession({
       serverSlug: "agent",
@@ -285,7 +285,7 @@ describe("mock MCP transport sessions", () => {
       protocolVersion,
     });
 
-    expect(repository.resetState("agent")).toBe(1);
+    expect(repository.resetState("agent", first.revision)).toBe(1);
     expect(
       await repository.getSession({
         serverSlug: "agent",
@@ -295,7 +295,7 @@ describe("mock MCP transport sessions", () => {
     ).toMatchObject({ status: "active" });
 
     clock.advance(1_000);
-    repository.put(serverSpec("two"));
+    repository.put(serverSpec("two"), first.revision);
     expect(
       await repository.getSession({
         serverSlug: "agent",
@@ -319,13 +319,13 @@ describe("mock MCP transport sessions", () => {
       new FixedClock("2026-07-24T11:00:00.000Z"),
       new SeededRng("mock-mcp-issuance-race")
     );
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     const pending = repository.createSession({
       serverSlug: "agent",
       serverRevision: first.revision,
       protocolVersion,
     });
-    repository.put(serverSpec("two"));
+    repository.put(serverSpec("two"), first.revision);
 
     await expect(pending).rejects.toMatchObject({
       code: "server_revision_mismatch",
@@ -343,7 +343,7 @@ describe("mock MCP transport sessions", () => {
       new FixedClock("2026-07-24T12:00:00.000Z"),
       new SeededRng("mock-mcp-concurrent-cap")
     );
-    const server = repository.put(serverSpec("one"));
+    const server = repository.put(serverSpec("one"), null);
     const results = await Promise.allSettled(
       Array.from({ length: MOCK_MCP_MAX_ACTIVE_SESSIONS_PER_SERVER + 1 }, async () =>
         repository.createSession({
@@ -395,7 +395,7 @@ describe("mock MCP transport sessions", () => {
     const store = memoryStore();
     const clock = new FixedClock("2026-07-24T13:00:00.000Z");
     const repository = new MockMcpRepository(store, clock);
-    repository.put(serverSpec("one"));
+    repository.put(serverSpec("one"), null);
     for (let index = 0; index < 7; index += 1) {
       store.run(
         `INSERT INTO mock_mcp_sessions (
@@ -425,7 +425,8 @@ describe("mock MCP transport sessions", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
     const server = repository.put(
-      serverSpec("stateless", "stateless", { stateful: false })
+      serverSpec("stateless", "stateless", { stateful: false }),
+      null
     );
     await expect(
       repository.createSession({

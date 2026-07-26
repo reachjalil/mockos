@@ -48,6 +48,9 @@
   `/e/{environmentId}/mcp-mock/{slug}` or
   `https://{environmentId}.{baseDomain}/mcp-mock/{slug}`; deployed acceptance is
   `unqualified`.
+- F1 mock MCP definition mutations are MCP-only atomic CAS operations:
+  `put` requires null-create or positive-current-replace intent, canonical replay
+  precedes CAS, and reset/delete require the positive current revision.
 - F2 mock LLM definitions: four MCP-only operations are source-implemented with
   schema-v8 environment persistence and write-only provider Mock Credentials.
 - F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic

@@ -200,6 +200,32 @@ describe("public mock MCP Worker route", () => {
 
     try {
       management = await connectClient(`${origin}/mcp`, apiKey);
+      const advertised = await management.client.listTools();
+      expect(advertised.tools).toHaveLength(24);
+      expect(
+        advertised.tools.find(({ name }) => name === "put_mock_mcp_server")?.inputSchema
+      ).toMatchObject({
+        additionalProperties: false,
+        required: ["expectedRevision", "server"],
+        properties: {
+          expectedRevision: {
+            anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+          },
+        },
+      });
+      for (const name of ["reset_mock_mcp_state", "delete_mock_mcp_server"]) {
+        expect(
+          advertised.tools.find(({ name: candidate }) => candidate === name)
+            ?.inputSchema
+        ).toMatchObject({
+          additionalProperties: false,
+          required: ["slug", "expectedRevision"],
+          properties: {
+            expectedRevision: { type: "integer", minimum: 1 },
+          },
+        });
+      }
+
       const environment = await callData<{ id: string }>(
         management.client,
         "create_environment",
@@ -218,6 +244,7 @@ describe("public mock MCP Worker route", () => {
           authentication: { mode: "bearer"; configured: true };
         };
       }>(management.client, "put_mock_mcp_server", {
+        expectedRevision: null,
         server: mockServer(),
       });
       expect(firstPut).toMatchObject({
@@ -233,6 +260,7 @@ describe("public mock MCP Worker route", () => {
         revision: number;
         updatedAt: string;
       }>(management.client, "put_mock_mcp_server", {
+        expectedRevision: null,
         server: mockServer(),
       });
       expect(replay).toMatchObject({
@@ -404,7 +432,7 @@ describe("public mock MCP Worker route", () => {
       const reset = await callData<{ slug: string; cleared: number }>(
         management.client,
         "reset_mock_mcp_state",
-        { slug: "support-agent" }
+        { slug: "support-agent", expectedRevision: firstPut.revision }
       );
       expect(reset).toEqual({ slug: "support-agent", cleared: 1 });
       await expect(
@@ -441,14 +469,80 @@ describe("public mock MCP Worker route", () => {
       const staleSessionId = rawInitialize.headers.get("MCP-Session-Id");
       expect(staleSessionId).toBeTruthy();
 
-      const changed = await callData<{ revision: number }>(
-        management.client,
-        "put_mock_mcp_server",
-        {
-          server: mockServer("1.0.1"),
-        }
+      const managementClient = management.client;
+      const contenders = await Promise.all(
+        ["1.0.1", "1.0.2"].map((version) =>
+          managementClient.callTool({
+            name: "put_mock_mcp_server",
+            arguments: {
+              expectedRevision: firstPut.revision,
+              server: mockServer(version),
+            },
+          })
+        )
       );
+      const committed = contenders.filter((result) => result?.isError !== true);
+      const conflicted = contenders.filter((result) => result?.isError === true);
+      expect(committed).toHaveLength(1);
+      expect(conflicted).toHaveLength(1);
+      expect(conflicted[0]?._meta?.["mockos/problem"]).toMatchObject({
+        code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+        status: 409,
+      });
+      const changed = (
+        committed[0]?.structuredContent as
+          | {
+              data?: {
+                revision: number;
+                spec: { serverInfo: { version: string } };
+              };
+            }
+          | undefined
+      )?.data;
+      expect(changed).toBeDefined();
+      if (!changed) throw new Error("One concurrent replacement must commit.");
       expect(changed.revision).toBe(2);
+
+      const stalePut = await management.client.callTool({
+        name: "put_mock_mcp_server",
+        arguments: {
+          expectedRevision: firstPut.revision,
+          server: mockServer("1.0.3"),
+        },
+      });
+      const staleReset = await management.client.callTool({
+        name: "reset_mock_mcp_state",
+        arguments: {
+          slug: "support-agent",
+          expectedRevision: firstPut.revision,
+        },
+      });
+      const staleDelete = await management.client.callTool({
+        name: "delete_mock_mcp_server",
+        arguments: {
+          slug: "support-agent",
+          expectedRevision: firstPut.revision,
+        },
+      });
+      for (const stale of [stalePut, staleReset, staleDelete]) {
+        expect(stale.isError).toBe(true);
+        expect(stale._meta?.["mockos/problem"]).toMatchObject({
+          code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+          status: 409,
+        });
+      }
+      await expect(
+        callData<{
+          revision: number;
+          spec: { serverInfo: { version: string } };
+        }>(management.client, "get_mock_mcp_server", {
+          slug: "support-agent",
+        })
+      ).resolves.toMatchObject({
+        revision: changed.revision,
+        spec: { serverInfo: { version: changed.spec.serverInfo.version } },
+      });
+
       const stalePing = await postMockRpc(
         endpoint,
         mockBearer,
@@ -507,14 +601,29 @@ describe("public mock MCP Worker route", () => {
 
       const deletedServer = await callData<{
         slug: string;
-        deleted: boolean;
+        deleted: true;
       }>(management.client, "delete_mock_mcp_server", {
         slug: "support-agent",
+        expectedRevision: changed.revision,
       });
       expect(deletedServer).toEqual({
         slug: "support-agent",
         deleted: true,
       });
+      for (const name of ["delete_mock_mcp_server", "reset_mock_mcp_state"]) {
+        const absent = await management.client.callTool({
+          name,
+          arguments: {
+            slug: "support-agent",
+            expectedRevision: changed.revision,
+          },
+        });
+        expect(absent.isError).toBe(true);
+        expect(absent._meta?.["mockos/problem"]).toMatchObject({
+          code: "MOCK_MCP_SERVER_NOT_FOUND",
+          status: 404,
+        });
+      }
     } finally {
       await dataPlane?.client.close().catch(() => undefined);
       if (management && environmentId) {

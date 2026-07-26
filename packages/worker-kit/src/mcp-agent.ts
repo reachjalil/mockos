@@ -45,11 +45,11 @@ export type MockosMcpBindings = {
 };
 
 type MockMcpEnvironmentRpc = {
-  putMockMcpServer(input: unknown): Promise<unknown>;
+  putMockMcpServer(input: unknown, expectedRevision: number | null): Promise<unknown>;
   listMockMcpServers(): Promise<unknown>;
   getMockMcpServer(slug: string): Promise<unknown>;
-  deleteMockMcpServer(slug: string): Promise<boolean>;
-  resetMockMcpState(slug: string): Promise<number>;
+  deleteMockMcpServer(slug: string, expectedRevision: number): Promise<true>;
+  resetMockMcpState(slug: string, expectedRevision: number): Promise<number>;
 };
 
 type MockLlmEnvironmentRpc = {
@@ -143,6 +143,16 @@ const mockMcpToolError = (
       ? Reflect.get(error, "code")
       : undefined;
   if (code === "server_not_found") return missingMockMcpServer(slug);
+  if (code === "server_revision_mismatch") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+      title: "Mock MCP server revision conflict",
+      status: 409,
+      detail:
+        "Read the current mock MCP server revision and retry the mutation against that revision.",
+      code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+    });
+  }
   if (code === "server_limit") {
     return new MockosToolError({
       type: "https://mockos.live/problems/mock-mcp-server-limit",
@@ -151,6 +161,26 @@ const mockMcpToolError = (
       detail:
         "Delete an existing mock MCP server before creating another in this environment.",
       code: "MOCK_MCP_SERVER_LIMIT",
+    });
+  }
+  if (code === "server_revision_limit") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-server-revision-limit",
+      title: "Mock MCP server revision capacity reached",
+      status: 409,
+      detail:
+        "This environment cannot safely allocate another mock MCP server revision.",
+      code: "MOCK_MCP_SERVER_REVISION_LIMIT",
+    });
+  }
+  if (code === "invalid_expected_revision") {
+    return new MockosToolError({
+      type: "https://mockos.live/problems/mock-mcp-expected-revision-invalid",
+      title: "Mock MCP expected revision is invalid",
+      status: 400,
+      detail:
+        "Expected revision must be a positive safe integer; put accepts null only when creating a server.",
+      code: "MOCK_MCP_EXPECTED_REVISION_INVALID",
     });
   }
   return undefined;
@@ -379,11 +409,14 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
           ...(location.graphBaseUrl ? { graphBaseUrl: location.graphBaseUrl } : {}),
         });
       },
-      putMockMcpServer: async (environmentId, server) => {
+      putMockMcpServer: async (environmentId, server, expectedRevision) => {
         await this.#requireEnvironment(environmentId);
         try {
           return mockMcpServerViewSchema.parse(
-            await this.#mockMcpEnvironment(environmentId).putMockMcpServer(server)
+            await this.#mockMcpEnvironment(environmentId).putMockMcpServer(
+              server,
+              expectedRevision
+            )
           );
         } catch (error) {
           throw mockMcpToolError(error, server.slug) ?? error;
@@ -402,14 +435,24 @@ export class MockosMcpAgent extends McpAgent<MockosMcpBindings, MockosMcpState> 
         if (!raw) throw missingMockMcpServer(slug);
         return mockMcpServerViewSchema.parse(raw) as MockMcpServerView;
       },
-      deleteMockMcpServer: async (environmentId, slug) => {
-        await this.#requireEnvironment(environmentId);
-        return this.#mockMcpEnvironment(environmentId).deleteMockMcpServer(slug);
-      },
-      resetMockMcpState: async (environmentId, slug) => {
+      deleteMockMcpServer: async (environmentId, slug, expectedRevision) => {
         await this.#requireEnvironment(environmentId);
         try {
-          return await this.#mockMcpEnvironment(environmentId).resetMockMcpState(slug);
+          return await this.#mockMcpEnvironment(environmentId).deleteMockMcpServer(
+            slug,
+            expectedRevision
+          );
+        } catch (error) {
+          throw mockMcpToolError(error, slug) ?? error;
+        }
+      },
+      resetMockMcpState: async (environmentId, slug, expectedRevision) => {
+        await this.#requireEnvironment(environmentId);
+        try {
+          return await this.#mockMcpEnvironment(environmentId).resetMockMcpState(
+            slug,
+            expectedRevision
+          );
         } catch (error) {
           throw mockMcpToolError(error, slug) ?? error;
         }

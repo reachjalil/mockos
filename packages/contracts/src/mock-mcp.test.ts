@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  deleteMockMcpServerToolInputSchema,
+  putMockMcpServerToolInputSchema,
+  resetMockMcpStateToolInputSchema,
+} from "./index";
+import {
   MOCK_MCP_DEFAULT_PAGE_SIZE,
   MOCK_MCP_MAX_CAPABILITIES_PER_KIND,
   MOCK_MCP_MAX_SCHEMA_BYTES,
@@ -338,6 +343,62 @@ describe("mock MCP contracts", () => {
         },
       })
     ).toThrow();
+  });
+
+  it("requires explicit revision intent for every mock MCP mutation", () => {
+    const server = {
+      version: 1,
+      slug: "revisioned-server",
+      serverInfo: { name: "Revisioned server", version: "1" },
+    };
+
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: null,
+        server,
+      })
+    ).toMatchObject({ expectedRevision: null, server });
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: 7,
+        server,
+      })
+    ).toMatchObject({ expectedRevision: 7, server });
+    for (const expectedRevision of [undefined, 0, -1, 1.5, Number.MAX_VALUE]) {
+      expect(() =>
+        putMockMcpServerToolInputSchema.parse({
+          expectedRevision,
+          server,
+        })
+      ).toThrow();
+    }
+    expect(() =>
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: null,
+        server,
+        unexpected: true,
+      })
+    ).toThrow(/Unknown top-level/);
+
+    for (const schema of [
+      deleteMockMcpServerToolInputSchema,
+      resetMockMcpStateToolInputSchema,
+    ]) {
+      expect(schema.parse({ slug: server.slug, expectedRevision: 7 })).toEqual({
+        slug: server.slug,
+        expectedRevision: 7,
+      });
+      for (const expectedRevision of [undefined, null, 0, -1, 1.5]) {
+        expect(() => schema.parse({ slug: server.slug, expectedRevision })).toThrow();
+      }
+      expect(() =>
+        schema.parse({
+          slug: server.slug,
+          expectedRevision: 7,
+          unexpected: true,
+        })
+      ).toThrow();
+    }
   });
 
   it("accepts only safe absolute Level-1 URI templates", () => {

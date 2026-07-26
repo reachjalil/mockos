@@ -40,7 +40,7 @@ const createRealRepositoryHarness = (
   stores.push(store);
   applyMigrations(store);
   const repository = new MockMcpRepository(store);
-  const server = repository.put(serverRecord(serverInput).spec);
+  const server = repository.put(serverRecord(serverInput).spec, null);
   const handler = createMockMcpFetchHandler({
     repository,
     observe: () => {},
@@ -157,7 +157,8 @@ describe("mock MCP adapter with the durable repository", () => {
           mode: "bearer",
           tokenSha256: "a".repeat(64),
         },
-      }).spec
+      }).spec,
+      null
     );
     let authenticationStarted!: () => void;
     let releaseAuthentication!: () => void;
@@ -194,7 +195,7 @@ describe("mock MCP adapter with the durable repository", () => {
     );
 
     await started;
-    expect(repository.delete(oldServer.spec.slug)).toBe(true);
+    expect(repository.delete(oldServer.spec.slug, oldServer.revision)).toBe(true);
     const recreated = repository.put(
       serverRecord({
         serverInfo: { name: "New definition", version: "2.0.0" },
@@ -202,7 +203,8 @@ describe("mock MCP adapter with the durable repository", () => {
           mode: "bearer",
           tokenSha256: "b".repeat(64),
         },
-      }).spec
+      }).spec,
+      null
     );
     expect(recreated.revision).toBeGreaterThan(oldServer.revision);
     releaseAuthentication();
@@ -248,7 +250,7 @@ describe("mock MCP adapter with the durable repository", () => {
           },
         ],
       });
-    const oldServer = repository.put(generationServer("old generation").spec);
+    const oldServer = repository.put(generationServer("old generation").spec, null);
     let evaluationStarted!: () => void;
     let releaseEvaluation!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -288,8 +290,8 @@ describe("mock MCP adapter with the durable repository", () => {
     const pending = call(oldServer, "old-call");
 
     await started;
-    expect(repository.delete(oldServer.spec.slug)).toBe(true);
-    const recreated = repository.put(generationServer("new generation").spec);
+    expect(repository.delete(oldServer.spec.slug, oldServer.revision)).toBe(true);
+    const recreated = repository.put(generationServer("new generation").spec, null);
     releaseEvaluation();
 
     const staleResponse = await pending;

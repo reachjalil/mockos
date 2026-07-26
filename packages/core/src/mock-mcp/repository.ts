@@ -165,6 +165,7 @@ export class MockMcpRepositoryError extends Error {
       | "server_revision_limit"
       | "server_not_found"
       | "server_revision_mismatch"
+      | "invalid_expected_revision"
       | "sessions_disabled"
       | "session_limit"
       | "invalid_session"
@@ -180,11 +181,26 @@ export class MockMcpRepositoryError extends Error {
   }
 }
 
+const assertRequiredRevision = (revision: number): void => {
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new MockMcpRepositoryError(
+      "invalid_expected_revision",
+      "A mock MCP revision must be a positive safe integer."
+    );
+  }
+};
+
+const assertExpectedRevision = (expectedRevision: number | null): void => {
+  if (expectedRevision !== null) assertRequiredRevision(expectedRevision);
+};
+
 /**
  * Durable, environment-local mock MCP configuration and application state.
  * New and changed specs consume one durable environment-wide revision. Replacing
  * a spec is an atomic boundary: old state is removed and old protocol sessions
- * are terminated before the new revision becomes visible.
+ * are terminated before the new revision becomes visible. Callers must state
+ * create-only (`null`) or a specific current replacement revision. A canonical
+ * replay succeeds before that CAS check so a timed-out write remains retry-safe.
  */
 export class MockMcpRepository {
   readonly #store: SqlStore;
@@ -201,20 +217,52 @@ export class MockMcpRepository {
     this.#rng = rng;
   }
 
-  put(input: unknown): MockMcpServerRecord {
+  put(input: unknown, expectedRevision: number | null): MockMcpServerRecord {
     const spec = parseMockMcpServerSpec(input);
     const serializedSpec = canonicalJson(spec);
+    assertExpectedRevision(expectedRevision);
     const now = this.#clock.now().toISOString();
     return this.#store.transaction(() => {
       const existing = this.#serverRow(spec.slug);
+      const existingRecord = existing ? parseServerRow(existing) : undefined;
+
+      // Replay precedes CAS deliberately. A timed-out successful write can be
+      // retried with its now-stale expectation without allocating a revision,
+      // deleting state, or terminating revision-bound sessions.
       if (existing?.spec_json === serializedSpec) {
-        return parseServerRow(existing);
+        if (!existingRecord) {
+          throw new MockMcpRepositoryError(
+            "invalid_persisted_server",
+            `Persisted mock MCP server ${spec.slug} disappeared during replay.`
+          );
+        }
+        return existingRecord;
       }
-      if (!existing) {
+
+      if (
+        (expectedRevision === null && existingRecord) ||
+        (expectedRevision !== null &&
+          (!existingRecord || existingRecord.revision !== expectedRevision))
+      ) {
+        throw new MockMcpRepositoryError(
+          "server_revision_mismatch",
+          expectedRevision === null
+            ? `Mock MCP server ${spec.slug} already exists.`
+            : `Mock MCP server ${spec.slug} revision ${expectedRevision} is stale.`
+        );
+      }
+
+      if (!existingRecord) {
         const count = Number(
           this.#store.get<CountRow>("SELECT COUNT(*) AS count FROM mock_mcp_servers")
             ?.count ?? 0
         );
+        if (!Number.isSafeInteger(count) || count < 0) {
+          throw new MockMcpRepositoryError(
+            "invalid_persisted_server",
+            "The persisted mock MCP server count is invalid."
+          );
+        }
         if (count >= MOCK_MCP_MAX_SERVERS) {
           throw new MockMcpRepositoryError(
             "server_limit",
@@ -224,16 +272,16 @@ export class MockMcpRepository {
       }
 
       const revision = this.#allocateRevision();
-      const createdAt = existing?.created_at ?? now;
-      if (existing) {
+      const createdAt = existingRecord?.createdAt ?? now;
+      if (existingRecord) {
         this.#store.run("DELETE FROM mock_state WHERE server_slug = ?", spec.slug);
         this.#store.run(
           `UPDATE mock_mcp_sessions
            SET terminated_at = COALESCE(terminated_at, ?)
-           WHERE server_slug = ? AND server_revision = ?`,
+          WHERE server_slug = ? AND server_revision = ?`,
           now,
           spec.slug,
-          Number(existing.revision)
+          existingRecord.revision
         );
       }
       this.#store.run(
@@ -292,12 +340,7 @@ export class MockMcpRepository {
    */
   assertServerRevision(slug: string, expectedRevision: number): void {
     mockMcpSlugSchema.parse(slug);
-    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
-      throw new MockMcpRepositoryError(
-        "server_revision_mismatch",
-        `Mock MCP server ${slug} revision ${expectedRevision} is invalid.`
-      );
-    }
+    assertRequiredRevision(expectedRevision);
     const current = this.#serverRow(slug);
     if (!current || Number(current.revision) !== expectedRevision) {
       throw new MockMcpRepositoryError(
@@ -319,27 +362,68 @@ export class MockMcpRepository {
       .map((row) => toMockMcpServerSummary(parseServerRow(row)));
   }
 
-  delete(slug: string): boolean {
+  delete(slug: string, expectedRevision: number): true {
     mockMcpSlugSchema.parse(slug);
+    assertRequiredRevision(expectedRevision);
     return this.#store.transaction(() => {
+      const current = this.#serverRow(slug);
+      if (!current) {
+        throw new MockMcpRepositoryError(
+          "server_not_found",
+          `Mock MCP server ${slug} does not exist.`
+        );
+      }
+      const currentRecord = parseServerRow(current);
+      this.#revisionAllocatorState();
+      if (currentRecord.revision !== expectedRevision) {
+        throw new MockMcpRepositoryError(
+          "server_revision_mismatch",
+          `Mock MCP server ${slug} revision ${expectedRevision} is stale.`
+        );
+      }
+
       this.#store.run("DELETE FROM mock_state WHERE server_slug = ?", slug);
       this.#store.run("DELETE FROM mock_mcp_sessions WHERE server_slug = ?", slug);
-      return (
-        this.#store.run("DELETE FROM mock_mcp_servers WHERE slug = ?", slug).changes > 0
+      const deleted = this.#store.run(
+        "DELETE FROM mock_mcp_servers WHERE slug = ? AND revision = ?",
+        slug,
+        expectedRevision
       );
+      if (deleted.changes !== 1) {
+        throw new MockMcpRepositoryError(
+          "invalid_persisted_server",
+          `Mock MCP server ${slug} could not be deleted atomically.`
+        );
+      }
+      return true;
     });
   }
 
-  resetState(slug: string): number {
-    const server = this.require(slug);
-    return this.#store.transaction(
-      () =>
-        this.#store.run(
-          "DELETE FROM mock_state WHERE server_slug = ? AND server_revision = ?",
-          slug,
-          server.revision
-        ).changes
-    );
+  resetState(slug: string, expectedRevision: number): number {
+    mockMcpSlugSchema.parse(slug);
+    assertRequiredRevision(expectedRevision);
+    return this.#store.transaction(() => {
+      const current = this.#serverRow(slug);
+      if (!current) {
+        throw new MockMcpRepositoryError(
+          "server_not_found",
+          `Mock MCP server ${slug} does not exist.`
+        );
+      }
+      const currentRecord = parseServerRow(current);
+      this.#revisionAllocatorState();
+      if (currentRecord.revision !== expectedRevision) {
+        throw new MockMcpRepositoryError(
+          "server_revision_mismatch",
+          `Mock MCP server ${slug} revision ${expectedRevision} is stale.`
+        );
+      }
+      return this.#store.run(
+        "DELETE FROM mock_state WHERE server_slug = ? AND server_revision = ?",
+        slug,
+        expectedRevision
+      ).changes;
+    });
   }
 
   /**
@@ -662,7 +746,10 @@ export class MockMcpRepository {
     );
   }
 
-  #allocateRevision(): number {
+  #revisionAllocatorState(): {
+    readonly lastRevision: number;
+    readonly maximumRevision: number;
+  } {
     const allocator = this.#store.get<RevisionAllocatorRow>(
       `SELECT last_revision,
               COALESCE(
@@ -687,6 +774,11 @@ export class MockMcpRepository {
         "The mock MCP revision allocator is invalid."
       );
     }
+    return { lastRevision, maximumRevision };
+  }
+
+  #allocateRevision(): number {
+    const { lastRevision } = this.#revisionAllocatorState();
     if (lastRevision >= Number.MAX_SAFE_INTEGER) {
       throw new MockMcpRepositoryError(
         "server_revision_limit",

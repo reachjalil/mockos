@@ -520,6 +520,48 @@ if (
     "F1 mock MCP must remain source-qualified at its exact endpoints and unqualified for deployment"
   );
 }
+const expectedMockMcpManagementTools = [
+  "put_mock_mcp_server",
+  "list_mock_mcp_servers",
+  "get_mock_mcp_server",
+  "delete_mock_mcp_server",
+  "reset_mock_mcp_state",
+];
+const mockMcpManagement = catalog.future?.mockMcpServers?.managementDefinitions;
+if (
+  mockMcpManagement?.status !== "source-implemented" ||
+  mockMcpManagement?.interface !== "MCP-only" ||
+  !equal(mockMcpManagement?.toolIds, expectedMockMcpManagementTools) ||
+  mockMcpManagement?.persistence !== "environment-schema-v6" ||
+  mockMcpManagement?.bearerCredentials !== "write-only-server-scoped" ||
+  mockMcpManagement?.putContract?.expectedRevision !==
+    "required-null-create-or-positive-replace" ||
+  mockMcpManagement?.putContract?.replay !== "canonical-before-cas" ||
+  mockMcpManagement?.putContract?.replacement !== "full-definition" ||
+  mockMcpManagement?.putContract?.bearerCredentialReplacement !==
+    "resupply-or-rotate" ||
+  mockMcpManagement?.putContract?.safeViewWriteShape !== "unsupported" ||
+  mockMcpManagement?.putContract?.revisionMismatch !== "typed-409" ||
+  mockMcpManagement?.resetContract?.expectedRevision !== "required-positive" ||
+  mockMcpManagement?.resetContract?.behavior !== "atomic-cas" ||
+  mockMcpManagement?.resetContract?.preserves !== "definition-revision-and-sessions" ||
+  mockMcpManagement?.resetContract?.exactReplay !== "cleared-zero" ||
+  mockMcpManagement?.resetContract?.missing !== "typed-404" ||
+  mockMcpManagement?.resetContract?.revisionMismatch !== "typed-409" ||
+  mockMcpManagement?.deleteContract?.expectedRevision !== "required-positive" ||
+  mockMcpManagement?.deleteContract?.behavior !== "atomic-cas" ||
+  mockMcpManagement?.deleteContract?.removes !== "definition-state-and-sessions" ||
+  mockMcpManagement?.deleteContract?.success !== "deleted-true" ||
+  mockMcpManagement?.deleteContract?.missingOrReplay !== "typed-404" ||
+  mockMcpManagement?.deleteContract?.revisionMismatch !== "typed-409" ||
+  mockMcpManagement?.validation?.topLevelArguments !== "strict-secret-safe" ||
+  mockMcpManagement?.validation?.definitionFailures !== "credential-free-generic" ||
+  mockMcpManagement?.validation?.revision !== "positive-safe-integer"
+) {
+  failures.push(
+    "F1 mock MCP management must retain its exact MCP-only revision-safe contract"
+  );
+}
 const expectedMockLlmManagementTools = [
   "put_mock_llm_server",
   "list_mock_llm_servers",
@@ -952,6 +994,49 @@ if (
     "put_mock_llm_server must retain strict, mandatory top-level write arguments"
   );
 }
+const putMockMcpTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "put_mock_mcp_server"
+);
+const putMockMcpExpectedRevision =
+  putMockMcpTool?.mcp?.inputSchema?.properties?.expectedRevision;
+if (
+  putMockMcpTool?.mcp?.inputSchema?.additionalProperties !== false ||
+  !putMockMcpTool.mcp.inputSchema.required?.includes("expectedRevision") ||
+  !putMockMcpTool.mcp.inputSchema.required?.includes("server") ||
+  !putMockMcpExpectedRevision?.anyOf?.some((candidate) => candidate.type === "null") ||
+  !putMockMcpExpectedRevision?.anyOf?.some(
+    (candidate) => candidate.type === "integer" && candidate.minimum === 1
+  )
+) {
+  failures.push(
+    "put_mock_mcp_server must require strict null-create-or-positive-replace intent"
+  );
+}
+for (const operationId of ["delete_mock_mcp_server", "reset_mock_mcp_state"]) {
+  const tool = catalog.managementMcp?.tools?.find(
+    (candidate) => candidate.operationId === operationId
+  );
+  if (
+    tool?.mcp?.inputSchema?.additionalProperties !== false ||
+    !tool.mcp.inputSchema.required?.includes("expectedRevision") ||
+    !tool.mcp.inputSchema.required?.includes("slug") ||
+    tool.mcp.inputSchema.properties?.expectedRevision?.type !== "integer" ||
+    tool.mcp.inputSchema.properties?.expectedRevision?.minimum !== 1
+  ) {
+    failures.push(
+      `${operationId} must require a strict positive expectedRevision for atomic CAS`
+    );
+  }
+}
+const deleteMockMcpTool = catalog.managementMcp?.tools?.find(
+  ({ operationId }) => operationId === "delete_mock_mcp_server"
+);
+if (
+  deleteMockMcpTool?.mcp?.outputSchema?.properties?.data?.properties?.deleted?.const !==
+  true
+) {
+  failures.push("delete_mock_mcp_server success must be the literal deleted: true");
+}
 const deleteMockLlmTool = catalog.managementMcp?.tools?.find(
   ({ operationId }) => operationId === "delete_mock_llm_server"
 );
@@ -1048,6 +1133,16 @@ for (const required of [
   "get_mock_mcp_server",
   "delete_mock_mcp_server",
   "reset_mock_mcp_state",
+  "expectedRevision: null",
+  "canonical replay",
+  "complete definition write",
+  "resupply",
+  "configured",
+  "cleared: 0",
+  "deleted: true",
+  "MOCK_MCP_SERVER_NOT_FOUND",
+  "MOCK_MCP_SERVER_REVISION_CONFLICT",
+  "not an actual-network",
   "/e/{environmentId}/mcp-mock/{slug}",
   "{environmentId}.{baseDomain}/mcp-mock/{slug}",
   "MCP-Protocol-Version",
@@ -1245,6 +1340,32 @@ const skillGuide = contents.find(([path]) => path === "docs/skill.md")?.[1];
 const testingSkill = contents.find(
   ([path]) => path === "skills/mockos-testing/SKILL.md"
 )?.[1];
+for (const [path, body] of [
+  ["docs/skill.md", skillGuide],
+  ["skills/mockos-testing/SKILL.md", testingSkill],
+]) {
+  for (const required of [
+    "put_mock_mcp_server",
+    "reset_mock_mcp_state",
+    "delete_mock_mcp_server",
+    "expectedRevision: null",
+    "canonical replay",
+    "complete definition",
+    "resupply or rotate",
+    "configured: true",
+    "cleared: 0",
+    "deleted: true",
+    "MOCK_MCP_SERVER_NOT_FOUND",
+    "MOCK_MCP_SERVER_REVISION_CONFLICT",
+    "not actual-network",
+  ]) {
+    if (!body?.includes(required)) {
+      failures.push(
+        `${path} must describe the F1 mutation contract phrase ${required}`
+      );
+    }
+  }
+}
 for (const [path, body] of [
   ["docs/skill.md", skillGuide],
   ["skills/mockos-testing/SKILL.md", testingSkill],

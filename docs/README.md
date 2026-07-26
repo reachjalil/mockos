@@ -70,8 +70,12 @@ The management MCP server at `/mcp` is the primary control interface. The curren
 source exposes 24 tools. Five F1 tools configure mock MCP servers and four F2 tools
 configure mock-LLM definitions. The direct self-hosted management HTTP surface still
 contains only five identity-management routes and must not be presented as
-equivalent. Environment mock MCP and mock LLM provider endpoints are separate data planes
-called by the application or agent under test. Their source behavior and exact
+equivalent. F1 put uses explicit null-create or positive-current-replace intent;
+reset/delete require the positive current revision, and stale or delete/recreate ABA
+intent fails atomically. Canonical put replay remains retry-safe and a changed Bearer
+replacement must resupply or rotate the raw synthetic credential. Environment mock
+MCP and mock LLM provider endpoints are separate data planes called by the
+application or agent under test. Their source behavior and exact
 boundaries are in [Environment-hosted mock MCP](./mock-mcp.md) and
 [MCP-managed mock OpenAI and Anthropic](./mock-llm.md).
 The generated product capability index links each interface included in its explicitly
@@ -143,8 +147,10 @@ Access Key.
 - [F-series execution roadmap](./F_SERIES_ROADMAP.md)
 
 The F-series roadmap is target design, not implementation evidence. F1 is locally
-source-qualified for its bounded implementation, while hosted CI, merge, package
-publication, private Cloud consumption, and deployed F1 acceptance remain open. The
+source-qualified for its bounded implementation. Its management-CAS and mounted
+official MCP SDK `1.29.0` Worker path are D/I/S/X/Q only; the mounted fetch seam is not
+actual-network evidence. Hosted CI, H/P, merge, package publication, private Cloud
+consumption, and deployed F1 acceptance remain open; V is not applicable. The
 F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
 server-definition contract, four MCP-only operations, schema-v8 environment

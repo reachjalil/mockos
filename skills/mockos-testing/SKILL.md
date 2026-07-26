@@ -1,18 +1,19 @@
 ---
 name: mockos-testing
 description: >-
-  Run accepted mockOS identity-integration tests and bounded mock-OpenAI/Anthropic
-  workflows through authenticated management MCP: create isolated Entra ID or Okta
-  environments, seed identities, register public or confidential OIDC clients,
-  configure MCP-managed mock LLM definitions, call model discovery, run OpenAI Chat
-  Completions and Anthropic Messages as JSON or bounded SSE, exercise
+  Run accepted mockOS identity-integration tests, bounded environment mock-MCP
+  workflows, and bounded mock-OpenAI/Anthropic workflows through authenticated
+  management MCP: create isolated Entra ID or Okta environments, seed identities,
+  register public or confidential OIDC clients, configure revision-safe MCP-managed
+  mock MCP and mock LLM definitions, call model discovery, run OpenAI Chat Completions
+  and Anthropic Messages as JSON or bounded SSE, exercise
   PKCE/refresh/lifecycle flows, exercise SCIM and bounded provider directory APIs, run
   outbound SCIM provisioning, mint broken tokens, rotate signing keys, apply clock
   skew, test group overage, inject deterministic scenarios, assert ordered
   request/response shapes, qualify pinned MSAL Node or Okta Auth JS paths, and clean
-  up. Use when wiring or testing an application's enterprise identity or
-  OpenAI/Anthropic-shaped integration, or reproducing provider-shaped failures; do
-  not claim unrecorded deployment qualification, Anthropic betas, configured
+  up. Use when wiring or testing an application's enterprise identity,
+  MCP-shaped, or OpenAI/Anthropic-shaped integration, or reproducing provider-shaped failures;
+  do not claim unrecorded deployment qualification, Anthropic betas, configured
   midstream errors, the complete Okta Classic Authn transaction machine, or broad
   provider parity.
 ---
@@ -85,12 +86,17 @@ management MCP tools. The accepted identity workflow uses these 15:
 
 The bounded mock-LLM workflows additionally require
 `put_mock_llm_server`, `list_mock_llm_servers`, `get_mock_llm_server`, and
-`delete_mock_llm_server`. Require only the tools needed by the planned workflow and
+`delete_mock_llm_server`. A bounded mock-MCP workflow instead requires
+`put_mock_mcp_server`, `list_mock_mcp_servers`, `get_mock_mcp_server`,
+`reset_mock_mcp_state`, and `delete_mock_mcp_server`. Require only the tools needed by
+the planned workflow and
 tolerate additional tools from a newer compatible server. Report a capability
 mismatch before any mutation; in particular, do not attempt the lifecycle cascade
 unless `simulate_lifecycle` is advertised, provisioning unless
-`run_provisioning_cycle` is advertised, or mock-OpenAI configuration unless all four
-definition tools are advertised. Capability discovery is evidence about the
+`run_provisioning_cycle` is advertised, mock-MCP configuration unless all five
+definition/state tools expose their required revision schemas, or mock-OpenAI
+configuration unless all four definition tools are advertised. Capability discovery
+is evidence about the
 connected server, not proof that the checkout under test is the source deployed
 there.
 
@@ -102,7 +108,7 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
    test seed. This also selects the environment in the current MCP session.
 2. For an identity workflow, call `seed_identities` with explicit `users` and
    `groups`. Use the returned user ID in token tests; group members are seeded user
-   names. A mock-LLM-only workflow does not need identities.
+   names. A mock-MCP-only or mock-LLM-only workflow does not need identities.
 3. For an identity workflow, call `create_application` with the exact callback URI,
    grants, and client type required by the test. `confidential` is the default: retain
    its returned synthetic `clientSecret` in memory or a test secret store and expect
@@ -125,6 +131,49 @@ Use a `try`/`finally` cleanup boundary and keep the returned environment ID:
 
 Pass `environmentId` explicitly in saved automation. Use `set_current_environment`
 only for interactive session convenience because its cursor is transport-session-local.
+
+## Exercise the bounded environment mock-MCP flow
+
+Read the [canonical mock MCP guide](../../docs/mock-mcp.md) before configuring a
+server. Management MCP is the control plane; the application or agent under test
+connects to the separate environment mock MCP data plane.
+
+1. Capability-negotiate all five F1 tools. Require `put_mock_mcp_server` to advertise
+   mandatory `expectedRevision` accepting `null` or a positive integer, and require
+   `reset_mock_mcp_state` and `delete_mock_mcp_server` to advertise a mandatory
+   positive integer. Stop on an older or incompatible schema.
+2. Resolve any synthetic Bearer Mock Credential from caller-owned secret storage.
+   Keep it distinct from the platform management Access Key and never print, commit,
+   or place it in a prompt.
+3. Call `put_mock_mcp_server` with the explicit environment ID,
+   `expectedRevision: null`, and a complete definition. Retain the returned positive
+   revision. A safe Bearer view contains `configured: true` but no token or verifier;
+   never copy that marker into a later write.
+4. Connect the application or official MCP client to the operator-reported
+   `/e/<environmentId>/mcp-mock/<slug>` or subdomain endpoint with the server's
+   separate synthetic credential. Discover and exercise only the configured
+   capabilities. The five management tools prove configuration support, not that an
+   arbitrary connected deployment serves the data plane.
+5. When deterministic sequence state must restart, call `reset_mock_mcp_state` with
+   the positive current revision. Require the definition, revision, and sessions to
+   remain; an exact retry succeeds with `cleared: 0`.
+6. For a changed replacement, call `get_mock_mcp_server`, reconcile the current safe
+   definition with the intended complete definition, and pass its positive revision
+   to `put_mock_mcp_server`. Resupply or rotate the raw Bearer value from caller-owned
+   storage. Do not increment the revision locally or treat the operation as a patch.
+7. A canonical replay of an identical put succeeds before CAS, preserving revision,
+   timestamps, state, and sessions even when its expectation is stale or still
+   `null`. A changed stale or delete/recreate ABA put/reset/delete must return
+   `MOCK_MCP_SERVER_REVISION_CONFLICT`; read and reconcile instead of overwriting.
+8. In `finally`, read the latest generation and call `delete_mock_mcp_server` with
+   that positive revision. Require literal `deleted: true`. A retry after successful
+   delete returns `MOCK_MCP_SERVER_NOT_FOUND`, not replayed success. Then delete the
+   disposable environment and close management MCP.
+
+The current bounded evidence uses mounted `@modelcontextprotocol/sdk` `1.29.0` Worker
+discovery and runtime calls. Report D/I/S/X/Q yes only for that named local path. It
+is not actual-network evidence and establishes no H, P, hosted, Cloud-pin, deployment,
+or broad ecosystem claim; V is not applicable.
 
 ## Exercise the bounded mock-OpenAI flow
 

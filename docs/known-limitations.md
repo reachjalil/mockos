@@ -173,7 +173,15 @@ P.
   authenticated hosted acceptance ran through the private edge consuming the public
   runtime rather than those standalone credentials.
   F1 appends five locally source-qualified tools for environment-hosted mock MCP
-  definitions and state. Those five have no inherited M5 hosted/deployed acceptance.
+  definitions and state. Put requires `expectedRevision: null` for create or the
+  positive current revision for changed replacement; reset/delete require the
+  positive current revision. Canonical put replay precedes CAS. Stale and
+  delete/recreate ABA mutation intent returns typed `409`, while missing reset/delete
+  and a repeated delete return typed `404`. Reset retry succeeds with `cleared: 0`;
+  delete success is literal `deleted: true`. The mounted official MCP SDK `1.29.0`
+  Worker flow qualifies this bounded management path through D/I/S/X/Q only. It is
+  not actual-network evidence, and those five have no inherited M5 hosted/deployed,
+  H, or P acceptance; V is not applicable to the synthetic flow.
   F2 appends four source-implemented tools for mock-LLM definitions, bringing the
   current source registry to 24. Those four likewise inherit no hosted/deployed
   evidence.
@@ -183,6 +191,13 @@ P.
   source-tested in path and subdomain resolution, but no current workers.dev version,
   wildcard TLS route, private hosted composition, or external ecosystem matrix is
   qualified for F1.
+- F1 definition replacement is a complete write, not a patch. A Bearer Mock
+  Credential must be resupplied or rotated from caller-owned secret storage; the
+  safe `configured: true` read marker cannot be submitted to preserve it. Clients
+  must read and reconcile the current server after a typed revision conflict rather
+  than incrementing or overwriting revisions blindly. Delete is idempotent only in
+  state effect: retry after success reports `MOCK_MCP_SERVER_NOT_FOUND` instead of
+  replaying success.
 - F1 protects staged sequence state when an HTTP Fetch abort/disconnect is observed
   during configured latency and uses JSON-RPC `-32800` if it can still render a
   response. It has no in-flight request-ID registry: `notifications/cancelled` is

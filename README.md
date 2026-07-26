@@ -20,7 +20,13 @@
 > green. This is sampled deployed mock evidence, not corpus-wide or verified-live
 > parity. The F0 contract/client/OpenAPI foundation and bounded F1 mock-MCP runtime
 > are locally source-qualified in the revision carrying this document: their focused
-> suites and the complete repository `pnpm check` gate are green. Hosted CI/merge,
+> suites and the complete repository `pnpm check` gate are green. F1 definition
+> mutations now require explicit revision intent, preserve canonical put replay, and
+> protect replacement/reset/delete from stale or delete/recreate ABA callers. The
+> mounted official MCP SDK `1.29.0` Worker flow qualifies that bounded management
+> path through D/I/S/X/Q only; it is not actual-network or hosted evidence, V is not
+> applicable to the synthetic flow, and P remains unqualified.
+> Hosted CI/merge,
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
 > MCP-only mock-LLM definition operations with environment-local schema-v8 persistence
@@ -67,7 +73,12 @@ five-route self-hosted HTTP API.
 Environment-hosted mock MCP servers have a different product role: they simulate
 tools, resources, resource templates, and prompts for an agent under test. The bounded
 F1 source implements that data plane at an environment route while the five
-configuration operations remain part of management MCP. Start with the
+configuration operations remain part of management MCP. Put uses
+`expectedRevision: null` for create or the positive current revision for a complete
+replacement; reset and delete require the positive current revision. Canonical put
+replay precedes CAS, while stale/ABA mutations return typed `409`. Bearer replacement
+must resupply or rotate the raw synthetic credential because the safe
+`configured: true` view cannot be written back. Start with the
 [mock MCP guide](./docs/mock-mcp.md). Four
 [mock-LLM definition operations](./docs/mock-llm.md) are source-implemented through
 management MCP. The separate F2 data plane now source-qualifies OpenAI model
@@ -142,9 +153,13 @@ private control plane, licensing, billing, or a hosted mockOS account.
   definition/state operations, and four MCP-only F2 mock-LLM definition operations
 - A bounded F1 source runtime for deterministic environment-hosted tools, resources,
   safe Level-1 resource templates, and prompts over MCP `2025-11-25`; definitions are
-  revisioned, Bearer Mock Credentials and transport sessions are stored hash-only,
-  behavior state is bounded, both hosting routes are resolved, and MCP method/tool/
-  argument evidence joins the existing request log and assertions. GET streaming,
+  revisioned with null-create/positive-current mutation CAS, canonical replay is
+  retry-safe, changed replacement is a full credential-resupplying write, and
+  reset/delete reject stale or ABA generations atomically. Bearer Mock Credentials
+  and transport sessions are stored hash-only, behavior state is bounded, both
+  hosting routes are resolved, and MCP method/tool/argument evidence joins the
+  existing request log and assertions. The 24-tool registry and five-route HTTP
+  surface do not change. GET streaming,
   `listChanged`, scripts, proxy/record-replay, hosted qualification, and deployment
   remain open
 - A source-complete local F0 foundation: one 24-operation metadata registry consumed

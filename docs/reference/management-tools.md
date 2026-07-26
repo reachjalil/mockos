@@ -3534,7 +3534,7 @@ invented HTTP path.
 
 ### `put_mock_mcp_server`
 
-**Create or replace a mock MCP server.** Creates or atomically replaces one environment-local mock MCP server. Bearer Mock Credentials are accepted only in this write operation and are never returned.
+**Create or replace a mock MCP server.** Creates with expectedRevision null or atomically replaces one environment-local mock MCP server at its current positive revision. Canonical replay succeeds before the revision check. Replacement is a full definition write, so a bearer Mock Credential must be resupplied or rotated; credentials are accepted only in this write operation and are never returned.
 
 - Scope metadata: `env:rw`
 - Effect: `mutation`
@@ -3997,6 +3997,18 @@ invented HTTP path.
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
       "type": "string"
     },
+    "expectedRevision": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      ]
+    },
     "server": {
       "additionalProperties": false,
       "properties": {
@@ -4394,6 +4406,10 @@ invented HTTP path.
       "type": "object"
     }
   },
+  "required": [
+    "expectedRevision",
+    "server"
+  ],
   "type": "object"
 }
 ```
@@ -6445,7 +6461,7 @@ invented HTTP path.
 
 ### `delete_mock_mcp_server`
 
-**Delete mock MCP server.** Deletes a mock MCP server and its revision-bound sessions and application state.
+**Delete mock MCP server.** Atomically deletes a mock MCP server, all of its sessions, and its application state only when expectedRevision matches the current positive revision. Success returns deleted true; a replay after success returns the typed not-found error.
 
 - Scope metadata: `env:rw`
 - Effect: `destructive`
@@ -6468,6 +6484,11 @@ invented HTTP path.
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
       "type": "string"
     },
+    "expectedRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
     "slug": {
       "maxLength": 64,
       "minLength": 1,
@@ -6476,7 +6497,8 @@ invented HTTP path.
     }
   },
   "required": [
-    "slug"
+    "slug",
+    "expectedRevision"
   ],
   "type": "object"
 }
@@ -6496,6 +6518,7 @@ invented HTTP path.
       "additionalProperties": false,
       "properties": {
         "deleted": {
+          "const": true,
           "type": "boolean"
         },
         "slug": {
@@ -6539,7 +6562,7 @@ invented HTTP path.
 
 ### `reset_mock_mcp_state`
 
-**Reset mock MCP application state.** Deletes sequence cursors and other application state for one mock MCP server without changing its definition.
+**Reset mock MCP application state.** Deletes sequence cursors and other application state only when expectedRevision matches the current positive server revision, without changing its definition, revision, or sessions. An exact retry succeeds with cleared zero.
 
 - Scope metadata: `env:rw`
 - Effect: `destructive`
@@ -6562,6 +6585,11 @@ invented HTTP path.
       "pattern": "^[a-z0-9][a-z0-9_-]+$",
       "type": "string"
     },
+    "expectedRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
     "slug": {
       "maxLength": 64,
       "minLength": 1,
@@ -6570,7 +6598,8 @@ invented HTTP path.
     }
   },
   "required": [
-    "slug"
+    "slug",
+    "expectedRevision"
   ],
   "type": "object"
 }
@@ -9204,6 +9233,16 @@ invented HTTP path.
 
 - The five F1 management operations configure source-qualified mock MCP servers
   inside an environment. They are MCP-only and add no self-hosted HTTP route.
+- Every F1 mutation carries explicit revision intent: create with
+  `expectedRevision: null`; replace, reset, or delete with the positive current
+  revision. Canonically identical put replay succeeds before CAS validation.
+- Replacement is a complete definition write. A bearer Mock Credential must be
+  resupplied or rotated because the safe `{ configured: true }` read marker is
+  not a valid replacement input.
+- Reset atomically clears application state while preserving the definition,
+  revision, and sessions. Delete atomically removes definition, state, and
+  sessions. Missing servers return typed 404 errors; stale or ABA revisions
+  return typed 409 conflicts.
 - The mock data plane implements protocol `2025-11-25`
   over POST-only Streamable HTTP. Path and subdomain endpoint templates are
   `/e/{environmentId}/mcp-mock/{slug}` and

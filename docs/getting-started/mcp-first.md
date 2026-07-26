@@ -1,7 +1,7 @@
 # MCP-first quickstart
 
 Status: Current 24-tool management workflow; package publication remains unavailable
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 Use management MCP to create a deterministic identity environment, obtain its
 provider-shaped endpoints, exercise your application, assert what it sent, and remove
@@ -59,6 +59,11 @@ source exposes exactly 24 tools; use the
 copied list. Five F1 tools configure environment-hosted mock MCP dependencies, and
 four F2 tools persist mock-LLM definitions. Those four tools do not prove that the
 connected endpoint serves either separate provider route.
+Saved F1 automation must also verify the discovered mutation schemas:
+`put_mock_mcp_server` requires `expectedRevision: null` for create or a positive
+current revision for replacement, while `reset_mock_mcp_state` and
+`delete_mock_mcp_server` require a positive current revision. Do not fall back to an
+older call shape when those required fields are absent or incompatible.
 
 Stop before creating state when:
 
@@ -135,7 +140,9 @@ minimum safe request evidence.
 ## What this quickstart does not enable
 
 This identity workflow does not configure the source-qualified F1 mock MCP server.
-Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for that task.
+Use the separate [environment-hosted mock MCP guide](../mock-mcp.md) for its complete
+definition, canonical-replay-before-CAS, Bearer credential resupply, reset/delete,
+typed conflict/not-found, and bounded local official-SDK evidence rules.
 It also does not configure the F2 definition/provider workflow. Use the
 [OpenAI SDK quickstart](../quickstarts/openai-sdk.md) or
 [Anthropic SDK quickstart](../quickstarts/anthropic-sdk.md) for a short end-to-end

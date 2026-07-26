@@ -16,6 +16,7 @@ import {
   type MockLlmServerSummary,
   type MockLlmServerView,
   type MockLlmServerWrite,
+  type MockMcpExpectedRevision,
   type MockMcpServerSummary,
   type MockMcpServerView,
   type MockMcpServerWrite,
@@ -43,8 +44,27 @@ import {
 const ENVIRONMENT_ID = "env_test01";
 const CREATED_AT = "2026-07-22T12:00:00.000Z";
 const EXPIRES_AT = "2026-07-22T13:00:00.000Z";
+const MOCK_MCP_CREDENTIAL = "synthetic-mock-mcp-credential";
 const OPENAI_MOCK_CREDENTIAL = "synthetic-openai-mock-credential";
 const ANTHROPIC_MOCK_CREDENTIAL = "synthetic-anthropic-mock-credential";
+
+const mockMcpServerWrite = (): MockMcpServerWrite => ({
+  version: 1,
+  slug: "crm-sandbox",
+  serverInfo: { name: "CRM sandbox", version: "1.0.0" },
+  authentication: { mode: "bearer", token: MOCK_MCP_CREDENTIAL },
+  transport: {
+    stateful: true,
+    enableGet: false,
+    sessionTtlSeconds: 3_600,
+  },
+  pageSize: 25,
+  tools: [],
+  resources: [],
+  resourceTemplates: [],
+  prompts: [],
+  errorCodeMap: {},
+});
 
 const mockLlmServerWrite = (): MockLlmServerWrite => ({
   version: 1,
@@ -92,6 +112,7 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   readonly calls: Array<{ environmentId: string; operation: string }> = [];
   readonly mockLlmServers = new Map<string, MockLlmServerView>();
   readonly mockMcpServers = new Map<string, MockMcpServerView>();
+  readonly mockMcpServerWrites = new Map<string, string>();
   currentEnvironmentId: string | null = null;
   lastLogQuery: RequestLogQuery | undefined;
 
@@ -337,10 +358,28 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   async putMockMcpServer(
     environmentId: string,
     server: MockMcpServerWrite,
+    expectedRevision: MockMcpExpectedRevision,
     _context: MockosToolRequestContext
   ): Promise<MockMcpServerView> {
     this.requireEnvironment(environmentId);
     const existing = this.mockMcpServers.get(server.slug);
+    const serialized = JSON.stringify(server);
+    if (existing && this.mockMcpServerWrites.get(server.slug) === serialized) {
+      this.calls.push({ environmentId, operation: `put-mock-mcp:${server.slug}` });
+      return existing;
+    }
+    if (
+      (existing === undefined && expectedRevision !== null) ||
+      (existing !== undefined && expectedRevision !== existing.revision)
+    ) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+        title: "Mock MCP server revision conflict",
+        status: 409,
+        detail: `Mock MCP server ${server.slug} did not match the expected revision.`,
+        code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+      });
+    }
     const view: MockMcpServerView = {
       spec: {
         ...server,
@@ -354,6 +393,7 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
       updatedAt: CREATED_AT,
     };
     this.mockMcpServers.set(server.slug, view);
+    this.mockMcpServerWrites.set(server.slug, serialized);
     this.calls.push({ environmentId, operation: `put-mock-mcp:${server.slug}` });
     return view;
   }
@@ -401,26 +441,56 @@ class InMemoryMockosDependencies implements MockosToolDependencies {
   async deleteMockMcpServer(
     environmentId: string,
     slug: string,
+    expectedRevision: number,
     _context: MockosToolRequestContext
-  ): Promise<boolean> {
+  ): Promise<true> {
     this.requireEnvironment(environmentId);
     this.calls.push({ environmentId, operation: `delete-mock-mcp:${slug}` });
-    return this.mockMcpServers.delete(slug);
-  }
-
-  async resetMockMcpState(
-    environmentId: string,
-    slug: string,
-    _context: MockosToolRequestContext
-  ): Promise<number> {
-    this.requireEnvironment(environmentId);
-    this.calls.push({ environmentId, operation: `reset-mock-mcp:${slug}` });
-    if (!this.mockMcpServers.has(slug)) {
+    const current = this.mockMcpServers.get(slug);
+    if (!current) {
       throw new MockosToolError({
         type: "https://mockos.live/problems/mock-mcp-server-not-found",
         title: "Mock MCP server not found",
         status: 404,
         code: "MOCK_MCP_SERVER_NOT_FOUND",
+      });
+    }
+    if (current.revision !== expectedRevision) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+        title: "Mock MCP server revision conflict",
+        status: 409,
+        code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+      });
+    }
+    this.mockMcpServers.delete(slug);
+    this.mockMcpServerWrites.delete(slug);
+    return true;
+  }
+
+  async resetMockMcpState(
+    environmentId: string,
+    slug: string,
+    expectedRevision: number,
+    _context: MockosToolRequestContext
+  ): Promise<number> {
+    this.requireEnvironment(environmentId);
+    this.calls.push({ environmentId, operation: `reset-mock-mcp:${slug}` });
+    const current = this.mockMcpServers.get(slug);
+    if (!current) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-not-found",
+        title: "Mock MCP server not found",
+        status: 404,
+        code: "MOCK_MCP_SERVER_NOT_FOUND",
+      });
+    }
+    if (current.revision !== expectedRevision) {
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+        title: "Mock MCP server revision conflict",
+        status: 409,
+        code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
       });
     }
     return 0;
@@ -644,6 +714,31 @@ describe("registerMockosTools", () => {
       listed.tools.find(({ name }) => name === "delete_mock_llm_server")?.inputSchema
         .required
     ).toEqual(expect.arrayContaining(["expectedRevision", "slug"]));
+    const putMockMcpInput = listed.tools.find(
+      ({ name }) => name === "put_mock_mcp_server"
+    )?.inputSchema as JsonSchema;
+    expect(putMockMcpInput).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["expectedRevision", "server"],
+      properties: {
+        expectedRevision: {
+          anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+        },
+      },
+    });
+    for (const name of ["delete_mock_mcp_server", "reset_mock_mcp_state"] as const) {
+      const inputSchema = listed.tools.find(({ name: toolName }) => toolName === name)
+        ?.inputSchema as JsonSchema;
+      expect(inputSchema).toMatchObject({
+        type: "object",
+        additionalProperties: false,
+        required: ["slug", "expectedRevision"],
+        properties: {
+          expectedRevision: { type: "integer", minimum: 1 },
+        },
+      });
+    }
   });
 
   it("advertises conditional application inputs and exact registration outputs", async () => {
@@ -952,16 +1047,16 @@ describe("registerMockosTools", () => {
     const urls = await callData<WellKnownUrls>(client, "get_wellknown_urls", {});
     expect(urls.issuer).toContain(ENVIRONMENT_ID);
 
-    const mockCredential = "synthetic-mock-mcp-credential";
     const mockServer = await callData<MockMcpServerView>(
       client,
       "put_mock_mcp_server",
       {
+        expectedRevision: null,
         server: {
           version: 1,
           slug: "crm-sandbox",
           serverInfo: { name: "CRM sandbox", version: "1.0.0" },
-          authentication: { mode: "bearer", token: mockCredential },
+          authentication: { mode: "bearer", token: MOCK_MCP_CREDENTIAL },
           tools: [
             {
               name: "lookup_contact",
@@ -984,7 +1079,7 @@ describe("registerMockosTools", () => {
       },
       revision: 1,
     });
-    expect(JSON.stringify(mockServer)).not.toContain(mockCredential);
+    expect(JSON.stringify(mockServer)).not.toContain(MOCK_MCP_CREDENTIAL);
     expect(JSON.stringify(mockServer)).not.toContain("tokenSha256");
 
     const mockServers = await callData<{ servers: MockMcpServerSummary[] }>(
@@ -999,10 +1094,16 @@ describe("registerMockosTools", () => {
       })
     ).toEqual(mockServer);
     expect(
-      await callData(client, "reset_mock_mcp_state", { slug: "crm-sandbox" })
+      await callData(client, "reset_mock_mcp_state", {
+        slug: "crm-sandbox",
+        expectedRevision: mockServer.revision,
+      })
     ).toEqual({ slug: "crm-sandbox", cleared: 0 });
     expect(
-      await callData(client, "delete_mock_mcp_server", { slug: "crm-sandbox" })
+      await callData(client, "delete_mock_mcp_server", {
+        slug: "crm-sandbox",
+        expectedRevision: mockServer.revision,
+      })
     ).toEqual({ slug: "crm-sandbox", deleted: true });
 
     const mockLlmServer = await callData<MockLlmServerView>(
@@ -1256,6 +1357,82 @@ describe("registerMockosTools", () => {
     expect(JSON.stringify(redactedError)).not.toContain(leakedCredential);
   });
 
+  it("forwards every mock-MCP revision precondition and redacts its bearer credential", async () => {
+    const { client, dependencies } = await createHarness();
+    await callData<EnvironmentConfig>(client, "create_environment", {
+      name: "MCP contract",
+      provider: "entra",
+    });
+
+    let receivedPutRevision: MockMcpExpectedRevision | undefined;
+    dependencies.putMockMcpServer = async (
+      _environmentId,
+      server,
+      expectedRevision
+    ) => {
+      receivedPutRevision = expectedRevision;
+      const credential =
+        server.authentication.mode === "bearer" ? server.authentication.token : "";
+      throw new MockosToolError({
+        type: "https://mockos.live/problems/mock-mcp-server-revision-conflict",
+        title: "Mock MCP server revision conflict",
+        status: 409,
+        detail: `Rejected ${credential}.`,
+        code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+      });
+    };
+
+    const putResult = await client.callTool({
+      name: "put_mock_mcp_server",
+      arguments: {
+        expectedRevision: 7,
+        server: mockMcpServerWrite(),
+      },
+    });
+    expect(receivedPutRevision).toBe(7);
+    expect(putResult.isError).toBe(true);
+    expect(putResult._meta?.["mockos/problem"]).toMatchObject({
+      status: 409,
+      code: "MOCK_MCP_SERVER_REVISION_CONFLICT",
+      detail: "Rejected [REDACTED].",
+    });
+    expect(JSON.stringify(putResult)).not.toContain(MOCK_MCP_CREDENTIAL);
+
+    let receivedDeleteRevision: number | undefined;
+    dependencies.deleteMockMcpServer = async (
+      _environmentId,
+      _slug,
+      expectedRevision
+    ) => {
+      receivedDeleteRevision = expectedRevision;
+      return true;
+    };
+    await expect(
+      callData(client, "delete_mock_mcp_server", {
+        slug: "crm-sandbox",
+        expectedRevision: 11,
+      })
+    ).resolves.toEqual({ slug: "crm-sandbox", deleted: true });
+    expect(receivedDeleteRevision).toBe(11);
+
+    let receivedResetRevision: number | undefined;
+    dependencies.resetMockMcpState = async (
+      _environmentId,
+      _slug,
+      expectedRevision
+    ) => {
+      receivedResetRevision = expectedRevision;
+      return 3;
+    };
+    await expect(
+      callData(client, "reset_mock_mcp_state", {
+        slug: "crm-sandbox",
+        expectedRevision: 12,
+      })
+    ).resolves.toEqual({ slug: "crm-sandbox", cleared: 3 });
+    expect(receivedResetRevision).toBe(12);
+  });
+
   it("forwards mock-LLM CAS inputs and redacts both provider credentials", async () => {
     const { client, dependencies } = await createHarness();
     await callData<EnvironmentConfig>(client, "create_environment", {
@@ -1435,6 +1612,83 @@ describe("registerMockosTools", () => {
     });
     expect(topLevelUnknownKeyFailure.rejected).toBe(true);
     expect(topLevelUnknownKeyFailure.serialized).not.toContain(credential);
+  });
+
+  it("never reflects a mock-MCP bearer credential from pre-handler validation", async () => {
+    const { client, dependencies } = await createHarness();
+    const credential = "synthetic-mcp-validation-secret";
+    const server = {
+      ...mockMcpServerWrite(),
+      authentication: { mode: "bearer", token: credential },
+    };
+    const serializeFailure = async (arguments_: Record<string, unknown>) => {
+      try {
+        const result = await client.callTool({
+          name: "put_mock_mcp_server",
+          arguments: arguments_,
+        });
+        return {
+          rejected: result.isError === true,
+          serialized: JSON.stringify(result),
+        };
+      } catch (error) {
+        return {
+          rejected: true,
+          serialized:
+            error instanceof Error
+              ? `${error.name}: ${error.message}`
+              : JSON.stringify(error),
+        };
+      }
+    };
+
+    for (const arguments_ of [
+      { server },
+      { expectedRevision: 0, server },
+      {
+        expectedRevision: null,
+        server: {
+          ...server,
+          [credential]: "unknown server field",
+        },
+      },
+      {
+        expectedRevision: null,
+        server: {
+          ...server,
+          tools: [
+            {
+              name: credential,
+              behavior: {
+                version: 1,
+                type: "static",
+                value: { content: [{ type: "text", text: "one" }] },
+              },
+            },
+            {
+              name: credential,
+              behavior: {
+                version: 1,
+                type: "static",
+                value: { content: [{ type: "text", text: "two" }] },
+              },
+            },
+          ],
+        },
+      },
+      {
+        expectedRevision: null,
+        server,
+        [credential]: "unknown top-level field",
+      },
+    ]) {
+      const failure = await serializeFailure(arguments_);
+      expect(failure.rejected).toBe(true);
+      expect(failure.serialized).not.toContain(credential);
+    }
+    expect(dependencies.calls).not.toContainEqual(
+      expect.objectContaining({ operation: "put-mock-mcp:crm-sandbox" })
+    );
   });
 
   it("requires an environment cursor and preserves mock-LLM not-found errors", async () => {

@@ -22,6 +22,7 @@ import {
   type MockMcpServerList,
   type MockMcpServerView,
   mockMcpCapabilityNameSchema,
+  mockMcpRevisionSchema,
   mockMcpServerWriteSchema,
   mockMcpSlugSchema,
 } from "./mock-mcp";
@@ -1096,12 +1097,46 @@ export const wellKnownUrlsSchema = z
   .strict();
 export type WellKnownUrls = z.infer<typeof wellKnownUrlsSchema>;
 
+export const mockMcpExpectedRevisionSchema = z.union([z.null(), mockMcpRevisionSchema]);
+export type MockMcpExpectedRevision = z.infer<typeof mockMcpExpectedRevisionSchema>;
+
+// MCP validates tool input before the handler can register the bearer credential
+// with its response redactor. Collapse every nested definition failure to one
+// credential-free issue while retaining the complete public schema for discovery
+// and forwarding the already-normalized value to the handler.
+const secretSafeMockMcpServerWriteSchema = z.preprocess((input, context) => {
+  try {
+    const result = mockMcpServerWriteSchema.safeParse(input);
+    if (result.success) return result.data;
+  } catch {
+    // Size/depth guards can throw before Zod constructs a regular issue.
+  }
+  context.addIssue({
+    code: "custom",
+    message: "The mock MCP server definition is invalid.",
+  });
+  return z.NEVER;
+}, mockMcpServerWriteSchema);
+
+const putMockMcpServerToolInputShape = {
+  environmentId: environmentIdSchema.optional(),
+  expectedRevision: mockMcpExpectedRevisionSchema,
+  server: secretSafeMockMcpServerWriteSchema.nonoptional(),
+};
+const putMockMcpServerToolInputKeys = new Set(
+  Object.keys(putMockMcpServerToolInputShape)
+);
 export const putMockMcpServerToolInputSchema = z
-  .object({
-    environmentId: environmentIdSchema.optional(),
-    server: mockMcpServerWriteSchema,
+  .looseObject(putMockMcpServerToolInputShape)
+  .superRefine((input, context) => {
+    if (Object.keys(input).some((key) => !putMockMcpServerToolInputKeys.has(key))) {
+      context.addIssue({
+        code: "custom",
+        message: "Unknown top-level mock MCP tool arguments are not allowed.",
+      });
+    }
   })
-  .strict();
+  .meta({ additionalProperties: false });
 export type PutMockMcpServerToolInput = z.infer<typeof putMockMcpServerToolInputSchema>;
 
 export const listMockMcpServersToolInputSchema = z
@@ -1124,11 +1159,23 @@ export type MockMcpServerRefToolInput = z.infer<typeof mockMcpServerRefToolInput
 export const getMockMcpServerToolInputSchema = mockMcpServerRefToolInputSchema;
 export type GetMockMcpServerToolInput = MockMcpServerRefToolInput;
 
-export const deleteMockMcpServerToolInputSchema = mockMcpServerRefToolInputSchema;
-export type DeleteMockMcpServerToolInput = MockMcpServerRefToolInput;
+const mockMcpMutationRefToolInputSchema = z
+  .object({
+    environmentId: environmentIdSchema.optional(),
+    slug: mockMcpSlugSchema,
+    expectedRevision: mockMcpRevisionSchema,
+  })
+  .strict();
 
-export const resetMockMcpStateToolInputSchema = mockMcpServerRefToolInputSchema;
-export type ResetMockMcpStateToolInput = MockMcpServerRefToolInput;
+export const deleteMockMcpServerToolInputSchema = mockMcpMutationRefToolInputSchema;
+export type DeleteMockMcpServerToolInput = z.infer<
+  typeof deleteMockMcpServerToolInputSchema
+>;
+
+export const resetMockMcpStateToolInputSchema = mockMcpMutationRefToolInputSchema;
+export type ResetMockMcpStateToolInput = z.infer<
+  typeof resetMockMcpStateToolInputSchema
+>;
 
 export const mockLlmRevisionSchema = z.number().int().safe().min(1);
 export type MockLlmRevision = z.infer<typeof mockLlmRevisionSchema>;

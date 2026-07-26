@@ -7,10 +7,11 @@ import {
   assertionSpecSchema,
   assertRequestsToolInputSchema,
   brokenTokenVariantSchema,
-  configureEnvironmentToolInputSchema,
   type CreateApplicationInput,
   type CreateApplicationToolInput,
+  configureEnvironmentToolInputSchema,
   createApplicationToolInputSchema,
+  deleteMockMcpServerToolInputSchema,
   environmentConfigSchema,
   getRequestLogToolInputSchema,
   identitySeedSchema,
@@ -20,10 +21,12 @@ import {
   mockosMcpToolNames,
   problemSchema,
   providerIdSchema,
+  putMockMcpServerToolInputSchema,
   REQUEST_LOG_LLM_PENDING_DURATION_MS,
   REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
   requestLogEntrySchema,
   requestLogLlmFinalizationSchema,
+  resetMockMcpStateToolInputSchema,
   SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_USER_SCHEMA,
   SCIM_PATCH_PARSE_INJECTION_POINT,
@@ -662,6 +665,40 @@ describe("wire contracts", () => {
       "delete_mock_llm_server",
     ]);
     expect(mockosMcpToolNames).toHaveLength(24);
+  });
+
+  it("locks mock-MCP mutation intent to create-or-current-revision CAS", () => {
+    const server = {
+      version: 1,
+      slug: "revisioned-server",
+      serverInfo: { name: "Revisioned server", version: "1" },
+    };
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: null,
+        server,
+      }).expectedRevision
+    ).toBeNull();
+    expect(
+      putMockMcpServerToolInputSchema.parse({
+        expectedRevision: 3,
+        server,
+      }).expectedRevision
+    ).toBe(3);
+    expect(() => putMockMcpServerToolInputSchema.parse({ server })).toThrow();
+
+    for (const schema of [
+      deleteMockMcpServerToolInputSchema,
+      resetMockMcpStateToolInputSchema,
+    ]) {
+      expect(
+        schema.parse({ slug: "revisioned-server", expectedRevision: 3 })
+      ).toMatchObject({ expectedRevision: 3 });
+      expect(() => schema.parse({ slug: "revisioned-server" })).toThrow();
+      expect(() =>
+        schema.parse({ slug: "revisioned-server", expectedRevision: null })
+      ).toThrow();
+    }
   });
 
   it("locks M3 SCIM and lifecycle wire shapes", () => {

@@ -260,6 +260,7 @@ describe("management MCP", () => {
           name: "put_mock_mcp_server",
           arguments: {
             environmentId: "env_missing01",
+            expectedRevision: null,
             server: {
               version: 1,
               slug: "platform-key",
@@ -280,6 +281,25 @@ describe("management MCP", () => {
       code: "PLATFORM_CREDENTIAL_NOT_ALLOWED",
       status: 400,
     });
+  });
+
+  it("does not reflect a mock MCP bearer credential from pre-handler validation", async () => {
+    const sessionId = await initialize();
+    const credential = "synthetic-mcp-validation-secret";
+    const result = await callTool(sessionId, 101, "put_mock_mcp_server", {
+      environmentId: "env_missing01",
+      expectedRevision: null,
+      server: {
+        version: 1,
+        slug: "invalid-server",
+        serverInfo: { name: "Invalid server", version: "1.0.0" },
+        authentication: { mode: "bearer", token: credential },
+        [credential]: "unknown server field",
+      },
+    });
+
+    expect(result?.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(credential);
   });
 
   it.each(["openai", "anthropic"] as const)(

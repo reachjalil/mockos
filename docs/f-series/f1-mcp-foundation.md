@@ -1,7 +1,7 @@
 # F1 mock-MCP source implementation
 
 Status: Locally source-qualified; no hosted or deployed acceptance
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 F1 makes a deterministic MCP server a first-class synthetic dependency inside an
 existing mockOS environment. Operators configure it through the primary management
@@ -14,11 +14,17 @@ architecture, responsibilities, and qualification boundary.
 
 ## Delivered vertical slice
 
-- The management MCP registry grows from 15 to 20 tools. The appended
+- F1 added five operations after the accepted 15-tool registry. The current combined
+  F1/F2 source registry contains 24 tools; F1 compare-and-swap semantics add no new
+  tool. The
   `put_mock_mcp_server`, `list_mock_mcp_servers`, `get_mock_mcp_server`,
   `delete_mock_mcp_server`, and `reset_mock_mcp_state` operations are generated from
   the shared operation registry and are deliberately MCP-only. The existing
   self-hosted HTTP surface remains five routes.
+- All F1 definition mutations are revision-safe. Put requires `null` create intent or
+  the positive current revision for changed replacement, while reset and delete
+  require the positive current revision. Stale and delete/recreate ABA expectations
+  return a typed `409`; missing reset/delete and delete replay return typed `404`.
 - Strict version-one contracts cover server identity, transport and hash-only Bearer
   policy, bounded pagination, tools, fixed resources, safe Level-1 resource
   templates, prompts, declarative behavior, method-specific results, and configured
@@ -76,19 +82,29 @@ requires that private service.
   fail creation.
 - Binary resource blobs and tool/prompt image or audio blocks accept canonical
   standard base64 only, including correct padding and padding bits.
-- Repeating a byte-identical normalized definition is a no-op that preserves revision,
-  timestamps, state, and sessions. Every new or changed definition atomically consumes
-  the next environment-wide safe positive-integer revision, deletes old application
-  state when replacing a slug, and terminates old-revision sessions. Per-slug values
-  may skip, but they increase strictly.
+- Put requires explicit compare-and-swap intent: `expectedRevision: null` is
+  create-only, while a positive safe integer selects the current generation for a
+  changed replacement. Canonical replay is evaluated before CAS, so an ambiguous
+  successful retry preserves revision, timestamps, state, and sessions even when its
+  expectation is now stale or remains `null`. Every new or changed definition
+  atomically consumes the next environment-wide safe positive-integer revision,
+  deletes old application state when replacing a slug, and terminates old-revision
+  sessions. Per-slug values may skip, but they increase strictly.
+- A changed replacement is a complete definition write. Bearer authentication must
+  resupply or rotate the raw synthetic token from caller-owned secret storage; the
+  safe `configured: true` view is deliberately not accepted as replacement input.
 - In-flight initialize, notification, request, configured-error, and DELETE paths
   recheck the resolved revision before commit/response. A racing replacement or
   deletion returns transport `409`, not an old-revision result.
-- Deleting a slug explicitly removes state and sessions even without SQLite foreign
-  key enforcement. The single allocator row survives even when every server is
-  deleted, so delete/recreate cannot reuse an old revision without an unbounded
-  tombstone ledger. Resetting deletes state only and preserves the definition,
-  revision, current sessions, and allocator.
+- Reset and delete require the positive current revision and validate it inside their
+  mutation transaction. Reset deletes only current-revision state and preserves the
+  definition, revision, current sessions, and allocator; an exact retry returns
+  `cleared: 0`. Delete explicitly removes definition, state, and sessions even without
+  SQLite foreign key enforcement and returns literal `deleted: true`. A missing
+  reset/delete or repeated delete returns `404 MOCK_MCP_SERVER_NOT_FOUND`; stale or
+  ABA state returns `409 MOCK_MCP_SERVER_REVISION_CONFLICT` without mutation.
+- The single allocator row survives even when every server is deleted, so
+  delete/recreate cannot reuse an old revision without an unbounded tombstone ledger.
 - Bearer Mock Credentials are accepted only on the write contract. Persistence stores
   a SHA-256 verifier; reads expose only `configured: true`. The platform management
   credential is rejected as a mock Bearer value.
@@ -170,18 +186,22 @@ and results may remain because observable test traffic is the product.
 
 | Evidence | F1 requirement |
 | --- | --- |
-| Contract tests | Strict bounds/defaults, schema subset, safe template grammar, write-only credentials, 20-tool registry, five HTTP routes |
-| Core tests | Atomic revision/state behavior, hash-only sessions, cap/pruning, stale-revision handling, staged sequence conflict behavior, request-log assertions |
+| Contract tests | Strict bounds/defaults, schema subset, safe template grammar, write-only credentials, mandatory null/positive mutation intent, 24-tool current registry, five HTTP routes |
+| Core tests | Atomic create/replay/replace/reset/delete CAS, stale and delete/recreate ABA denial, hash-only sessions, cap/pruning, staged sequence conflict behavior, request-log assertions |
 | Adapter tests | Raw-wire negotiation, lifecycle, method dispatch, cursors, schemas, configured errors, bounded/linear resource-template reverse matching, HTTP-abort state protection during latency, deliberately ignored `notifications/cancelled`, output validation, in-flight revision races, and real-repository sequential/concurrent state capacity |
-| Management tests | Five tool registration, explicit/current environment resolution, safe results, typed failures, redaction |
-| Worker and routing tests | Host-resolver coverage for both route modes and trusted headers; [`mock-mcp.integration.test.ts`](../../apps/worker/test/mock-mcp.integration.test.ts) for the path-mode official SDK, management creation, auth/session, capabilities, reset/revision/delete, and redacted observations |
+| Management tests | Five tool registration, discovered/runtime schema identity, explicit/current environment resolution, safe results, typed 404/409 failures, pre-handler secret non-reflection, and redaction |
+| Worker and routing tests | Host-resolver coverage for both route modes and trusted headers; [`mock-mcp.integration.test.ts`](../../apps/worker/test/mock-mcp.integration.test.ts) for mounted `@modelcontextprotocol/sdk` `1.29.0` discovery and management create/replay/reset/concurrent replace/stale/delete calls plus path-mode auth/session, capabilities, revision invalidation, cleanup, and redacted observations |
 | Documentation checks | Generated catalog/reference drift, exact counts, links/anchors, inert examples, supported/unsupported claims |
 | Full local source gate | `pnpm check` |
 
 Every applicable focused suite and the complete `pnpm check` gate are green in the
 revision carrying this record, so the bounded F1 implementation is locally
-source-qualified. It does not yet have hosted CI, merge, package publication, staging,
-production, private Cloud consumption, or broader ecosystem evidence.
+source-qualified. D/I/S/X/Q are yes for the bounded management-CAS and mounted
+official-SDK Worker path. Q does not extend beyond the named SDK `1.29.0` flow, and
+the mounted fetch seam is not actual-network evidence. H and P remain unqualified,
+while V is not applicable to this synthetic flow. F1 does not yet have hosted CI,
+merge, package publication, staging, production, private Cloud consumption, or broader
+ecosystem evidence.
 
 ## Still open
 

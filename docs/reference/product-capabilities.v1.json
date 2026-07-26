@@ -197,13 +197,16 @@
           "contextRefs": [],
           "coverage": "full",
           "proofRefs": [
+            "packages/contracts/src/operations/management.test.ts",
+            "packages/core/src/mock-mcp/foundation.test.ts",
+            "packages/mcp/src/index.test.ts",
             "packages/mcp-mock/src/sdk-conformance.test.ts",
             "packages/mcp-mock/src/repository-integration.test.ts",
             "apps/worker/test/mock-mcp.integration.test.ts"
           ],
           "qualification": "qualified",
           "revisionRelation": "current",
-          "scope": "bounded-f1-current-source"
+          "scope": "bounded-f1-current-source-with-management-cas"
         },
         "verifiedLive": {
           "contextRefs": [],

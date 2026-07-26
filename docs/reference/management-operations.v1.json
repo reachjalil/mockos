@@ -377,6 +377,48 @@
     },
     "mockMcpServers": {
       "deployedAcceptance": "unqualified",
+      "managementDefinitions": {
+        "bearerCredentials": "write-only-server-scoped",
+        "deleteContract": {
+          "behavior": "atomic-cas",
+          "expectedRevision": "required-positive",
+          "missingOrReplay": "typed-404",
+          "removes": "definition-state-and-sessions",
+          "revisionMismatch": "typed-409",
+          "success": "deleted-true"
+        },
+        "interface": "MCP-only",
+        "persistence": "environment-schema-v6",
+        "putContract": {
+          "bearerCredentialReplacement": "resupply-or-rotate",
+          "expectedRevision": "required-null-create-or-positive-replace",
+          "replacement": "full-definition",
+          "replay": "canonical-before-cas",
+          "revisionMismatch": "typed-409",
+          "safeViewWriteShape": "unsupported"
+        },
+        "resetContract": {
+          "behavior": "atomic-cas",
+          "exactReplay": "cleared-zero",
+          "expectedRevision": "required-positive",
+          "missing": "typed-404",
+          "preserves": "definition-revision-and-sessions",
+          "revisionMismatch": "typed-409"
+        },
+        "status": "source-implemented",
+        "toolIds": [
+          "put_mock_mcp_server",
+          "list_mock_mcp_servers",
+          "get_mock_mcp_server",
+          "delete_mock_mcp_server",
+          "reset_mock_mcp_state"
+        ],
+        "validation": {
+          "definitionFailures": "credential-free-generic",
+          "revision": "positive-safe-integer",
+          "topLevelArguments": "strict-secret-safe"
+        }
+      },
       "pathEndpoint": "/e/{environmentId}/mcp-mock/{slug}",
       "phase": "F1",
       "status": "source-qualified",
@@ -3812,7 +3854,7 @@
         "title": "Select current environment"
       },
       {
-        "description": "Creates or atomically replaces one environment-local mock MCP server. Bearer Mock Credentials are accepted only in this write operation and are never returned.",
+        "description": "Creates with expectedRevision null or atomically replaces one environment-local mock MCP server at its current positive revision. Canonical replay succeeds before the revision check. Replacement is a full definition write, so a bearer Mock Credential must be resupplied or rotated; credentials are accepted only in this write operation and are never returned.",
         "effect": "mutation",
         "http": null,
         "mcp": {
@@ -4272,6 +4314,18 @@
                 "pattern": "^[a-z0-9][a-z0-9_-]+$",
                 "type": "string"
               },
+              "expectedRevision": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                ]
+              },
               "server": {
                 "additionalProperties": false,
                 "properties": {
@@ -4669,6 +4723,10 @@
                 "type": "object"
               }
             },
+            "required": [
+              "expectedRevision",
+              "server"
+            ],
             "type": "object"
           },
           "outputSchema": {
@@ -6708,7 +6766,7 @@
         "title": "Get mock MCP server"
       },
       {
-        "description": "Deletes a mock MCP server and its revision-bound sessions and application state.",
+        "description": "Atomically deletes a mock MCP server, all of its sessions, and its application state only when expectedRevision matches the current positive revision. Success returns deleted true; a replay after success returns the typed not-found error.",
         "effect": "destructive",
         "http": null,
         "mcp": {
@@ -6728,6 +6786,11 @@
                 "pattern": "^[a-z0-9][a-z0-9_-]+$",
                 "type": "string"
               },
+              "expectedRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
               "slug": {
                 "maxLength": 64,
                 "minLength": 1,
@@ -6736,7 +6799,8 @@
               }
             },
             "required": [
-              "slug"
+              "slug",
+              "expectedRevision"
             ],
             "type": "object"
           },
@@ -6748,6 +6812,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "deleted": {
+                    "const": true,
                     "type": "boolean"
                   },
                   "slug": {
@@ -6797,7 +6862,7 @@
         "title": "Delete mock MCP server"
       },
       {
-        "description": "Deletes sequence cursors and other application state for one mock MCP server without changing its definition.",
+        "description": "Deletes sequence cursors and other application state only when expectedRevision matches the current positive server revision, without changing its definition, revision, or sessions. An exact retry succeeds with cleared zero.",
         "effect": "destructive",
         "http": null,
         "mcp": {
@@ -6817,6 +6882,11 @@
                 "pattern": "^[a-z0-9][a-z0-9_-]+$",
                 "type": "string"
               },
+              "expectedRevision": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
               "slug": {
                 "maxLength": 64,
                 "minLength": 1,
@@ -6825,7 +6895,8 @@
               }
             },
             "required": [
-              "slug"
+              "slug",
+              "expectedRevision"
             ],
             "type": "object"
           },

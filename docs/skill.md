@@ -39,6 +39,9 @@ The workflow covers the accepted M5 slice plus bounded M6 recipes:
 - capability discovery against the 24-tool current management registry, preserving
   `simulate_lifecycle` and `run_provisioning_cycle` and recognizing the five F1
   mock-MCP definition/state operations plus four F2 mock-LLM definition operations;
+- revision-safe F1 mock-MCP create, canonical replay, reset, complete replacement,
+  stale-conflict reconciliation, and delete through the five MCP-only tools, including
+  raw Bearer resupply rather than safe-view round-tripping;
 - MCP-managed OpenAI definitions, an authenticated model-discovery capability probe,
   official-SDK JSON and bounded SSE Chat Completions, stream-option and cancellation
   checks, one bounded negative case, and revision-safe cleanup without confusing
@@ -115,6 +118,39 @@ state and revision semantics, observation matchers, and F1 limitations. The exis
 of those source tools does not imply that the F1 route is deployed on an arbitrary
 connected server; capability-negotiate management MCP and retain the endpoint/evidence
 boundary returned by the operator.
+
+## Bounded mock-MCP recipe
+
+For a deterministic MCP dependency, the skill requires this exact control/data-plane
+separation:
+
+1. Capability-negotiate `put_mock_mcp_server`, `list_mock_mcp_servers`,
+   `get_mock_mcp_server`, `reset_mock_mcp_state`, and
+   `delete_mock_mcp_server`; verify the discovered required `expectedRevision`
+   schemas before mutation.
+2. Create a disposable environment, then create the server with an explicit
+   environment ID, `expectedRevision: null`, and a complete definition. Keep a
+   synthetic Bearer Mock Credential in caller-owned secret storage when strict
+   authentication is needed.
+3. Retain the returned positive revision and safe view. The Bearer
+   `configured: true` marker proves configuration only; it is not replacement input.
+4. Connect the application or agent under test to the operator-reported environment
+   mock MCP route using the separate synthetic credential. The management tools alone
+   do not prove that a connected deployment serves the data plane.
+5. Reset deterministic application state with the current revision. Preserve the
+   definition, revision, and sessions, and accept an exact retry as `cleared: 0`.
+6. For a changed replacement, read and reconcile the current server, pass that
+   positive revision, resend the complete definition, and resupply or rotate the raw
+   Bearer credential. Canonical replay may succeed with a stale or `null` expectation,
+   but changed stale or delete/recreate ABA intent must return
+   `MOCK_MCP_SERVER_REVISION_CONFLICT`.
+7. In `finally`, read the latest generation and delete it with that positive
+   revision. Require `deleted: true`; a repeated delete returns
+   `MOCK_MCP_SERVER_NOT_FOUND`, not replayed success.
+8. Delete the disposable environment and close management MCP. Report the bounded
+   mounted `@modelcontextprotocol/sdk` `1.29.0` Worker path as D/I/S/X/Q only, never
+   broader than the named flow and as not actual-network, hosted, deployed, or
+   broad-client evidence. H and P remain unqualified; V is not applicable.
 
 ## Bounded mock-OpenAI recipe
 

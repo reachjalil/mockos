@@ -1,7 +1,7 @@
 # Environment-hosted mock MCP
 
 Status: F1 locally source-qualified; no hosted or deployed acceptance
-Last reviewed: 2026-07-25
+Last reviewed: 2026-07-26
 
 Use a mock MCP server when the system under test is an agent or MCP client and needs
 deterministic tools, resources, resource templates, prompts, errors, latency, and
@@ -30,27 +30,30 @@ API.
 
 ## Configure through management MCP
 
-The management registry now contains 24 tools. The five F1 tools remain appended after the
-15 accepted identity-management tools:
+The management registry now contains 24 tools. The five F1 tools occupy positions
+16–20 after the 15 accepted identity-management tools:
 
 | Tool | Effect | Exact result data | State semantics |
 | --- | --- | --- | --- |
-| `put_mock_mcp_server` | idempotent mutation | A safe server view with specification, revision, and timestamps | Allocates the next environment revision for a new or changed definition; an identical normalized write is a no-op |
+| `put_mock_mcp_server` | idempotent mutation | A safe server view with specification, revision, and timestamps | Requires `expectedRevision: null` for create-only intent or the positive current revision for replacement; a canonical replay succeeds before CAS validation |
 | `list_mock_mcp_servers` | safe read | `{ servers }` summaries | Orders the bounded environment catalog by most recently updated, then slug |
 | `get_mock_mcp_server` | safe read | A safe server view | Returns no Bearer token or verifier |
-| `delete_mock_mcp_server` | idempotent destructive mutation | `{ slug, deleted }` | Cascades current definition, application state, and revision-bound sessions |
-| `reset_mock_mcp_state` | idempotent destructive mutation | `{ slug, cleared }` | Deletes application state only; the definition, revision, and active sessions remain |
+| `delete_mock_mcp_server` | idempotent-state destructive mutation | `{ slug, deleted: true }` | Requires the positive current revision and atomically deletes the definition, application state, and all sessions; a retry after success returns typed not-found |
+| `reset_mock_mcp_state` | idempotent destructive mutation | `{ slug, cleared }` | Requires the positive current revision and atomically deletes application state only; the definition, revision, and active sessions remain, and an exact retry returns `cleared: 0` |
 
 Every input accepts an optional `environmentId`. Saved automation should provide it
 explicitly. Omitting it uses the current management transport session's environment
 cursor and therefore does not transfer to another MCP session.
 
-`put_mock_mcp_server` takes `{ environmentId?, server }`. This minimal definition
-creates a stateful, unauthenticated test server with one deterministic tool:
+`put_mock_mcp_server` takes
+`{ environmentId?, expectedRevision, server }`. This minimal definition uses
+`expectedRevision: null` for create-only intent and creates a stateful,
+unauthenticated test server with one deterministic tool:
 
 ```json
 {
   "environmentId": "test-env_01",
+  "expectedRevision": null,
   "server": {
     "version": 1,
     "slug": "support-agent",
@@ -118,6 +121,111 @@ Load the token from a secret store and inject it into the management tool call. 
 put a real credential in a committed definition or example. The public Worker rejects
 its own platform `API_KEY` as a mock Bearer value, so management authority cannot be
 replayed against the data plane.
+
+A replacement is a complete definition write, not a patch. Resend every intended
+server field and use the positive current revision returned by put/get. For Bearer
+authentication, resupply the raw synthetic token from caller-owned secret storage or
+rotate it. The safe `{ "mode": "bearer", "configured": true }` read marker is not a
+write shape and cannot preserve or recover the credential.
+
+### Create, replace, reset, and delete safely
+
+Treat `expectedRevision` as caller-visible compare-and-swap intent:
+
+1. Create a slug with `expectedRevision: null` and retain the returned positive
+   revision.
+2. Before a changed replacement, get the server, reconcile its current safe
+   definition with the intended complete definition, and send that current revision.
+   Do not increment a revision client-side.
+3. Reset or delete only with the positive revision of the generation the caller
+   intends to mutate.
+4. On `MOCK_MCP_SERVER_REVISION_CONFLICT`, read the current server and decide whether
+   to retry, merge, or stop. Never overwrite another caller's replacement blindly.
+
+For example, a changed replacement of revision `7` uses the same complete `server`
+shape shown above, with the intended edits:
+
+```json
+{
+  "environmentId": "test-env_01",
+  "expectedRevision": 7,
+  "server": {
+    "version": 1,
+    "slug": "support-agent",
+    "serverInfo": {
+      "name": "Support agent dependency",
+      "version": "1.0.1"
+    },
+    "transport": {
+      "stateful": true,
+      "enableGet": false,
+      "sessionTtlSeconds": 3600
+    },
+    "pageSize": 25,
+    "authentication": {
+      "mode": "none"
+    },
+    "tools": [
+      {
+        "name": "lookup_ticket",
+        "description": "Return a deterministic synthetic ticket.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        "behavior": {
+          "version": 1,
+          "type": "static",
+          "value": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic ticket is open."
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+Reset uses the current generation without changing its definition, revision, or
+sessions:
+
+```json
+{
+  "environmentId": "test-env_01",
+  "slug": "support-agent",
+  "expectedRevision": 7
+}
+```
+
+Pass that object to `reset_mock_mcp_state`. Its first result reports the number of
+state rows removed; an exact retry while revision `7` still exists succeeds with
+`{ "slug": "support-agent", "cleared": 0 }`.
+
+Pass the same shape to `delete_mock_mcp_server` to remove that generation. Success is
+exactly `{ "slug": "support-agent", "deleted": true }`. A retry after successful
+delete returns `404 MOCK_MCP_SERVER_NOT_FOUND`; delete is idempotent in state effect,
+not replayed response shape.
+
+Put checks a canonically identical definition before its CAS comparison. Retrying an
+ambiguous successful put therefore returns the existing record even if the supplied
+expectation is now stale or still `null`; it does not allocate a revision, delete
+state, or terminate sessions. This exception applies only to canonical replay. A
+changed create against an existing slug, a changed replacement against a missing
+slug, and stale or delete/recreate ABA expectations fail with
+`409 MOCK_MCP_SERVER_REVISION_CONFLICT` without mutation.
 
 ## Connect the agent under test
 
@@ -489,7 +597,8 @@ transport-session state: tool and prompt sequences are shared by capability name
 fixed-resource sequences by URI, and template-resource sequences by template plus
 requested URI. Concurrent clients therefore consume the same committed sequence.
 Use `reset_mock_mcp_state` when a test needs the configured server back at its initial
-behavior state.
+behavior state, and pass the server's positive current revision as
+`expectedRevision`.
 
 To return a top-level configured JSON-RPC error, declare both the behavior and its
 one-to-one server mapping:
@@ -542,13 +651,20 @@ commit.
 
 ## Revision, session, state, and pagination rules
 
+- Every management mutation carries explicit generation intent. Put uses `null` only
+  for create or a positive current revision for replacement; reset and delete require
+  a positive current revision. Stale and delete/recreate ABA expectations fail
+  atomically with typed `409`.
 - Every successful new or changed definition receives the next environment-wide safe
   positive-integer revision. One slug's revisions therefore increase strictly but may
   skip values used by other slugs.
-- Repeating the same normalized definition is a true no-op: revision, timestamps,
+- Canonical replay is checked before put CAS. Repeating the same normalized definition
+  is a true no-op even with a stale or `null` expectation: revision, timestamps,
   application state, and sessions are preserved.
 - Changing a slug's definition advances its revision atomically, removes prior
-  application state, and terminates sessions for the old revision.
+  application state, and terminates sessions for the old revision. It is a complete
+  write, so Bearer authentication requires caller-owned credential resupply or
+  rotation.
 - The one-row revision allocator survives deletion, including deletion of every
   server, so recreating a slug cannot reuse an old revision. Reset, delete, invalid
   input, and rejected capacity writes do not consume revisions. If the safe-integer
@@ -567,6 +683,9 @@ commit.
 - Resetting application state does not terminate a valid current-revision session.
 - Deleting a server explicitly removes its state and sessions even when SQLite foreign
   key enforcement is unavailable; it does not reset the revision allocator.
+- Reset is response-idempotent while the definition exists: an exact retry reports
+  `cleared: 0`. Delete is state-idempotent, but its successful response is not cached:
+  an exact retry reports typed not-found.
 - List cursors are opaque and capped at 512 characters. They encode list kind, server
   slug, revision, transport/session scope, and offset; malformed, naively modified,
   cross-kind, cross-session, and cross-revision values fail rather than silently
@@ -575,6 +694,24 @@ commit.
   boundary or security credential.
 
 ## Errors and response commitment
+
+### Management mutation errors
+
+Management MCP validates the discovered strict input schema before handler entry.
+Missing `expectedRevision`, `null` on reset/delete, zero, negative, fractional, or
+unsafe-integer revisions fail input validation and never reach repository mutation.
+After handler entry, F1 exposes these stable mutation outcomes:
+
+| Condition | MCP problem status/code | Mutation |
+| --- | --- | --- |
+| Changed put does not match create/current-revision intent | `409 MOCK_MCP_SERVER_REVISION_CONFLICT` | None |
+| Reset/delete uses a stale or delete/recreate ABA revision | `409 MOCK_MCP_SERVER_REVISION_CONFLICT` | None |
+| Reset/delete targets a missing server, including delete retry | `404 MOCK_MCP_SERVER_NOT_FOUND` | None |
+| Reset matches current revision after state is already clear | Success with `cleared: 0` | No additional state change |
+| Delete matches current revision | Success with `deleted: true` | Definition, state, and sessions removed atomically |
+
+The 404/409 statuses belong to the management tool's structured problem result. They
+are separate from the environment mock MCP transport and JSON-RPC mapping below.
 
 The adapter keeps HTTP transport failures separate from JSON-RPC application errors.
 Malformed content negotiation, method, protocol, credential, origin, or session state
@@ -741,6 +878,15 @@ this document passed that local gate. Local source qualification does not qualif
 package publication, hosted CI, merge, staging, production, wildcard TLS, operated
 Cloud composition, a future MCP protocol revision, or external ecosystem compatibility
 beyond the tested clients.
+
+For the bounded F1 management-CAS slice, D/I/S/X/Q are yes locally: strict contracts,
+repository/MCP tests, and the mounted Worker integration prove discovery and runtime
+agreement, canonical replay, current-revision reset/delete, one-winner concurrent
+replacement, typed stale/ABA conflict, repeated-delete not-found, and credential
+non-reflection through `@modelcontextprotocol/sdk` `1.29.0`. Q is limited to that
+mounted official-client management and data-plane path; it is not an actual-network,
+hosted, deployed, broad-client, or production qualification. H and P remain
+unqualified; V is not applicable to this synthetic flow.
 
 ## Current limitations
 

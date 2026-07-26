@@ -18,10 +18,10 @@ import {
   MOCK_LLM_ANTHROPIC_MAX_REQUEST_NODES,
   MOCK_LLM_ANTHROPIC_MAX_RESPONSE_BODY_BYTES,
   MOCK_LLM_ANTHROPIC_MAX_TEXT_BYTES,
-  MOCK_LLM_ANTHROPIC_MAX_TOOLS,
   MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_BYTES,
   MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_DEPTH,
   MOCK_LLM_ANTHROPIC_MAX_TOOL_VALUE_NODES,
+  MOCK_LLM_ANTHROPIC_MAX_TOOLS,
   MOCK_LLM_ANTHROPIC_VERSION,
   MOCK_LLM_OPENAI_MAX_MESSAGES,
   MOCK_LLM_OPENAI_MAX_REQUEST_BODY_BYTES,
@@ -29,8 +29,8 @@ import {
   MOCK_LLM_OPENAI_MAX_REQUEST_NODES,
   MOCK_LLM_OPENAI_MAX_RESPONSE_BODY_BYTES,
   MOCK_LLM_OPENAI_MAX_TEXT_BYTES,
-  MOCK_LLM_OPENAI_MAX_TOOLS,
   MOCK_LLM_OPENAI_MAX_TOOL_VALUE_BYTES,
+  MOCK_LLM_OPENAI_MAX_TOOLS,
   mockLlmAnthropicProviderManifest,
   mockLlmOpenAiProviderManifest,
 } from "@mockos/llm-mock";
@@ -538,6 +538,48 @@ export type MockosManagementDocumentationCatalog = {
     mockMcpServers: {
       status: "source-qualified";
       phase: "F1";
+      managementDefinitions: {
+        status: "source-implemented";
+        interface: "MCP-only";
+        toolIds: readonly [
+          "put_mock_mcp_server",
+          "list_mock_mcp_servers",
+          "get_mock_mcp_server",
+          "delete_mock_mcp_server",
+          "reset_mock_mcp_state",
+        ];
+        persistence: "environment-schema-v6";
+        bearerCredentials: "write-only-server-scoped";
+        putContract: {
+          expectedRevision: "required-null-create-or-positive-replace";
+          replay: "canonical-before-cas";
+          replacement: "full-definition";
+          bearerCredentialReplacement: "resupply-or-rotate";
+          safeViewWriteShape: "unsupported";
+          revisionMismatch: "typed-409";
+        };
+        resetContract: {
+          expectedRevision: "required-positive";
+          behavior: "atomic-cas";
+          preserves: "definition-revision-and-sessions";
+          exactReplay: "cleared-zero";
+          missing: "typed-404";
+          revisionMismatch: "typed-409";
+        };
+        deleteContract: {
+          expectedRevision: "required-positive";
+          behavior: "atomic-cas";
+          removes: "definition-state-and-sessions";
+          success: "deleted-true";
+          missingOrReplay: "typed-404";
+          revisionMismatch: "typed-409";
+        };
+        validation: {
+          topLevelArguments: "strict-secret-safe";
+          definitionFailures: "credential-free-generic";
+          revision: "positive-safe-integer";
+        };
+      };
       testedProtocolVersion: "2025-11-25";
       pathEndpoint: "/e/{environmentId}/mcp-mock/{slug}";
       subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}";
@@ -1022,6 +1064,48 @@ export const generateMockosManagementDocumentationCatalog =
         mockMcpServers: {
           status: "source-qualified",
           phase: "F1",
+          managementDefinitions: {
+            status: "source-implemented",
+            interface: "MCP-only",
+            toolIds: [
+              "put_mock_mcp_server",
+              "list_mock_mcp_servers",
+              "get_mock_mcp_server",
+              "delete_mock_mcp_server",
+              "reset_mock_mcp_state",
+            ],
+            persistence: "environment-schema-v6",
+            bearerCredentials: "write-only-server-scoped",
+            putContract: {
+              expectedRevision: "required-null-create-or-positive-replace",
+              replay: "canonical-before-cas",
+              replacement: "full-definition",
+              bearerCredentialReplacement: "resupply-or-rotate",
+              safeViewWriteShape: "unsupported",
+              revisionMismatch: "typed-409",
+            },
+            resetContract: {
+              expectedRevision: "required-positive",
+              behavior: "atomic-cas",
+              preserves: "definition-revision-and-sessions",
+              exactReplay: "cleared-zero",
+              missing: "typed-404",
+              revisionMismatch: "typed-409",
+            },
+            deleteContract: {
+              expectedRevision: "required-positive",
+              behavior: "atomic-cas",
+              removes: "definition-state-and-sessions",
+              success: "deleted-true",
+              missingOrReplay: "typed-404",
+              revisionMismatch: "typed-409",
+            },
+            validation: {
+              topLevelArguments: "strict-secret-safe",
+              definitionFailures: "credential-free-generic",
+              revision: "positive-safe-integer",
+            },
+          },
           testedProtocolVersion: "2025-11-25",
           pathEndpoint: "/e/{environmentId}/mcp-mock/{slug}",
           subdomainEndpoint: "https://{environmentId}.{baseDomain}/mcp-mock/{slug}",
@@ -1453,8 +1537,11 @@ export const generateMockosProductCapabilityIndex =
           evidence: {
             source: qualifiedSourceClaim(
               catalog.future.mockMcpServers.status === "source-qualified",
-              "bounded-f1-current-source",
+              "bounded-f1-current-source-with-management-cas",
               [
+                "packages/contracts/src/operations/management.test.ts",
+                "packages/core/src/mock-mcp/foundation.test.ts",
+                "packages/mcp/src/index.test.ts",
                 "packages/mcp-mock/src/sdk-conformance.test.ts",
                 "packages/mcp-mock/src/repository-integration.test.ts",
                 "apps/worker/test/mock-mcp.integration.test.ts",

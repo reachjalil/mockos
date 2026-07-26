@@ -8,6 +8,8 @@ import {
 } from "./behavior";
 
 export const MOCK_MCP_PROTOCOL_VERSION = "2025-11-25" as const;
+export const mockMcpRevisionSchema = z.number().int().safe().min(1);
+export type MockMcpRevision = z.infer<typeof mockMcpRevisionSchema>;
 export const MOCK_MCP_MAX_SERVERS = 64;
 export const MOCK_MCP_MAX_CAPABILITIES_PER_KIND = 64;
 export const MOCK_MCP_MAX_PAGE_SIZE = 50;
@@ -1045,7 +1047,7 @@ export type MockMcpServerPublicSpec = z.infer<typeof mockMcpServerPublicSpecSche
 export const mockMcpServerRecordSchema = z
   .object({
     spec: mockMcpServerSpecSchema,
-    revision: z.number().int().min(1),
+    revision: mockMcpRevisionSchema,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
@@ -1055,7 +1057,7 @@ export type MockMcpServerRecord = z.infer<typeof mockMcpServerRecordSchema>;
 export const mockMcpServerViewSchema = z
   .object({
     spec: mockMcpServerPublicSpecSchema,
-    revision: z.number().int().min(1),
+    revision: mockMcpRevisionSchema,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
@@ -1067,7 +1069,7 @@ export const mockMcpServerSummarySchema = z
     slug: mockMcpSlugSchema,
     name: z.string().min(1).max(128),
     version: z.string().min(1).max(64),
-    revision: z.number().int().min(1),
+    revision: mockMcpRevisionSchema,
     toolCount: z.number().int().min(0).max(MOCK_MCP_MAX_CAPABILITIES_PER_KIND),
     resourceCount: z.number().int().min(0).max(MOCK_MCP_MAX_CAPABILITIES_PER_KIND),
     resourceTemplateCount: z
@@ -1093,7 +1095,7 @@ export type MockMcpServerList = z.infer<typeof mockMcpServerListSchema>;
 export const mockMcpDeleteServerResultSchema = z
   .object({
     slug: mockMcpSlugSchema,
-    deleted: z.boolean(),
+    deleted: z.literal(true),
   })
   .strict();
 export type MockMcpDeleteServerResult = z.infer<typeof mockMcpDeleteServerResultSchema>;

@@ -87,6 +87,20 @@ describe("management operation registry", () => {
         io: "input",
       })
     );
+    const putInputSchema = z.toJSONSchema(
+      mockosManagementOperations.put_mock_mcp_server.mcp.inputSchema,
+      { io: "input" }
+    );
+    expect(putInputSchema).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["expectedRevision", "server"],
+      properties: {
+        expectedRevision: {
+          anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+        },
+      },
+    });
     expect(putInputJsonSchema).toContain('"token"');
     expect(putInputJsonSchema).not.toContain("tokenSha256");
     for (const toolName of [
@@ -134,6 +148,18 @@ describe("management operation registry", () => {
             destructiveHint: true,
             idempotentHint: true,
           },
+        },
+      });
+      expect(
+        z.toJSONSchema(mockosManagementOperations[toolName].mcp.inputSchema, {
+          io: "input",
+        })
+      ).toMatchObject({
+        type: "object",
+        additionalProperties: false,
+        required: ["slug", "expectedRevision"],
+        properties: {
+          expectedRevision: { type: "integer", minimum: 1 },
         },
       });
     }

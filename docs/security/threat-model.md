@@ -45,7 +45,9 @@ metadata, platform-key confusion with a mock Bearer value, raw session disclosur
 session fixation or cross-server replay, stale sessions/cursors after definition
 replacement or delete/recreate, pathological JSON Schema and URI-template input,
 prototype traversal, configured error-map ambiguity, sequence-state races, aborted
-latency that commits state, and secret reflection through observations.
+latency that commits state, secret reflection through observations, lost definition
+updates, stale reset/delete, delete/recreate ABA mutation, and accidental credential
+loss or ambiguity when a safe read marker is reused as replacement input.
 F2 definition threats add platform-key confusion with either provider key, plaintext
 or verifier reflection through safe reads/behavior material, cross-environment
 definition access, lost updates, delete/recreate revision reuse, canonicalization
@@ -71,7 +73,24 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
 - `put_mock_mcp_server` rejects a Bearer Mock Credential equal to the active self-host
   platform key before persistence. The write credential is hashed; list/get views
   return only `configured: true`, and their strict schemas cannot contain token or
-  verifier material.
+  verifier material. That marker is not a write shape. Replacement is a complete
+  definition write and must resupply or rotate the raw synthetic Bearer value from
+  caller-owned secret storage.
+- Every mock-MCP definition mutation carries explicit compare-and-swap intent.
+  `expectedRevision: null` is create-only; a changed put must name the positive
+  current revision. Canonical replay is checked first, so an ambiguous successful
+  retry returns the existing record without allocating a revision, clearing state, or
+  terminating sessions. Unknown top-level put arguments collapse to one secret-safe
+  validation issue without reflecting their key or value.
+- Mock-MCP reset and delete require the positive current revision and validate it
+  inside the mutation transaction. Reset removes current-revision application state
+  while preserving definition, revision, and sessions; exact replay returns
+  `cleared: 0`. Delete removes definition, state, and all sessions and returns literal
+  `deleted: true`; missing or repeated delete returns typed `404`. A stale or
+  delete/recreate ABA expectation on put/reset/delete returns typed `409` without
+  mutation. These management controls are separate from the data-plane revision
+  recheck that prevents an in-flight MCP request from returning against a replaced
+  generation.
 - `put_mock_llm_server` independently rejects the complete active self-host platform
   key as a substring anywhere in a bounded submitted definition's JSON keys or string
   values at Worker ingress and again inside the Environment Durable Object. Each
@@ -202,10 +221,10 @@ pending evidence, duplicate/conflicting terminal writes, and append-order distor
 - Mock-MCP session IDs contain 32 random bytes, are returned only at issuance, and are
   persisted only as SHA-256 hashes. Lookup binds a session to server slug, current
   revision, negotiated version, initialization state, expiry, and termination.
-  Every non-idempotent definition write consumes one safe environment-wide revision
-  from a single durable allocator row. Replacement makes old sessions stale, delete
-  cascades them without resetting that allocator, active sessions are capped at 100
-  per server, and cleanup is bounded.
+  Every new or changed definition consumes one safe environment-wide revision from a
+  single durable allocator row; canonical replay and rejected CAS do not. Replacement
+  makes old sessions stale, delete cascades them without resetting that allocator,
+  active sessions are capped at 100 per server, and cleanup is bounded.
 - F1 definitions, schemas, behavior/results, fixed/returned resource URIs, templates,
   state, pages, capabilities, error maps, and sessions have explicit
   byte/depth/node/count ceilings. Current-revision state is capped at 256 rows and 2
@@ -400,11 +419,15 @@ in arbitrary content. This is not permission to send production secrets, account
 Access Keys, Cloudflare credentials, or real personal data into a mock environment.
 Operators must treat exported logs as sensitive test artifacts.
 
-The F1 threat controls currently have source tests only. They are not a penetration
-test, load/abuse envelope, hosted multi-tenant authorization review, wildcard-route
-qualification, or deployment acceptance. The public self-host still uses one coarse
-management key, while a mock MCP Bearer value is a synthetic per-server credential,
-not team or end-user authorization. `env:ro`/`env:rw` enforcement remains F4 work.
+The F1 threat controls are D/I/S/X/Q only for the bounded local source and mounted
+official MCP SDK `1.29.0` Worker flow. That Q path exercises discovery and management
+CAS but is not an actual-network run, penetration test, load/abuse envelope, hosted
+multi-tenant authorization review, wildcard-route qualification, deployment,
+verified-live comparison, or production acceptance; H and P remain unqualified, while
+V is not applicable to the synthetic flow. The
+public self-host still uses one coarse management key, while a mock MCP Bearer value
+is a synthetic per-server credential, not team or end-user authorization.
+`env:ro`/`env:rw` enforcement remains F4 work.
 POST-only operation, disabled GET/list-change delivery, no scripts, and no proxy are
 deliberate capability reductions, not controls that may be silently bypassed.
 

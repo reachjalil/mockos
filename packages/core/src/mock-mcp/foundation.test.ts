@@ -100,7 +100,7 @@ describe("mock MCP persistence", () => {
     const store = memoryStore();
     const clock = new FixedClock("2026-07-23T12:00:00.000Z");
     const repository = new MockMcpRepository(store, clock);
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     repository.writeState("agent", first.revision, "sequence:tool", 2);
     store.run(
       `INSERT INTO mock_mcp_sessions (
@@ -117,7 +117,7 @@ describe("mock MCP persistence", () => {
     );
 
     clock.advance(1_000);
-    const second = repository.put(serverSpec("two"));
+    const second = repository.put(serverSpec("two"), first.revision);
     expect(second.revision).toBe(2);
     expect(() => repository.assertServerRevision("agent", first.revision)).toThrow(
       MockMcpRepositoryError
@@ -141,11 +141,11 @@ describe("mock MCP persistence", () => {
     );
   });
 
-  it("treats a byte-identical put as an idempotent no-op", () => {
+  it("accepts a canonical replay before checking a stale CAS expectation", () => {
     const store = memoryStore();
     const clock = new FixedClock("2026-07-23T12:00:00.000Z");
     const repository = new MockMcpRepository(store, clock);
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     repository.writeState("agent", first.revision, "sequence:tool", 2);
     store.run(
       `INSERT INTO mock_mcp_sessions (
@@ -162,7 +162,15 @@ describe("mock MCP persistence", () => {
     );
 
     clock.advance(1_000);
-    const replay = repository.put(serverSpec("one"));
+    const replay = repository.put(
+      {
+        tools: serverSpec("one").tools,
+        serverInfo: serverSpec("one").serverInfo,
+        slug: "agent",
+        version: 1,
+      },
+      99
+    );
 
     expect(replay).toEqual(first);
     expect(repository.readState("agent", 1, "sequence:tool")).toBe(2);
@@ -172,22 +180,98 @@ describe("mock MCP persistence", () => {
         "b".repeat(64)
       )?.terminated_at
     ).toBeNull();
+    expect(repository.put(serverSpec("one"), null)).toEqual(first);
+  });
+
+  it("rejects stale and ABA mutations without touching the recreated generation", () => {
+    const store = memoryStore();
+    const repository = new MockMcpRepository(store);
+    const first = repository.put(serverSpec("one"), null);
+    expect(repository.delete("agent", first.revision)).toBe(true);
+
+    const recreated = repository.put(serverSpec("recreated"), null);
+    repository.writeState("agent", recreated.revision, "sequence:tool", 2);
+    store.run(
+      `INSERT INTO mock_mcp_sessions (
+        session_hash, server_slug, server_revision, protocol_version,
+        initialized, created_at, expires_at, terminated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      "d".repeat(64),
+      "agent",
+      recreated.revision,
+      "2025-11-25",
+      1,
+      "2026-07-23T12:00:00.000Z",
+      "2099-07-23T13:00:00.000Z"
+    );
+
+    for (const mutation of [
+      () => repository.put(serverSpec("stale replace"), first.revision),
+      () => repository.resetState("agent", first.revision),
+      () => repository.delete("agent", first.revision),
+    ]) {
+      expect(mutation).toThrow(
+        expect.objectContaining<Partial<MockMcpRepositoryError>>({
+          code: "server_revision_mismatch",
+        })
+      );
+    }
+
+    expect(repository.require("agent")).toEqual(recreated);
+    expect(repository.readState("agent", recreated.revision, "sequence:tool")).toBe(2);
+    expect(
+      store.get<{ terminated_at: string | null }>(
+        "SELECT terminated_at FROM mock_mcp_sessions WHERE session_hash = ?",
+        "d".repeat(64)
+      )?.terminated_at
+    ).toBeNull();
+  });
+
+  it("rejects invalid expected revisions before mutation", () => {
+    const repository = new MockMcpRepository(memoryStore());
+    const first = repository.put(serverSpec("one"), null);
+
+    for (const expectedRevision of [
+      0,
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+      Number.NaN,
+    ]) {
+      expect(() => repository.put(serverSpec("changed"), expectedRevision)).toThrow(
+        expect.objectContaining<Partial<MockMcpRepositoryError>>({
+          code: "invalid_expected_revision",
+        })
+      );
+      expect(() => repository.resetState("agent", expectedRevision)).toThrow(
+        expect.objectContaining<Partial<MockMcpRepositoryError>>({
+          code: "invalid_expected_revision",
+        })
+      );
+      expect(() => repository.delete("agent", expectedRevision)).toThrow(
+        expect.objectContaining<Partial<MockMcpRepositoryError>>({
+          code: "invalid_expected_revision",
+        })
+      );
+    }
+
+    expect(repository.require("agent")).toEqual(first);
   });
 
   it("persists one bounded monotonic revision generation across delete and recreate", () => {
     const store = memoryStore();
     const clock = new FixedClock("2026-07-23T12:00:00.000Z");
     const repository = new MockMcpRepository(store, clock);
-    const first = repository.put(serverSpec("one"));
-    const replay = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
+    const replay = repository.put(serverSpec("one"), null);
     const secondRepository = new MockMcpRepository(store, clock);
-    const other = secondRepository.put({ ...serverSpec("other"), slug: "other" });
+    const other = secondRepository.put({ ...serverSpec("other"), slug: "other" }, null);
 
     expect(first.revision).toBe(1);
     expect(replay).toEqual(first);
     expect(other.revision).toBe(2);
-    expect(repository.delete("agent")).toBe(true);
-    expect(repository.delete("other")).toBe(true);
+    expect(repository.delete("agent", first.revision)).toBe(true);
+    expect(repository.delete("other", other.revision)).toBe(true);
     expect(repository.list()).toEqual([]);
     expect(
       store.get<{ last_revision: number }>(
@@ -196,7 +280,7 @@ describe("mock MCP persistence", () => {
     ).toBe(2);
 
     const restartedRepository = new MockMcpRepository(store, clock);
-    const recreated = restartedRepository.put(serverSpec("recreated"));
+    const recreated = restartedRepository.put(serverSpec("recreated"), null);
     expect(recreated.revision).toBe(3);
     expect(recreated.revision).toBeGreaterThan(first.revision);
     expect(
@@ -207,15 +291,39 @@ describe("mock MCP persistence", () => {
     ).toEqual({ count: 1, last_revision: 3 });
   });
 
-  it("does not allocate revisions for reset, absent delete, validation, or server-cap failure", () => {
+  it("does not allocate revisions for reset, rejected mutation, validation, or server-cap failure", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
 
-    expect(repository.resetState("agent")).toBe(0);
-    expect(repository.delete("missing")).toBe(false);
+    expect(repository.resetState("agent", first.revision)).toBe(0);
+    expect(() => repository.delete("missing", first.revision)).toThrow(
+      expect.objectContaining<Partial<MockMcpRepositoryError>>({
+        code: "server_not_found",
+      })
+    );
+    expect(() => repository.resetState("missing", first.revision)).toThrow(
+      expect.objectContaining<Partial<MockMcpRepositoryError>>({
+        code: "server_not_found",
+      })
+    );
+    expect(() => repository.put(serverSpec("changed"), null)).toThrow(
+      expect.objectContaining<Partial<MockMcpRepositoryError>>({
+        code: "server_revision_mismatch",
+      })
+    );
     expect(() =>
-      repository.put({ ...serverSpec("invalid"), slug: "INVALID SLUG" })
+      repository.put(
+        { ...serverSpec("missing"), slug: "missing-server" },
+        first.revision
+      )
+    ).toThrow(
+      expect.objectContaining<Partial<MockMcpRepositoryError>>({
+        code: "server_revision_mismatch",
+      })
+    );
+    expect(() =>
+      repository.put({ ...serverSpec("invalid"), slug: "INVALID SLUG" }, null)
     ).toThrow();
     expect(
       store.get<{ last_revision: number }>(
@@ -224,16 +332,19 @@ describe("mock MCP persistence", () => {
     ).toBe(first.revision);
 
     for (let index = 1; index < MOCK_MCP_MAX_SERVERS; index += 1) {
-      repository.put({
-        ...serverSpec(`server-${index}`),
-        slug: `server-${index}`,
-      });
+      repository.put(
+        {
+          ...serverSpec(`server-${index}`),
+          slug: `server-${index}`,
+        },
+        null
+      );
     }
     const beforeRejectedPut = store.get<{ last_revision: number }>(
       "SELECT last_revision FROM mock_mcp_revision_allocator WHERE singleton = 1"
     )?.last_revision;
     expect(() =>
-      repository.put({ ...serverSpec("overflow"), slug: "server-overflow" })
+      repository.put({ ...serverSpec("overflow"), slug: "server-overflow" }, null)
     ).toThrow(
       expect.objectContaining<Partial<MockMcpRepositoryError>>({
         code: "server_limit",
@@ -249,7 +360,7 @@ describe("mock MCP persistence", () => {
   it("fails revision exhaustion before changing an existing definition", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     repository.writeState("agent", first.revision, "sequence:tool", 2);
     store.run(
       `INSERT INTO mock_mcp_sessions (
@@ -271,8 +382,8 @@ describe("mock MCP persistence", () => {
       Number.MAX_SAFE_INTEGER
     );
 
-    expect(repository.put(serverSpec("one"))).toEqual(first);
-    expect(() => repository.put(serverSpec("two"))).toThrow(
+    expect(repository.put(serverSpec("one"), null)).toEqual(first);
+    expect(() => repository.put(serverSpec("two"), first.revision)).toThrow(
       expect.objectContaining<Partial<MockMcpRepositoryError>>({
         code: "server_revision_limit",
       })
@@ -295,11 +406,13 @@ describe("mock MCP persistence", () => {
   it("fails closed when the revision allocator row is missing or behind active state", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
-    const first = repository.put(serverSpec("one"));
+    const first = repository.put(serverSpec("one"), null);
     repository.writeState("agent", first.revision, "sequence:tool", 2);
 
     store.run("DELETE FROM mock_mcp_revision_allocator WHERE singleton = 1");
-    expect(() => repository.put(serverSpec("missing-allocator"))).toThrow(
+    expect(() =>
+      repository.put(serverSpec("missing-allocator"), first.revision)
+    ).toThrow(
       expect.objectContaining<Partial<MockMcpRepositoryError>>({
         code: "invalid_persisted_server",
       })
@@ -310,7 +423,9 @@ describe("mock MCP persistence", () => {
       `INSERT INTO mock_mcp_revision_allocator (singleton, last_revision)
        VALUES (1, 0)`
     );
-    expect(() => repository.put(serverSpec("behind-allocator"))).toThrow(
+    expect(() =>
+      repository.put(serverSpec("behind-allocator"), first.revision)
+    ).toThrow(
       expect.objectContaining<Partial<MockMcpRepositoryError>>({
         code: "invalid_persisted_server",
       })
@@ -321,7 +436,7 @@ describe("mock MCP persistence", () => {
 
   it("bounds state cardinality and serialized bytes per server revision", () => {
     const rowRepository = new MockMcpRepository(memoryStore());
-    const rowServer = rowRepository.put(serverSpec("rows"));
+    const rowServer = rowRepository.put(serverSpec("rows"), null);
     for (let index = 0; index < MOCK_MCP_MAX_STATE_ROWS_PER_SERVER; index += 1) {
       rowRepository.writeState("agent", rowServer.revision, `row:${index}`, index);
     }
@@ -337,7 +452,7 @@ describe("mock MCP persistence", () => {
     ).not.toThrow();
 
     const byteRepository = new MockMcpRepository(memoryStore());
-    const byteServer = byteRepository.put(serverSpec("bytes"));
+    const byteServer = byteRepository.put(serverSpec("bytes"), null);
     const payload = "x".repeat(60_000);
     const payloadBytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
     const fittingRows = Math.floor(MOCK_MCP_MAX_STATE_BYTES_PER_SERVER / payloadBytes);
@@ -362,10 +477,10 @@ describe("mock MCP persistence", () => {
   it("resets state and explicitly deletes children without foreign keys", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
-    const record = repository.put(serverSpec("one"));
+    const record = repository.put(serverSpec("one"), null);
     repository.writeState("agent", record.revision, "one", { value: true });
     repository.writeState("agent", record.revision, "two", 2);
-    expect(repository.resetState("agent")).toBe(2);
+    expect(repository.resetState("agent", record.revision)).toBe(2);
     expect(repository.get("agent")).toBeDefined();
     repository.writeState("agent", record.revision, "remaining", 3);
     store.run(
@@ -382,11 +497,15 @@ describe("mock MCP persistence", () => {
       "2026-07-23T13:00:00.000Z"
     );
     store.database.exec("PRAGMA foreign_keys = OFF");
-    expect(repository.delete("agent")).toBe(true);
+    expect(repository.delete("agent", record.revision)).toBe(true);
     expect(() => repository.assertServerRevision("agent", record.revision)).toThrow(
       MockMcpRepositoryError
     );
-    expect(repository.delete("agent")).toBe(false);
+    expect(() => repository.delete("agent", record.revision)).toThrow(
+      expect.objectContaining<Partial<MockMcpRepositoryError>>({
+        code: "server_not_found",
+      })
+    );
     expect(repository.list()).toEqual([]);
     expect(
       store.get<{ count: number }>(
@@ -400,7 +519,7 @@ describe("mock MCP persistence", () => {
         "agent"
       )?.count
     ).toBe(0);
-    const recreated = repository.put(serverSpec("recreated"));
+    const recreated = repository.put(serverSpec("recreated"), null);
     expect(recreated.revision).toBe(2);
     expect(
       repository.readState("agent", recreated.revision, "remaining")
@@ -410,7 +529,7 @@ describe("mock MCP persistence", () => {
   it("rejects unbounded or non-JSON application state on write and read", () => {
     const store = memoryStore();
     const repository = new MockMcpRepository(store);
-    const record = repository.put(serverSpec("one"));
+    const record = repository.put(serverSpec("one"), null);
     expect(() =>
       repository.writeState(
         "agent",
