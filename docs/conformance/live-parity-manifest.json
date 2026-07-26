@@ -1,0 +1,313 @@
+{
+  "schemaVersion": 1,
+  "title": "mockOS live-provider parity cases",
+  "status": "Foundation landed; no live capture has run",
+  "lastReviewed": "2026-07-26",
+  "notes": [
+    "status is not-captured until a real tenant capture exists. It must never render as a pass.",
+    "enforcement is advisory by default. Promote a case to enforcing only after it has been stable across several captures.",
+    "tier a runs headless. tier b needs browser automation against a real hosted login."
+  ],
+  "cases": [
+    {
+      "id": "okta-authn-success",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "Primary authentication returns SUCCESS with a one-use session token",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-mfa-required",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "MFA_REQUIRED returns a state token and an embedded factor with a verify link",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-factor-verify",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "Factor verification with a real RFC 6238 TOTP code returns a session token",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-factor-wrong-passcode",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "A wrong passcode returns E0000068 and preserves the transaction",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-password-expired",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "PASSWORD_EXPIRED returns the policy complexity block",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-locked-out",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "LOCKED_OUT returns status only, with no embedded user",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-invalid-credentials",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "Unknown user or wrong password returns E0000004 without disclosing which",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-cancel",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "Cancelling a transaction succeeds once and then returns E0000011",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-authn-content-type",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Classic Authn",
+      "capability": "A non-JSON content type is rejected with E0000003",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-discovery",
+      "provider": "okta",
+      "tier": "a",
+      "area": "OIDC metadata",
+      "capability": "Authorization-server discovery document fields and cache headers",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-jwks",
+      "provider": "okta",
+      "tier": "a",
+      "area": "OIDC metadata",
+      "capability": "JWKS key shape, alg, use, and cache headers",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-token-invalid-grant",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Token endpoint",
+      "capability": "An unknown or replayed authorization code returns invalid_grant",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-token-pkce-mismatch",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Token endpoint",
+      "capability": "A mismatched PKCE verifier returns invalid_grant",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-token-unsupported-grant",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Token endpoint",
+      "capability": "client_credentials returns unsupported_grant_type",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-introspect-public-client",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Introspection",
+      "capability": "A public client cannot introspect and is rejected",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-revoke",
+      "provider": "okta",
+      "tier": "a",
+      "area": "Revocation",
+      "capability": "Revocation is idempotent and returns 200 with an empty body",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-discovery",
+      "provider": "entra",
+      "tier": "a",
+      "area": "OIDC metadata",
+      "capability": "Tenant discovery document fields and cache headers",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-jwks",
+      "provider": "entra",
+      "tier": "a",
+      "area": "OIDC metadata",
+      "capability": "JWKS key shape and cache headers",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-authorize-bad-redirect",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Authorize endpoint",
+      "capability": "An unregistered redirect URI is rejected without a login prompt",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-authorize-unknown-client",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Authorize endpoint",
+      "capability": "An unknown client id is rejected with the application-not-found error",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-token-invalid-grant",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Token endpoint",
+      "capability": "An unknown or replayed authorization code returns invalid_grant with an AADSTS code",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-token-bad-client-secret",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Token endpoint",
+      "capability": "A wrong client secret returns invalid_client with 401",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-device-create",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Device authorization",
+      "capability": "Device authorization response fields, interval, and lifetime",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-device-authorization-pending",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Device authorization",
+      "capability": "Polling before approval returns authorization_pending",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-device-bad-verification-code",
+      "provider": "entra",
+      "tier": "a",
+      "area": "Device authorization",
+      "capability": "An unknown device code returns bad_verification_code",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-authorization-code-happy-path",
+      "provider": "entra",
+      "tier": "b",
+      "area": "Authorization code",
+      "capability": "Interactive sign-in through the real hosted login, then code redemption",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "entra-device-approval",
+      "provider": "entra",
+      "tier": "b",
+      "area": "Device authorization",
+      "capability": "Approving a device code at the real activation page, then redemption",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    },
+    {
+      "id": "okta-hosted-login-authorize",
+      "provider": "okta",
+      "tier": "b",
+      "area": "Authorization code",
+      "capability": "Interactive sign-in through the real Okta hosted login redirect",
+      "enforcement": "advisory",
+      "status": "not-captured",
+      "capturedAt": null
+    }
+  ],
+  "outOfScope": [
+    "client_credentials",
+    "on-behalf-of and token exchange",
+    "resource owner password credentials",
+    "implicit and hybrid response types",
+    "PKCE plain",
+    "pushed authorization requests and request objects",
+    "DPoP and mTLS sender-constrained tokens",
+    "UserInfo",
+    "RP-initiated logout",
+    "session cookies and silent SSO",
+    "dynamic client registration",
+    "SAML and WS-Federation",
+    "consent screens",
+    "multi-tenant common, organizations, and consumers authorities",
+    "Conditional Access and risk evaluation",
+    "Okta IDX and Sign-In Widget",
+    "factor enrollment and non-TOTP factor types",
+    "Okta administrative APIs"
+  ]
+}

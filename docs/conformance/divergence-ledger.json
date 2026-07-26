@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "title": "mockOS live-provider divergence ledger",
+  "status": "Seeded from source review; no live capture has run yet",
+  "lastReviewed": "2026-07-26",
+  "notes": [
+    "Every difference a live parity run finds must resolve to an entry here.",
+    "An unledgered difference is reported as a defect.",
+    "intentional=false means the difference is a known bug that is tracked but not yet fixed; it still reports as a defect.",
+    "field is a dotted path into the normalised observation. A trailing * matches any deeper path."
+  ],
+  "entries": [
+    {
+      "id": "D-01",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "requestBody.passCode*",
+      "intentional": true,
+      "reason": "The software TOTP factor accepts only the static synthetic passcode 000000. RFC 6238 time steps, drift, enrollment, and shared secrets are not implemented.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/authn/okta-authn.ts:8"
+    },
+    {
+      "id": "D-02",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseBody.access_token.__jwt.payload.acr",
+      "intentional": true,
+      "reason": "Tokens issued after the factor and session bridge keep acr urn:okta:loa:1fa:any. mockOS does not model MFA assurance elevation.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/okta.ts:234"
+    },
+    {
+      "id": "D-02b",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseBody.id_token.__jwt.payload.amr",
+      "intentional": true,
+      "reason": "The ID token always carries amr [pwd] regardless of the factor path taken.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/okta.ts:238"
+    },
+    {
+      "id": "D-03",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.id_token.__jwt.payload.tid",
+      "intentional": true,
+      "reason": "Tenant identifiers are derived deterministically from the environment seed so runs are reproducible. A real tenant id is assigned by the provider.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/determinism.ts:142"
+    },
+    {
+      "id": "D-04",
+      "provider": "entra",
+      "caseId": "entra-discovery",
+      "field": "responseBody.userinfo_endpoint",
+      "intentional": true,
+      "reason": "UserInfo is deliberately omitted from discovery until an executable route exists, rather than advertised and unimplemented.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "docs/known-limitations.md"
+    },
+    {
+      "id": "D-04b",
+      "provider": "okta",
+      "caseId": "okta-discovery",
+      "field": "responseBody.userinfo_endpoint",
+      "intentional": true,
+      "reason": "UserInfo is deliberately omitted from discovery until an executable route exists.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "docs/known-limitations.md"
+    },
+    {
+      "id": "D-07",
+      "provider": "entra",
+      "caseId": "entra-device-create",
+      "field": "responseBody.verification_uri_complete",
+      "intentional": true,
+      "reason": "The Entra device policy omits verification_uri_complete by design; Okta includes it.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:299"
+    },
+    {
+      "id": "D-15",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.id_token.__jwt.payload._claim_sources*",
+      "intentional": true,
+      "reason": "Group overage emits a claim source at 201 groups with a 1000-id fallback ceiling. Real Entra thresholds and endpoints differ.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:199"
+    },
+    {
+      "id": "D-19",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.error_description",
+      "intentional": true,
+      "reason": "Error descriptions, trace and correlation identifiers, and timestamp formatting are synthesised. The OAuth error code is the comparable field, not the prose.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/errors.ts:212"
+    },
+    {
+      "id": "D-19b",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseBody.errorSummary",
+      "intentional": true,
+      "reason": "Okta error summaries and errorId values are synthesised; errorCode is the comparable field.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/okta-types.ts"
+    },
+    {
+      "id": "D-26",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.access_token.__jwt.payload.token_use",
+      "intentional": false,
+      "reason": "mockOS emits a token_use claim on Entra tokens. Real Entra v2 tokens have no such claim. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:290"
+    },
+    {
+      "id": "D-27",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.access_token.__jwt.payload.aud",
+      "intentional": false,
+      "reason": "The Entra access token uses client_id as its audience and carries the full ID-token claim set. Real Entra scopes the audience to the resource API. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:261"
+    },
+    {
+      "id": "D-28",
+      "provider": "entra",
+      "caseId": "entra-discovery",
+      "field": "responseBody.subject_types_supported*",
+      "intentional": false,
+      "reason": "Discovery advertises pairwise subject types while sub equals oid equals the user id, which is public, not pairwise. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:165"
+    },
+    {
+      "id": "D-29",
+      "provider": "okta",
+      "caseId": "okta-discovery",
+      "field": "responseBody.response_modes_supported*",
+      "intentional": false,
+      "reason": "Discovery advertises query-only response modes while the HTTP adapter accepts and implements form_post. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/okta.ts:162"
+    },
+    {
+      "id": "D-30",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseBody.access_token.__jwt.payload.aud",
+      "intentional": false,
+      "reason": "The Okta access token uses client_id as its audience. A real custom authorization server uses its own audience, typically api://default. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/okta.ts:222"
+    },
+    {
+      "id": "D-31",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseBody.id_token.__jwt.payload.groups*",
+      "intentional": true,
+      "reason": "The Okta groups claim carries display names while Entra carries identifiers. Both are deliberate and provider-shaped.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/okta.ts:256"
+    },
+    {
+      "id": "D-34",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "status",
+      "intentional": false,
+      "reason": "The authorize endpoint requires openid in scope. Real Entra permits resource-only scopes, so a resource-only authorize request diverges. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/worker-kit/src/environment-do.ts:229"
+    },
+    {
+      "id": "D-35",
+      "provider": "entra",
+      "caseId": "entra-discovery",
+      "field": "responseBody.cloud_instance_name",
+      "intentional": true,
+      "reason": "Discovery constants cloud_instance_name and tenant_region_scope are fixed synthetic values.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts:195"
+    },
+    {
+      "id": "D-36",
+      "provider": "okta",
+      "caseId": "*",
+      "field": "responseHeaders.x-rate-limit-limit",
+      "intentional": true,
+      "reason": "Rate-limit headers are fixed synthetic constants rather than a real quota.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/okta-api.ts:413"
+    },
+    {
+      "id": "D-37",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseHeaders.location",
+      "intentional": true,
+      "reason": "Hosted login is mockOS-branded with no session cookie, so every authorize re-prompts. prompt, max_age, acr_values, and domain_hint are ignored.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/login.ts"
+    },
+    {
+      "id": "D-39",
+      "provider": "okta",
+      "caseId": "okta-authn-factor-verify",
+      "field": "responseBody.errorCode",
+      "intentional": false,
+      "reason": "A non-numeric passCode is rejected at the HTTP layer with E0000001 before the factor comparison, where real Okta returns E0000068. Not yet fixed.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/okta-authn.ts:213"
+    },
+    {
+      "id": "D-40",
+      "provider": "okta",
+      "caseId": "okta-revoke",
+      "field": "responseHeaders.content-type",
+      "intentional": true,
+      "reason": "Revocation returns 200 with a null body and no content-type.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/okta.ts:607"
+    },
+    {
+      "id": "D-41",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.id_token.__jwt.payload.ver",
+      "intentional": true,
+      "reason": "Entra emits the string \"2.0\" and Okta the number 1. Both are deliberate and provider-shaped; assert the exact type.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/providers/entra.ts"
+    },
+    {
+      "id": "D-43",
+      "provider": "entra",
+      "caseId": "entra-device-create",
+      "field": "responseBody.user_code",
+      "intentional": true,
+      "reason": "The device user code is eight characters from a custom alphabet, matching neither provider's real format.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/core/src/oauth/device-authorization.ts:110"
+    },
+    {
+      "id": "D-44",
+      "provider": "entra",
+      "caseId": "*",
+      "field": "responseBody.timestamp",
+      "intentional": true,
+      "reason": "The Entra error timestamp renders ISO 8601 with the T replaced by a space and the Z retained.",
+      "owner": "identity",
+      "openedAt": "2026-07-26",
+      "anchor": "packages/engine-http/src/errors.ts:212"
+    }
+  ]
+}
