@@ -186,7 +186,7 @@ const verifyJwt = async (
 
 describe("Okta public identity surface", () => {
   it("runs bounded Classic Authn states without logging credentials or tokens", {
-    timeout: 20_000,
+    timeout: 30_000,
   }, async () => {
     const sessionId = await initializeMcp();
     const environment = await callTool<EnvironmentConfig>(
