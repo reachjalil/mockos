@@ -1,17 +1,34 @@
-import { exports } from "cloudflare:workers";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
+import { type CloudflareEnv, createWorkerApp } from "../src/app";
 
 const PLATFORM_KEY = "mockos-integration-test-key";
 const ANTHROPIC_MOCK_CREDENTIAL = "synthetic-anthropic-provider-key";
 const ROTATED_ANTHROPIC_MOCK_CREDENTIAL = "rotated-anthropic-provider-key";
 const origin = "https://mockos.test";
-const worker = (exports as unknown as { default: Fetcher }).default;
+const app = createWorkerApp();
+const providerExecutionContexts: ExecutionContext[] = [];
 
-const routedFetch: typeof globalThis.fetch = async (input, init) =>
-  worker.fetch(new Request(input, init));
+const routedFetch: typeof globalThis.fetch = async (input, init) => {
+  const request = new Request(input, init);
+  const context = createExecutionContext();
+  const response = await app.fetch(request, env as unknown as CloudflareEnv, context);
+  if (new URL(request.url).pathname.includes("/llm-mock/")) {
+    providerExecutionContexts.push(context);
+  }
+  return response;
+};
+
+const waitForProviderBackgroundWork = async (): Promise<void> => {
+  await Promise.all(
+    providerExecutionContexts
+      .splice(0)
+      .map((context) => waitOnExecutionContext(context))
+  );
+};
 
 const connectManagement = async (): Promise<Client> => {
   const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
@@ -584,6 +601,7 @@ describe("public mock Anthropic Worker route", () => {
         ).data
       ).toHaveLength(4);
 
+      await waitForProviderBackgroundWork();
       const requestLog = await eventuallyRequestLog(
         management,
         {

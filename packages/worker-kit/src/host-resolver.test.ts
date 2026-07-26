@@ -337,6 +337,31 @@ describe("resolveEnvironmentRequest", () => {
     expect(forwarded.headers.has("x-mockos-private-future")).toBe(false);
   });
 
+  it("preserves streamed POST bodies for Node and Worker consumers", async () => {
+    const body = new URLSearchParams({
+      client_id: "public-device-client",
+      scope: "openid profile offline_access",
+    });
+    const request = new Request(
+      `https://mockos.example/e/${environmentId}/${tenantId}/oauth2/v2.0/devicecode`,
+      {
+        body,
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        method: "POST",
+      }
+    );
+    const resolution = resolveEnvironmentRequest(request, { hostingMode: "path" });
+    if (!resolution?.environmentId) throw new Error("Expected environment route.");
+
+    const forwarded = forwardEnvironmentRequest(request, {
+      ...resolution,
+      environmentId: resolution.environmentId,
+    });
+
+    expect(forwarded.method).toBe("POST");
+    expect(await forwarded.text()).toBe(body.toString());
+  });
+
   it("replaces caller-supplied mock MCP routing metadata", () => {
     const request = new Request(
       `https://mockos.example/e/${environmentId}/mcp-mock/recruiting-agent`,

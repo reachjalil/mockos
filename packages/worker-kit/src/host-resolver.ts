@@ -352,11 +352,13 @@ export const forwardEnvironmentRequest = (
   if (options.redactAuthorization) {
     headers.set("x-mockos-redact-authorization", "true");
   }
-  return new Request(url, {
+  const init: RequestInit & { duplex?: "half" } = {
     body: request.body,
     headers,
     method: request.method,
     redirect: request.redirect,
     signal: request.signal,
-  });
+  };
+  if (request.body) init.duplex = "half";
+  return new Request(url, init);
 };
