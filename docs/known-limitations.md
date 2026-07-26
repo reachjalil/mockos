@@ -280,21 +280,9 @@ but no current fixture is V or P.
   actual-network, H, V, and P are unqualified. See the
   [blueprint guide](./blueprints/salesforce-sobject-reads.md) and generated
   [catalog](./reference/mock-mcp-blueprints.v1.json).
-- Every core SQL migration declares `additive` or `breaking` compatibility, and
-  `applyMigrations` takes a bounded `applyThrough`/`tolerateThrough` pair so a bundle
-  can be a declared rollback target for a database a newer bundle already advanced.
-  Tolerance is honoured only while every intervening migration is declared additive,
-  and never above the newest migration the bundle can actually read. Core migrations
-  1-8 are additive, and `nonAdditiveStatements` derives that verdict from the
-  statements instead of trusting the declaration. This is D/I/S only and it does not
-  reach backwards: a bundle built before this contract still refuses a newer
-  database, so a schema-v5-aware runtime remains an unsafe rollback target after a
-  v6-v8 first touch. Persisting a minimum-reader floor in the database itself — which
-  would let any bundle judge compatibility without knowing future migrations — is not
-  implemented.
 - The partial F2 source has an MCP-only configuration plane and separate bounded
   OpenAI/Anthropic data planes; it is not a general mock LLM service. Four MCP operations own
-  strict definitions, schema-v8 persistence, mandatory changed-write revision CAS,
+  strict definitions, baseline schema persistence, mandatory changed-write revision CAS,
   canonical replay, atomic revision-bound delete, and write-only provider-key views.
   Environment routes source-qualify ordered model list/retrieve, OpenAI Chat
   Completions and Anthropic Messages as JSON or bounded SSE. OpenAI

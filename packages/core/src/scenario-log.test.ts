@@ -1,12 +1,12 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
-  SCIM_BEFORE_COMMIT_INJECTION_POINT,
-  SCIM_PATCH_PARSE_INJECTION_POINT,
   type AssertionSpec,
-  type RequestLogEntry,
-  type RequestLogLlmReservation,
   REQUEST_LOG_LLM_PENDING_DURATION_MS,
   REQUEST_LOG_LLM_PENDING_RESPONSE_STATUS,
+  type RequestLogEntry,
+  type RequestLogLlmReservation,
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
+  SCIM_PATCH_PARSE_INJECTION_POINT,
   scenarioSpecSchema,
 } from "@mockos/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -107,9 +107,9 @@ const scenarioService = (seed: string) => {
 };
 
 describe("scenario service", () => {
-  it("upgrades v2 scenario rows through later append-only migrations", () => {
+  it("backfills scenario counters from a row that stores only the spec", () => {
     const store = memoryStore();
-    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 2))).toBe(2);
+    expect(applyMigrations(store)).toBe(1);
     const legacy = scenarioSpecSchema.parse({
       id: "legacy",
       injectionPoint: "oauth.token",
@@ -127,8 +127,6 @@ describe("scenario service", () => {
       "2026-07-22T12:00:00.000Z"
     );
 
-    expect(applyMigrations(store)).toBe(8);
-    expect(getSchemaVersion(store)).toBe(8);
     const service = new ScenarioService({
       store,
       seed: "upgrade",

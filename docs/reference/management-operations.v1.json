@@ -15,7 +15,7 @@
           "revisionMismatch": "typed-409"
         },
         "interface": "MCP-only",
-        "persistence": "environment-schema-v8",
+        "persistence": "environment-baseline-schema",
         "putContract": {
           "expectedRevision": "required-null-create-or-positive-replace",
           "replacement": "full-definition",

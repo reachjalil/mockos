@@ -15,7 +15,7 @@ built-in server-definition presets. Provider,
 environment mock-MCP, and mock-LLM protocol surfaces are intentionally
 attacker-controllable.
 F2 adds provider-scoped mock-LLM credential verifiers, revisioned server definitions,
-schema-v8 environment storage, bounded OpenAI/Anthropic provider data planes, and
+baseline environment storage, bounded OpenAI/Anthropic provider data planes, and
 metadata-only provider lifecycle observations. Those data planes are
 attacker-controlled synthetic protocol surfaces, not management APIs.
 Management MCP and `/__mockos/v1/*` control operations cross a stronger authorization

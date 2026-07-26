@@ -7,7 +7,7 @@ This slice establishes both a provider-neutral seam for deterministic mock LLM
 responses and an MCP-first configuration substrate for environment-hosted servers.
 One normalized behavior result becomes one validated response plan and then
 provider-shaped OpenAI or Anthropic JSON/SSE frames. Strict server
-definitions, four MCP-only operations, environment-local schema-v8 persistence,
+definitions, four MCP-only operations, environment-local baseline schema persistence,
 mandatory revision compare-and-swap, and write-only provider credential views own
 configuration. Separate bounded OpenAI and Anthropic request adapters plus the shared
 environment runtime now serve model list/retrieve, OpenAI Chat Completions as JSON or
@@ -174,7 +174,7 @@ management agent
  four MCP-only definition tools
        │
        ▼
- schema-v8 environment repository
+ baseline environment repository
 ```
 
 The management branch is composed through the Environment Durable Object and persists

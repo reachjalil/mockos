@@ -878,7 +878,7 @@ if (
   catalog.future?.mockLlmApis?.managementDefinitions?.status !== "source-implemented" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.interface !== "MCP-only" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.persistence !==
-    "environment-schema-v8" ||
+    "environment-baseline-schema" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.strictCredentials !==
     "write-only-provider-scoped" ||
   catalog.future?.mockLlmApis?.managementDefinitions?.putContract?.expectedRevision !==
@@ -1526,9 +1526,8 @@ for (const required of [
   "secret-safe",
   "active platform management Access Key, including as a substring",
   "JSON keys or string values",
-  "schema v8",
-  "older v7 bundle",
-  "roll forward",
+  "baseline environment schema",
+  "newer than the baseline",
   "MCP-only",
   "OpenAI and Anthropic",
   "not a general OpenAI or Anthropic API",

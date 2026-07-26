@@ -13,7 +13,7 @@ implementation described in the
 [F1 implementation record](./f-series/f1-mcp-foundation.md). F1 hosted
 CI/merge/deployment remain open. A
 [partial F2 slice](./f-series/f2-llm-kernel.md) now has strict definitions, four
-MCP-only operations, schema-v8 persistence, and bounded OpenAI model/JSON-or-SSE Chat
+MCP-only operations, baseline schema persistence, and bounded OpenAI model/JSON-or-SSE Chat
 Completions plus Anthropic model/JSON-or-SSE Messages data planes that are
 source-qualified locally through official SDKs. Metadata-only request-log
 observation/query/assertion for successfully parsed/planned, response-preflighted
@@ -114,7 +114,7 @@ evidence boundary.
 Current-source note: the partial F2 slice freezes a neutral response-plan seam,
 behavior adapter, pure JSON/SSE-frame renderers, and official-SDK deserialization. It
 also source-implements strict server definitions, four MCP-only management
-operations, schema-v8 environment persistence, mandatory changed-write revision CAS,
+operations, baseline environment persistence, mandatory changed-write revision CAS,
 atomic revision-bound delete, and safe write-only provider-key views. Changed
 full-definition writes must resupply or rotate every enabled strict key; safe-view
 markers are not write shapes.

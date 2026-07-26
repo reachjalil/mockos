@@ -146,7 +146,7 @@ Rotation atomically promotes that successor, creates another successor, and conv
 previous active row into a metadata-only overlap: its private JWK is scrubbed to `{}` and
 it is encoded as legacy-visible `next` plus a non-null `retired_at`. `retiring` is only
 accepted while normalizing legacy rows; it is not a steady-state status. This lets the
-previous schema-v5 JWKS query keep publishing the overlap key without an unsafe migration.
+previous JWKS query keep publishing the overlap key without an unsafe migration.
 The ring is bounded to active, successor, overlap, and one retired metadata row.
 
 A second rotation is blocked for exactly 26 hours after the prior rotation. That is the

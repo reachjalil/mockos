@@ -34,7 +34,7 @@
 > Hosted CI/merge,
 > F1/F2 deployment, private Cloud consumption, the remaining F2 runtime, and all
 > experimental activation remain pending. F2 now adds four source-implemented,
-> MCP-only mock-LLM definition operations with environment-local schema-v8 persistence
+> MCP-only mock-LLM definition operations with environment-local baseline schema persistence
 > and write-only provider keys plus bounded OpenAI Chat Completions JSON/SSE and
 > Anthropic Messages/model JSON/SSE data planes. Package tests and local Worker
 > integrations through pinned official OpenAI 6.49.0 and Anthropic 0.115.0 SDKs qualify
@@ -201,7 +201,7 @@ private control plane, licensing, billing, or a hosted mockOS account.
   behavior-to-plan adaptation, pure OpenAI Chat Completions and Anthropic Messages
   JSON/SSE-frame renderers, pinned official-SDK consumption through injected
   in-process Fetch, strict server-definition contracts, four MCP-only management
-  operations, schema-v8 environment persistence, mandatory revision
+  operations, baseline environment persistence, mandatory revision
   compare-and-swap, safe credential views, and bounded OpenAI and Anthropic provider
   request adapters. Local Worker integrations configure through MCP and exercise
   official SDK model list/retrieve, JSON text/tool/error calls, bounded OpenAI and

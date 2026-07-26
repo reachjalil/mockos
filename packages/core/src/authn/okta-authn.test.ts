@@ -767,11 +767,11 @@ describe("Okta Classic Authn core", () => {
     );
   });
 
-  it("keeps expiry indexes version-neutral for schema-v5 rollback", async () => {
+  it("creates the operational expiry indexes outside CORE_MIGRATIONS", async () => {
     const { store } = await setup("authn-version-neutral-indexes");
     expect(
       store.get<{ user_version: number }>("PRAGMA user_version")?.user_version
-    ).toBe(8);
+    ).toBe(1);
     expect(
       store
         .all<{ name: string }>(

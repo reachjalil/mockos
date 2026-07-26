@@ -1,7 +1,7 @@
 import {
   type ApplicationListPage,
-  applicationListPageSchema,
   type ApplicationSummary,
+  applicationListPageSchema,
   applicationSummarySchema,
   type ManagementListQuery,
   managementListQuerySchema,
@@ -9,11 +9,11 @@ import {
 } from "@mockos/contracts";
 import { type Clock, type Rng, uuidFromRng } from "../determinism";
 import { hashSecret, randomId, verifySecret } from "../security";
+import type { SqlRow, SqlStore } from "../store";
 import {
   decodeManagementListCursor,
   encodeManagementListCursor,
 } from "../store/management-list-cursor";
-import type { SqlRow, SqlStore } from "../store";
 import { idFromUuid, parseJson } from "./shared";
 
 export type OAuthGrantType =

@@ -69,7 +69,7 @@ JSON or named-event SSE `/v1/messages`. The tools existed before those routes, s
 alone is not provider capability evidence; use authenticated OpenAI `GET /models` or
 Anthropic `GET /v1/models` as the non-mutating probe. Use
 [MCP-managed mock OpenAI and Anthropic](../mock-llm.md) for revision
-compare-and-swap, write-only provider keys, schema-v8 persistence, provider requests,
+compare-and-swap, write-only provider keys, baseline schema persistence, provider requests,
 metadata-only observation/query/assertion through the existing management MCP tools,
 and unsupported behavior.
 

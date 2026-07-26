@@ -37,7 +37,7 @@ management MCP /mcp
                      │
                      ▼
           environment-local definition
-          schema v8 + monotonic revision
+          baseline schema + monotonic revision
 
 application or provider SDK
           │
@@ -829,7 +829,7 @@ tamper-evident, billing, security-audit, or compliance record.
 | Evidence level | Status for this bounded observation slice |
 | --- | --- |
 | Designed | Yes: strict metadata, lifecycle, privacy, query, assertion, and append-order contracts are explicit. |
-| Implemented | Yes: schema v8, provider hooks, Environment Durable Object reservation/finalization, and existing MCP query/assertion projections are wired. |
+| Implemented | Yes: the baseline schema, provider hooks, Environment Durable Object reservation/finalization, and existing MCP query/assertion projections are wired. |
 | Source-tested | Yes: contracts, v7→v8 migration, append-once terminal persistence, exact matchers, fail-open behavior, terminal stream accounting, and privacy are covered. |
 | Integration-tested | Yes: mounted local Worker tests drive official provider SDK calls, then query and assert observations through the official MCP client. |
 | SDK/client-qualified | Bounded: the pinned OpenAI/Anthropic SDK claim applies to provider behavior. Observation query/assertion itself is qualified through the mounted Worker and MCP-client tests, not a separate provider-SDK contract. |
@@ -949,17 +949,15 @@ fields. Unknown top-level arguments collapse to one generic, secret-safe validat
 issue so neither their name nor value is echoed. Nested definition objects are strict.
 Never use a real credential merely because mockOS tests non-reflection.
 
-Opening this runtime applies append-only environment **schema v8**. Schema v7 already
-owns canonical definition rows and the monotonic LLM revision allocator; v8 adds
-nullable structured LLM columns to the existing request log plus an append-once
-terminal child table keyed by request ID. Reads join that terminal state back into
-one logical row. No prompt/output table, conversation, response, or evaluator-state
-table is added.
+Opening this runtime applies the **baseline environment schema**. It owns canonical
+definition rows, the monotonic LLM revision allocator, structured LLM columns on the
+request log, and an append-once terminal child table keyed by request ID. Reads join
+that terminal state back into one logical row. No prompt/output table, conversation,
+response, or evaluator-state table is added.
 
-A v7 store upgrades without rewriting existing request-log rows. An older v7 bundle
-refuses a store already touched by schema v8. Recovery must roll forward to a v8-aware
-build or use a separately reviewed migration/export bridge; a source rollback is not
-a SQLite downgrade.
+mockOS has no released version and no database anyone depends on, so the schema is a
+single baseline with no upgrade path to replay. A runtime refuses any store whose
+recorded version is newer than the baseline it knows.
 
 ## Verify and clean up
 

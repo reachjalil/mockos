@@ -11643,8 +11643,8 @@ invented HTTP path.
   Unknown top-level put arguments fail with a secret-safe generic issue, and any
   definition JSON key or string value containing the platform Access Key as a
   substring is rejected at both Worker ingress and the Environment Durable Object.
-- Schema v8 upgrades v7 stores; an older v7 bundle explicitly refuses a store
-  already touched by the newer schema v8, so rollback requires forward recovery.
+- The baseline environment schema is applied on open. A runtime refuses any
+  store whose recorded version is newer than the baseline it knows.
 - MCP is the only current configuration interface. Applications under test call
   the separate provider-shaped environment data plane; those provider operations
   never enter the five-route management OpenAPI projection.

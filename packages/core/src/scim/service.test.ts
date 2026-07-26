@@ -1,9 +1,9 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
+  SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_CORE_GROUP_SCHEMA,
   SCIM_CORE_USER_SCHEMA,
   SCIM_ENTERPRISE_USER_SCHEMA,
-  SCIM_BEFORE_COMMIT_INJECTION_POINT,
   SCIM_PATCH_OP_SCHEMA,
 } from "@mockos/contracts";
 import { afterEach, describe, expect, it } from "vitest";

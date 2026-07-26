@@ -260,7 +260,7 @@ Classic Authn state reads slide the state capability's expiry to five minutes fr
 each valid read; a one-time session capability retains its fixed five-minute issuance
 expiry. Each User is capped at 32 retained rows per kind and each state/session table
 at 10,000 retained rows, with oldest-expiring eviction and an issuance-time GC pass bounded
-to 256 expired rows per table. Version-neutral operational indexes preserve schema-v5
+to 256 expired rows per table. Operational indexes live outside CORE_MIGRATIONS and preserve baseline
 rollback compatibility. Browser CORS admits same-origin `POST` with only `accept` and
 `content-type`, never enables credentials, and returns 403 cross-origin. Responses use
 the singular `_embedded.factor` property and omit `passwordChanged`. Deactivating
@@ -344,7 +344,7 @@ or a shallow JSON-object mutation. `rotate_signing_key` and
 `token_clock_skew` are restricted to `token.before_sign`; skew is bounded to plus or
 minus 86,400 seconds and changes only JWT temporal claims, not the environment clock or
 stored grant timestamps. Rotation promotes a pre-published successor and stores the
-previous public key as a schema-v5-compatible, metadata-only overlap row after scrubbing
+previous public key as a metadata-only overlap row after scrubbing
 its private JWK. A subsequent rotation is gated for exactly 26 hours, the maximum
 rollback/verification-overlap window qualified for the built-in Worker OIDC and MCP
 `mint_token` paths with their fixed one-hour lifetime and bounded skew. Public core

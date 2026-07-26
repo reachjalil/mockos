@@ -11,11 +11,9 @@ import {
   FixedClock,
   generateSigningKey,
   getSchemaVersion,
-  nonAdditiveStatements,
   pkceS256,
   RequestLogService,
   SeededRng,
-  type SqlMigration,
   type SqlRow,
   type SqlRunResult,
   type SqlStore,
@@ -87,420 +85,103 @@ afterEach(() => {
 });
 
 describe("core substrate", () => {
-  it("applies ordered PRAGMA user_version migrations idempotently", () => {
+  it("applies the baseline schema idempotently", () => {
     const store = memoryStore();
-    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8,
-    ]);
+    expect(CORE_MIGRATIONS.map(({ version }) => version)).toEqual([1]);
     expect(JSON.stringify(CORE_MIGRATIONS)).not.toMatch(/issuer/i);
-    expect(applyMigrations(store)).toBe(8);
-    expect(getSchemaVersion(store)).toBe(8);
-    expect(applyMigrations(store)).toBe(8);
-    expect(
-      store.get<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_codes'"
-      )?.name
-    ).toBe("oauth_codes");
+    expect(applyMigrations(store)).toBe(1);
+    expect(getSchemaVersion(store)).toBe(1);
+    expect(applyMigrations(store)).toBe(1);
+
     expect(
       store
         .all<{ name: string }>(
           `SELECT name FROM sqlite_master
-           WHERE type = 'table' AND name LIKE 'provisioning_%'
+           WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
            ORDER BY name`
         )
         .map(({ name }) => name)
     ).toEqual([
+      "applications",
+      "authn_transactions",
+      "device_codes",
+      "group_members",
+      "groups",
+      "meta",
+      "mock_llm_revision_allocator",
+      "mock_llm_servers",
+      "mock_mcp_revision_allocator",
+      "mock_mcp_servers",
+      "mock_mcp_sessions",
+      "mock_state",
+      "oauth_access_tokens",
+      "oauth_codes",
       "provisioning_run_targets",
       "provisioning_runs",
       "provisioning_steps",
       "provisioning_targets",
       "provisioning_watermarks",
+      "refresh_tokens",
+      "request_log",
+      "request_log_llm_terminal",
+      "role_assignments",
+      "scenarios",
+      "signing_keys",
+      "users",
+      "web_sessions",
     ]);
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'index' AND name = 'provisioning_run_targets_ref_idx'`
-      )?.name
-    ).toBe("provisioning_run_targets_ref_idx");
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'index' AND name = 'provisioning_runs_active_target_idx'`
-      )?.name
-    ).toBe("provisioning_runs_active_target_idx");
-    expect(
-      store.get<{ count: number; last_revision: number }>(
-        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
-         FROM mock_mcp_revision_allocator`
-      )
-    ).toEqual({ count: 1, last_revision: 0 });
-    expect(
-      store.get<{ count: number; last_revision: number }>(
-        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
-         FROM mock_llm_revision_allocator`
-      )
-    ).toEqual({ count: 1, last_revision: 0 });
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'table' AND name = 'request_log_llm_terminal'`
-      )
-    ).toEqual({ name: "request_log_llm_terminal" });
-  });
-
-  it("makes the deployed v5 bundle refuse a database already touched by schema v8", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store)).toBe(8);
-
-    // This is the operational rollback case: the accepted deployed bundle is
-    // schema-v5-aware, so redeploying it after first touch is not a recovery.
-    expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 5))).toThrow(
-      "Database schema version 8 is newer than supported version 5."
-    );
-    expect(getSchemaVersion(store)).toBe(8);
-  });
-
-  it("makes an older v6 bundle refuse a database already touched by schema v8", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store)).toBe(8);
-
-    expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 6))).toThrow(
-      "Database schema version 8 is newer than supported version 6."
-    );
-    expect(getSchemaVersion(store)).toBe(8);
-  });
-
-  it("makes the immediately previous v7 bundle refuse schema v8", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store)).toBe(8);
-
-    expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 7))).toThrow(
-      "Database schema version 8 is newer than supported version 7."
-    );
-    expect(getSchemaVersion(store)).toBe(8);
-  });
-
-  it("declares every core migration additive only when its statements are", () => {
-    for (const migration of CORE_MIGRATIONS) {
-      if (migration.compatibility !== "additive") continue;
-      expect({
-        version: migration.version,
-        offending: nonAdditiveStatements(migration),
-      }).toEqual({ version: migration.version, offending: [] });
+    for (const table of [
+      "mock_mcp_revision_allocator",
+      "mock_llm_revision_allocator",
+    ]) {
+      expect(
+        store.get<{ count: number; last_revision: number }>(
+          `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
+           FROM ${table}`
+        )
+      ).toEqual({ count: 1, last_revision: 0 });
     }
   });
 
-  it("reports the statements that contradict an additive declaration", () => {
-    expect(
-      nonAdditiveStatements({
-        version: 1,
-        compatibility: "additive",
-        statements: [
-          "CREATE TABLE IF NOT EXISTS kept (id TEXT PRIMARY KEY)",
-          "ALTER TABLE kept ADD COLUMN safe TEXT",
-          "ALTER TABLE kept ADD COLUMN defaulted TEXT NOT NULL DEFAULT ''",
-          "ALTER TABLE kept ADD COLUMN unfillable TEXT NOT NULL",
-          "DROP TABLE removed",
-        ],
-      })
-    ).toEqual([
-      "ALTER TABLE kept ADD COLUMN unfillable TEXT NOT NULL",
-      "DROP TABLE removed",
-    ]);
+  it("refuses a database newer than the supported baseline", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store)).toBe(1);
+    store.run("PRAGMA user_version = 2");
+
+    expect(() => applyMigrations(store)).toThrow(
+      "Database schema version 2 is newer than supported version 1."
+    );
+    expect(getSchemaVersion(store)).toBe(2);
   });
 
-  it("lets a bounded-tolerance bundle open a database a newer bundle advanced", () => {
+  it("allows one active provisioning run per application target", () => {
     const store = memoryStore();
-    expect(applyMigrations(store)).toBe(8);
-
-    // The rollback target writes through v5 but declares it can open v8.
-    expect(
-      applyMigrations(store, CORE_MIGRATIONS, {
-        applyThrough: 5,
-        tolerateThrough: 8,
-      })
-    ).toBe(8);
-    expect(getSchemaVersion(store)).toBe(8);
-
-    // The additive claim has to hold operationally, not just on paper: a write
-    // path that names only pre-v6 columns must still round-trip on v8 storage.
-    store.run(
-      `INSERT INTO request_log (
-        id, timestamp, source, provider, method, path, request_headers,
-        request_body, response_status, response_headers, response_body,
-        duration_ms, correlation_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      "pre-v6-write",
-      "2026-07-26T12:00:00.000Z",
-      "inbound",
-      "okta",
-      "GET",
-      "/api/v1/users",
-      "{}",
-      null,
-      200,
-      "{}",
-      null,
-      7,
-      "pre-v6-correlation"
-    );
-    expect(
-      store.get<{ id: string; protocol: string | null; llm_model: string | null }>(
-        "SELECT id, protocol, llm_model FROM request_log WHERE id = ?",
-        "pre-v6-write"
-      )
-    ).toEqual({ id: "pre-v6-write", protocol: null, llm_model: null });
-  });
-
-  it("still stops a bounded-tolerance bundle at its own write version", () => {
-    const store = memoryStore();
-    expect(
-      applyMigrations(store, CORE_MIGRATIONS, {
-        applyThrough: 5,
-        tolerateThrough: 8,
-      })
-    ).toBe(5);
-    expect(getSchemaVersion(store)).toBe(5);
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'table' AND name = 'mock_mcp_servers'`
-      )
-    ).toBeUndefined();
-  });
-
-  it("refuses tolerance across a migration declared breaking", () => {
-    const store = memoryStore();
-    const custom: readonly SqlMigration[] = [
-      {
-        version: 1,
-        statements: ["CREATE TABLE t (id TEXT PRIMARY KEY)"],
-        compatibility: "additive",
-      },
-      {
-        version: 2,
-        statements: ["ALTER TABLE t RENAME TO renamed"],
-        compatibility: "breaking",
-      },
-    ];
-    expect(applyMigrations(store, custom)).toBe(2);
-    expect(() =>
-      applyMigrations(store, custom, { applyThrough: 1, tolerateThrough: 2 })
-    ).toThrow(
-      "Database schema version 2 applied breaking migration 2; version 1 cannot open it."
-    );
-  });
-
-  it("rejects tolerance bounds it cannot justify", () => {
-    const store = memoryStore();
-    expect(() =>
-      applyMigrations(store, CORE_MIGRATIONS, { tolerateThrough: 9 })
-    ).toThrow("Cannot tolerate version 9; the newest declared migration is 8.");
-    expect(() =>
-      applyMigrations(store, CORE_MIGRATIONS, {
-        applyThrough: 5,
-        tolerateThrough: 4,
-      })
-    ).toThrow("Cannot tolerate version 4 below the applied version 5.");
-    expect(() => applyMigrations(store, CORE_MIGRATIONS, { applyThrough: 9 })).toThrow(
-      "Cannot apply through version 9; the newest declared migration is 8."
-    );
-    expect(getSchemaVersion(store)).toBe(0);
-  });
-
-  it("keeps refusing a newer database when tolerance is not requested", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store)).toBe(8);
-    expect(() => applyMigrations(store, CORE_MIGRATIONS, { applyThrough: 5 })).toThrow(
-      "Database schema version 8 is newer than supported version 5."
-    );
-    expect(getSchemaVersion(store)).toBe(8);
-  });
-
-  it("upgrades a v6 database with isolated mock LLM persistence", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 6))).toBe(6);
-    store.run(
-      `INSERT INTO mock_mcp_servers (
-        slug, revision, spec_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?)`,
-      "existing",
-      4,
-      "{}",
-      "2026-07-25T12:00:00.000Z",
-      "2026-07-25T12:00:00.000Z"
-    );
-    store.run(
-      `UPDATE mock_mcp_revision_allocator
-       SET last_revision = 4
-       WHERE singleton = 1`
-    );
-
-    expect(applyMigrations(store)).toBe(8);
-    expect(
-      store.get<{ revision: number }>(
-        "SELECT revision FROM mock_mcp_servers WHERE slug = ?",
-        "existing"
-      )
-    ).toEqual({ revision: 4 });
-    expect(
-      store.get<{ last_revision: number }>(
-        "SELECT last_revision FROM mock_mcp_revision_allocator WHERE singleton = 1"
-      )
-    ).toEqual({ last_revision: 4 });
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'table' AND name = 'mock_llm_servers'`
-      )
-    ).toEqual({ name: "mock_llm_servers" });
-    expect(
-      store.get<{ name: string }>(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'index' AND name = 'mock_llm_servers_updated_idx'`
-      )
-    ).toEqual({ name: "mock_llm_servers_updated_idx" });
-    expect(
-      store.get<{ count: number; last_revision: number }>(
-        `SELECT COUNT(*) AS count, MAX(last_revision) AS last_revision
-         FROM mock_llm_revision_allocator`
-      )
-    ).toEqual({ count: 1, last_revision: 0 });
-  });
-
-  it("upgrades v7 request-log rows into the structured LLM observation schema", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 7))).toBe(7);
-    store.run(
-      `INSERT INTO request_log (
-        id, timestamp, source, provider, method, path, request_headers,
-        request_body, response_status, response_headers, response_body,
-        duration_ms, correlation_id, protocol, mcp_method, mcp_tool,
-        mcp_arguments_json, mcp_error_code, mcp_tool_is_error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      "legacy-request",
-      "2026-07-25T12:00:00.000Z",
-      "inbound",
-      "okta",
-      "GET",
-      "/api/v1/users",
-      "{}",
-      null,
-      200,
-      "{}",
-      null,
-      4,
-      "legacy-correlation",
-      "http",
-      null,
-      null,
-      null,
-      null,
-      null
-    );
-
-    expect(applyMigrations(store)).toBe(8);
-    expect(getSchemaVersion(store)).toBe(8);
-    const service = new RequestLogService({ store, limit: 10 });
-    expect(service.query({ limit: 10 }).entries).toEqual([
-      {
-        id: "legacy-request",
-        timestamp: "2026-07-25T12:00:00.000Z",
-        source: "inbound",
-        provider: "okta",
-        protocol: "http",
-        method: "GET",
-        path: "/api/v1/users",
-        requestHeaders: {},
-        requestBody: null,
-        responseStatus: 200,
-        responseHeaders: {},
-        responseBody: null,
-        durationMs: 4,
-        correlationId: "legacy-correlation",
-      },
-    ]);
-  });
-
-  it("upgrades a v4 database to provisioning persistence schema without rewriting runs", () => {
-    const store = memoryStore();
-    expect(applyMigrations(store, CORE_MIGRATIONS.slice(0, 4))).toBe(4);
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, mode, status, summary_json, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-      "run_existing",
-      "app_existing",
-      "incremental",
-      "queued",
-      null,
-      "2026-07-22T12:00:00.000Z"
-    );
-
-    expect(applyMigrations(store)).toBe(8);
-    expect(
-      store.get<{ status: string; target_ref: string | null }>(
-        "SELECT status, target_ref FROM provisioning_runs WHERE id = ?",
-        "run_existing"
-      )
-    ).toEqual({ status: "queued", target_ref: null });
-    store.run(
-      `INSERT INTO provisioning_watermarks (
-        application_id, target_ref, watermark_json, updated_at
-      ) VALUES (?, ?, ?, ?)`,
-      "app_existing",
-      "target-app",
-      '{"users":[],"groups":[]}',
-      "2026-07-22T12:01:00.000Z"
-    );
-    expect(
-      store.get<{ target_ref: string }>(
-        `SELECT target_ref FROM provisioning_watermarks
-         WHERE application_id = ? AND target_ref = ?`,
-        "app_existing",
-        "target-app"
-      )
-    ).toEqual({ target_ref: "target-app" });
-
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, target_ref, mode, status, summary_json,
-        created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
-      "run_active",
-      "app_locked",
-      "target-locked",
-      "incremental",
-      "queued",
-      "2026-07-22T12:02:00.000Z"
-    );
-    expect(() =>
+    applyMigrations(store);
+    const insertRun = (
+      id: string,
+      targetRef: string | null,
+      status: string,
+      completedAt: string | null
+    ) =>
       store.run(
         `INSERT INTO provisioning_runs (
           id, application_id, target_ref, mode, status, summary_json,
           created_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
-        "run_conflict",
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
+        id,
         "app_locked",
-        "target-locked",
+        targetRef,
         "incremental",
-        "running",
-        "2026-07-22T12:03:00.000Z"
-      )
-    ).toThrow();
-    store.run(
-      `INSERT INTO provisioning_runs (
-        id, application_id, target_ref, mode, status, summary_json,
-        created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
-      "run_terminal",
-      "app_locked",
-      "target-locked",
-      "incremental",
-      "succeeded",
-      "2026-07-22T11:00:00.000Z",
-      "2026-07-22T11:01:00.000Z"
-    );
+        status,
+        "2026-07-22T12:00:00.000Z",
+        completedAt
+      );
+
+    insertRun("run_active", "target-locked", "queued", null);
+    expect(() => insertRun("run_conflict", "target-locked", "running", null)).toThrow();
+    // A terminal run releases the target, and a null target is never locked.
+    insertRun("run_terminal", "target-locked", "succeeded", "2026-07-22T13:00:00.000Z");
+    insertRun("run_untargeted", null, "queued", null);
   });
 
   it("keeps deterministic identifiers stable and seed-specific", () => {

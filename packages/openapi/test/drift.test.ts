@@ -444,7 +444,7 @@ describe("management OpenAPI generation", () => {
           "get_mock_llm_server",
           "delete_mock_llm_server",
         ],
-        persistence: "environment-schema-v8",
+        persistence: "environment-baseline-schema",
         strictCredentials: "write-only-provider-scoped",
         putContract: {
           expectedRevision: "required-null-create-or-positive-replace",

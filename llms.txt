@@ -60,7 +60,7 @@
   provider network or REST call, claims no provider output-wire parity, and is not
   the F5 portable blueprint/export/import/gallery system.
 - F2 mock LLM definitions: four MCP-only operations are source-implemented with
-  schema-v8 environment persistence and write-only provider Mock Credentials.
+  baseline environment persistence and write-only provider Mock Credentials.
 - F2 mock LLM provider data plane: bounded OpenAI Chat Completions and Anthropic
   Messages/model subsets, including SSE and metadata-only request-log
   observation/query/assert/sequence support, are source-qualified locally;

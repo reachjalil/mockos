@@ -167,7 +167,7 @@ and deployed F1 acceptance remain open. V is not applicable to the generic synth
 runtime, while the provider-derived preset's live-provider V remains unqualified. The
 F2 source now combines a neutral response plan, behavior adapter, pure
 OpenAI/Anthropic rendering, and in-process official-SDK deserialization with a strict
-server-definition contract, four MCP-only operations, schema-v8 environment
+server-definition contract, four MCP-only operations, baseline environment
 persistence, mandatory revision compare-and-swap, and write-only provider Mock
 Credentials. It now source-qualifies bounded provider routes for ordered model
 list/retrieve plus OpenAI Chat Completions and Anthropic Messages as JSON or timed
