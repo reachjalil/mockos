@@ -11,9 +11,11 @@ import {
   FixedClock,
   generateSigningKey,
   getSchemaVersion,
+  nonAdditiveStatements,
   pkceS256,
   RequestLogService,
   SeededRng,
+  type SqlMigration,
   type SqlRow,
   type SqlRunResult,
   type SqlStore,
@@ -146,6 +148,18 @@ describe("core substrate", () => {
     ).toEqual({ name: "request_log_llm_terminal" });
   });
 
+  it("makes the deployed v5 bundle refuse a database already touched by schema v8", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store)).toBe(8);
+
+    // This is the operational rollback case: the accepted deployed bundle is
+    // schema-v5-aware, so redeploying it after first touch is not a recovery.
+    expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 5))).toThrow(
+      "Database schema version 8 is newer than supported version 5."
+    );
+    expect(getSchemaVersion(store)).toBe(8);
+  });
+
   it("makes an older v6 bundle refuse a database already touched by schema v8", () => {
     const store = memoryStore();
     expect(applyMigrations(store)).toBe(8);
@@ -162,6 +176,143 @@ describe("core substrate", () => {
 
     expect(() => applyMigrations(store, CORE_MIGRATIONS.slice(0, 7))).toThrow(
       "Database schema version 8 is newer than supported version 7."
+    );
+    expect(getSchemaVersion(store)).toBe(8);
+  });
+
+  it("declares every core migration additive only when its statements are", () => {
+    for (const migration of CORE_MIGRATIONS) {
+      if (migration.compatibility !== "additive") continue;
+      expect({
+        version: migration.version,
+        offending: nonAdditiveStatements(migration),
+      }).toEqual({ version: migration.version, offending: [] });
+    }
+  });
+
+  it("reports the statements that contradict an additive declaration", () => {
+    expect(
+      nonAdditiveStatements({
+        version: 1,
+        compatibility: "additive",
+        statements: [
+          "CREATE TABLE IF NOT EXISTS kept (id TEXT PRIMARY KEY)",
+          "ALTER TABLE kept ADD COLUMN safe TEXT",
+          "ALTER TABLE kept ADD COLUMN defaulted TEXT NOT NULL DEFAULT ''",
+          "ALTER TABLE kept ADD COLUMN unfillable TEXT NOT NULL",
+          "DROP TABLE removed",
+        ],
+      })
+    ).toEqual([
+      "ALTER TABLE kept ADD COLUMN unfillable TEXT NOT NULL",
+      "DROP TABLE removed",
+    ]);
+  });
+
+  it("lets a bounded-tolerance bundle open a database a newer bundle advanced", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store)).toBe(8);
+
+    // The rollback target writes through v5 but declares it can open v8.
+    expect(
+      applyMigrations(store, CORE_MIGRATIONS, {
+        applyThrough: 5,
+        tolerateThrough: 8,
+      })
+    ).toBe(8);
+    expect(getSchemaVersion(store)).toBe(8);
+
+    // The additive claim has to hold operationally, not just on paper: a write
+    // path that names only pre-v6 columns must still round-trip on v8 storage.
+    store.run(
+      `INSERT INTO request_log (
+        id, timestamp, source, provider, method, path, request_headers,
+        request_body, response_status, response_headers, response_body,
+        duration_ms, correlation_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      "pre-v6-write",
+      "2026-07-26T12:00:00.000Z",
+      "inbound",
+      "okta",
+      "GET",
+      "/api/v1/users",
+      "{}",
+      null,
+      200,
+      "{}",
+      null,
+      7,
+      "pre-v6-correlation"
+    );
+    expect(
+      store.get<{ id: string; protocol: string | null; llm_model: string | null }>(
+        "SELECT id, protocol, llm_model FROM request_log WHERE id = ?",
+        "pre-v6-write"
+      )
+    ).toEqual({ id: "pre-v6-write", protocol: null, llm_model: null });
+  });
+
+  it("still stops a bounded-tolerance bundle at its own write version", () => {
+    const store = memoryStore();
+    expect(
+      applyMigrations(store, CORE_MIGRATIONS, {
+        applyThrough: 5,
+        tolerateThrough: 8,
+      })
+    ).toBe(5);
+    expect(getSchemaVersion(store)).toBe(5);
+    expect(
+      store.get<{ name: string }>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'table' AND name = 'mock_mcp_servers'`
+      )
+    ).toBeUndefined();
+  });
+
+  it("refuses tolerance across a migration declared breaking", () => {
+    const store = memoryStore();
+    const custom: readonly SqlMigration[] = [
+      {
+        version: 1,
+        statements: ["CREATE TABLE t (id TEXT PRIMARY KEY)"],
+        compatibility: "additive",
+      },
+      {
+        version: 2,
+        statements: ["ALTER TABLE t RENAME TO renamed"],
+        compatibility: "breaking",
+      },
+    ];
+    expect(applyMigrations(store, custom)).toBe(2);
+    expect(() =>
+      applyMigrations(store, custom, { applyThrough: 1, tolerateThrough: 2 })
+    ).toThrow(
+      "Database schema version 2 applied breaking migration 2; version 1 cannot open it."
+    );
+  });
+
+  it("rejects tolerance bounds it cannot justify", () => {
+    const store = memoryStore();
+    expect(() =>
+      applyMigrations(store, CORE_MIGRATIONS, { tolerateThrough: 9 })
+    ).toThrow("Cannot tolerate version 9; the newest declared migration is 8.");
+    expect(() =>
+      applyMigrations(store, CORE_MIGRATIONS, {
+        applyThrough: 5,
+        tolerateThrough: 4,
+      })
+    ).toThrow("Cannot tolerate version 4 below the applied version 5.");
+    expect(() => applyMigrations(store, CORE_MIGRATIONS, { applyThrough: 9 })).toThrow(
+      "Cannot apply through version 9; the newest declared migration is 8."
+    );
+    expect(getSchemaVersion(store)).toBe(0);
+  });
+
+  it("keeps refusing a newer database when tolerance is not requested", () => {
+    const store = memoryStore();
+    expect(applyMigrations(store)).toBe(8);
+    expect(() => applyMigrations(store, CORE_MIGRATIONS, { applyThrough: 5 })).toThrow(
+      "Database schema version 8 is newer than supported version 5."
     );
     expect(getSchemaVersion(store)).toBe(8);
   });

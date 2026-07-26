@@ -39,7 +39,12 @@ import {
 } from "./providers";
 import { type ScenarioDecision, ScenarioService } from "./scenario";
 import { randomId } from "./security";
-import { applyMigrations, type SqlRow, type SqlStore } from "./store";
+import {
+  applyMigrations,
+  type ApplyMigrationsOptions,
+  type SqlRow,
+  type SqlStore,
+} from "./store";
 
 export interface EngineConfig {
   readonly provider: ProviderId;
@@ -50,6 +55,11 @@ export interface EngineConfig {
   readonly createdAt?: string;
   readonly idleTtlHours?: number;
   readonly requestLogLimit?: number;
+  /**
+   * Bounded schema tolerance for a bundle that must open a database another
+   * bundle already advanced. Omit it to keep the strict refusal.
+   */
+  readonly schema?: ApplyMigrationsOptions;
 }
 
 export interface EngineDependencies {
@@ -183,7 +193,7 @@ export class Engine {
   }
 
   async #initialize(): Promise<void> {
-    applyMigrations(this.#store);
+    applyMigrations(this.#store, undefined, this.config.schema);
     this.authn.initializeStorage();
     this.#bindMetadata("provider", this.providerId);
     this.#bindMetadata("tenant_id", this.tenantId);

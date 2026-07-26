@@ -1,8 +1,25 @@
 import type { SqlRow, SqlStore } from "./sql-store";
 
+/**
+ * Declares whether a runtime that predates a migration may still open a
+ * database the migration has already been applied to.
+ *
+ * - `additive`: the migration only creates tables, indexes, views, or triggers,
+ *   adds columns that are nullable or carry a DEFAULT, and backfills data. An
+ *   older runtime keeps reading and writing correctly because every statement it
+ *   emits names its own columns and the new ones fill themselves in.
+ * - `breaking`: the migration drops, renames, retypes, or tightens existing
+ *   state. Only a runtime that knows the version may open the database.
+ *
+ * Declare this from the statements, never from the release it shipped in. A
+ * mislabelled `additive` migration silently authorizes an incompatible rollback.
+ */
+export type SqlMigrationCompatibility = "additive" | "breaking";
+
 export interface SqlMigration {
   readonly version: number;
   readonly statements: readonly string[];
+  readonly compatibility: SqlMigrationCompatibility;
 }
 
 const migrationV1 = [
@@ -399,17 +416,43 @@ const migrationV8 = [
 ] as const;
 
 export const CORE_MIGRATIONS: readonly SqlMigration[] = [
-  { version: 1, statements: migrationV1 },
-  { version: 2, statements: migrationV2 },
-  { version: 3, statements: migrationV3 },
-  { version: 4, statements: migrationV4 },
-  { version: 5, statements: migrationV5 },
-  { version: 6, statements: migrationV6 },
-  { version: 7, statements: migrationV7 },
-  { version: 8, statements: migrationV8 },
+  { version: 1, statements: migrationV1, compatibility: "additive" },
+  { version: 2, statements: migrationV2, compatibility: "additive" },
+  { version: 3, statements: migrationV3, compatibility: "additive" },
+  { version: 4, statements: migrationV4, compatibility: "additive" },
+  { version: 5, statements: migrationV5, compatibility: "additive" },
+  { version: 6, statements: migrationV6, compatibility: "additive" },
+  { version: 7, statements: migrationV7, compatibility: "additive" },
+  { version: 8, statements: migrationV8, compatibility: "additive" },
 ];
 
 type UserVersionRow = SqlRow & { user_version: number };
+
+const ADDITIVE_STATEMENT = [
+  /^CREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|VIEW|TRIGGER)\b/i,
+  /^INSERT\s+/i,
+  /^UPDATE\s+/i,
+] as const;
+
+const ADD_COLUMN = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN\s+(.+)$/i;
+
+const collapseWhitespace = (statement: string) =>
+  statement.replaceAll(/\s+/g, " ").trim();
+
+/**
+ * Returns the statements that contradict an `additive` declaration.
+ *
+ * A column an older runtime never names must fill itself in, so `NOT NULL`
+ * without `DEFAULT` is breaking even though it is syntactically an addition.
+ */
+export const nonAdditiveStatements = (migration: SqlMigration): readonly string[] =>
+  migration.statements.map(collapseWhitespace).filter((statement) => {
+    const addedColumn = ADD_COLUMN.exec(statement)?.[1];
+    if (addedColumn !== undefined) {
+      return /\bNOT\s+NULL\b/i.test(addedColumn) && !/\bDEFAULT\b/i.test(addedColumn);
+    }
+    return !ADDITIVE_STATEMENT.some((pattern) => pattern.test(statement));
+  });
 
 const assertMigrationOrder = (migrations: readonly SqlMigration[]) => {
   let previous = 0;
@@ -427,23 +470,95 @@ const assertMigrationOrder = (migrations: readonly SqlMigration[]) => {
 export const getSchemaVersion = (store: SqlStore): number =>
   Number(store.get<UserVersionRow>("PRAGMA user_version")?.user_version ?? 0);
 
-/** Applies every pending migration atomically, one version at a time. */
+export type ApplyMigrationsOptions = {
+  /**
+   * Highest version this runtime will apply and write. Defaults to the newest
+   * supplied migration. Lower it to run a bundle whose write paths deliberately
+   * stay behind the newest schema.
+   */
+  readonly applyThrough?: number;
+  /**
+   * Highest already-applied version this runtime will open without migrating.
+   * Defaults to `applyThrough`, which preserves the strict refusal. Raising it
+   * declares that this bundle is a valid rollback target for a database another
+   * bundle has already advanced, and is honoured only while every intervening
+   * migration is declared `additive`.
+   */
+  readonly tolerateThrough?: number;
+};
+
+const resolveBounds = (
+  migrations: readonly SqlMigration[],
+  options: ApplyMigrationsOptions
+) => {
+  const latest = migrations.at(-1)?.version ?? 0;
+  const applyThrough = options.applyThrough ?? latest;
+  if (
+    !Number.isSafeInteger(applyThrough) ||
+    applyThrough < 0 ||
+    applyThrough > latest
+  ) {
+    throw new Error(
+      `Cannot apply through version ${applyThrough}; the newest declared migration is ${latest}.`
+    );
+  }
+  const tolerateThrough = options.tolerateThrough ?? applyThrough;
+  if (!Number.isSafeInteger(tolerateThrough) || tolerateThrough < applyThrough) {
+    throw new Error(
+      `Cannot tolerate version ${tolerateThrough} below the applied version ${applyThrough}.`
+    );
+  }
+  if (tolerateThrough > latest) {
+    // Tolerance is only meaningful for versions whose compatibility this
+    // bundle can actually read; never tolerate an undeclared future version.
+    throw new Error(
+      `Cannot tolerate version ${tolerateThrough}; the newest declared migration is ${latest}.`
+    );
+  }
+  return { applyThrough, tolerateThrough };
+};
+
+/**
+ * Applies every pending migration atomically, one version at a time.
+ *
+ * A database newer than this runtime is refused unless the caller opted into a
+ * bounded forward tolerance and every intervening migration is additive.
+ */
 export const applyMigrations = (
   store: SqlStore,
-  migrations: readonly SqlMigration[] = CORE_MIGRATIONS
+  migrations: readonly SqlMigration[] = CORE_MIGRATIONS,
+  options: ApplyMigrationsOptions = {}
 ): number => {
   assertMigrationOrder(migrations);
+  const { applyThrough, tolerateThrough } = resolveBounds(migrations, options);
   const current = getSchemaVersion(store);
-  const latest = migrations.at(-1)?.version ?? 0;
-  if (current > latest) {
-    throw new Error(
-      `Database schema version ${current} is newer than supported version ${latest}.`
+
+  if (current > applyThrough) {
+    if (current > tolerateThrough) {
+      throw new Error(
+        `Database schema version ${current} is newer than supported version ${applyThrough}.`
+      );
+    }
+    const breaking = migrations.find(
+      (migration) =>
+        migration.version > applyThrough &&
+        migration.version <= current &&
+        migration.compatibility !== "additive"
     );
+    if (breaking) {
+      throw new Error(
+        `Database schema version ${current} applied breaking migration ${breaking.version}; version ${applyThrough} cannot open it.`
+      );
+    }
+    // Every intervening migration only added state this runtime never names,
+    // so the database stays readable and writable at the older write paths.
+    return current;
   }
 
   let applied = current;
   for (const migration of migrations) {
     if (migration.version <= current) continue;
+    if (migration.version > applyThrough) break;
     if (migration.version !== applied + 1) {
       throw new Error(`Cannot apply migration ${migration.version} after ${applied}.`);
     }
