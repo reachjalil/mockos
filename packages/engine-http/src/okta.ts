@@ -10,6 +10,8 @@ import type {
 } from "./okta-types";
 
 const DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code" as const;
+const MAX_SESSION_TOKEN_BYTES = 512;
+const textEncoder = new TextEncoder();
 
 const noStoreHeaders = {
   "cache-control": "no-store",
@@ -177,6 +179,24 @@ const authorizationFromParams = (params: URLSearchParams): OktaAuthorizationRequ
       ? { loginHint: optional(params.get("login_hint")) }
       : {}),
   };
+};
+
+const sessionTokenFromParams = (params: URLSearchParams): string | undefined => {
+  const values = params.getAll("sessionToken");
+  if (values.length === 0) return undefined;
+  const token = values[0];
+  if (
+    values.length !== 1 ||
+    !token ||
+    textEncoder.encode(token).byteLength > MAX_SESSION_TOKEN_BYTES ||
+    !/^[A-Za-z0-9_-]+$/.test(token)
+  ) {
+    throw new OAuthProtocolError(
+      "INVALID_REQUEST",
+      "The sessionToken parameter is invalid."
+    );
+  }
+  return token;
 };
 
 const formValue = (form: FormData, name: string) => {
@@ -382,8 +402,17 @@ export const createOktaHttpApp = ({
 
   app.get("/oauth2/:authorizationServerId/v1/authorize", async (context) => {
     assertAuthorizationServer(context.req.param("authorizationServerId"));
-    const input = authorizationFromParams(new URL(context.req.url).searchParams);
+    const params = new URL(context.req.url).searchParams;
+    const input = authorizationFromParams(params);
+    const sessionToken = sessionTokenFromParams(params);
     await engine.validateAuthorizationRequest?.(input);
+    if (sessionToken) {
+      const result = await engine.authorizeWithSessionToken({
+        ...input,
+        sessionToken,
+      });
+      return authorizationRedirect(input, result.code);
+    }
     return context.html(
       renderOktaLoginPage(input, {
         action: publicActionFromRequest(context.req.raw, publicPathHeader),

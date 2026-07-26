@@ -1,9 +1,16 @@
-import { OktaAuthnError, type OktaAuthnResult, type UserRecord } from "@mockos/core";
+import {
+  OktaAuthnError,
+  oktaAuthnFactorId,
+  type OktaAuthnResult,
+  type UserRecord,
+} from "@mockos/core";
 import { Hono, type MiddlewareHandler } from "hono";
 
 const MAX_AUTHN_BODY_BYTES = 64 * 1_024;
 const MAX_AUTHN_USERNAME_BYTES = 320;
 const MAX_AUTHN_PASSWORD_BYTES = 4 * 1_024;
+const MAX_AUTHN_FACTOR_ID_BYTES = 512;
+const MAX_AUTHN_PASSCODE_BYTES = 64;
 const MAX_AUTHN_TOKEN_BYTES = 512;
 const textEncoder = new TextEncoder();
 
@@ -23,6 +30,11 @@ export type OktaAuthnEngine = {
   }): Promise<OktaAuthnResult> | OktaAuthnResult;
   cancel(stateToken: string): Promise<void> | void;
   getTransaction(stateToken: string): Promise<OktaAuthnResult> | OktaAuthnResult;
+  verifyFactor(input: {
+    readonly factorId: string;
+    readonly passCode: string;
+    readonly stateToken: string;
+  }): Promise<OktaAuthnResult> | OktaAuthnResult;
 };
 
 export type CreateOktaAuthnApiOptions = {
@@ -45,9 +57,13 @@ class OktaAuthnHttpError extends Error {
 const errorDetails = (error: unknown) => {
   if (error instanceof OktaAuthnHttpError) return error;
   if (error instanceof OktaAuthnError) {
-    return error.code === "INVALID_CREDENTIALS"
-      ? new OktaAuthnHttpError("E0000004", "Authentication failed", 401)
-      : new OktaAuthnHttpError("E0000011", "Invalid token provided", 401);
+    if (error.code === "INVALID_CREDENTIALS") {
+      return new OktaAuthnHttpError("E0000004", "Authentication failed", 401);
+    }
+    if (error.code === "INVALID_PASSCODE") {
+      return new OktaAuthnHttpError("E0000068", "Invalid Passcode/Answer", 403);
+    }
+    return new OktaAuthnHttpError("E0000011", "Invalid token provided", 401);
   }
   return new OktaAuthnHttpError(
     "E0000009",
@@ -149,16 +165,20 @@ const boundedJsonObject = async (
 
 const boundedString = (
   value: unknown,
-  name: "password" | "stateToken" | "username"
+  name: "factorId" | "passCode" | "password" | "stateToken" | "username"
 ): string => {
   const candidate =
     typeof value === "string" && name === "username" ? value.trim() : value;
   const maximum =
     name === "username"
       ? MAX_AUTHN_USERNAME_BYTES
-      : name === "password"
-        ? MAX_AUTHN_PASSWORD_BYTES
-        : MAX_AUTHN_TOKEN_BYTES;
+      : name === "factorId"
+        ? MAX_AUTHN_FACTOR_ID_BYTES
+        : name === "passCode"
+          ? MAX_AUTHN_PASSCODE_BYTES
+          : name === "password"
+            ? MAX_AUTHN_PASSWORD_BYTES
+            : MAX_AUTHN_TOKEN_BYTES;
   if (
     typeof candidate !== "string" ||
     !candidate ||
@@ -184,6 +204,19 @@ const primaryInputFrom = (body: Record<string, unknown>) => {
   return {
     userName: boundedString(body.username, "username"),
     password: boundedString(body.password, "password"),
+  };
+};
+
+const factorInputFrom = (factorIdValue: string, body: Record<string, unknown>) => {
+  const factorId = boundedString(factorIdValue, "factorId");
+  const passCode = boundedString(body.passCode, "passCode");
+  if (!/^mfa_[A-Za-z0-9_-]+$/.test(factorId) || !/^\d{6}$/.test(passCode)) {
+    throw new OktaAuthnHttpError("E0000001", "Api validation failed", 400);
+  }
+  return {
+    factorId,
+    passCode,
+    stateToken: stateTokenFrom(body),
   };
 };
 
@@ -339,12 +372,7 @@ const sameOriginCors: MiddlewareHandler = async (context, next) => {
 const renderResult = (result: OktaAuthnResult, request: Request) => {
   const base = publicAuthnBase(request);
   if (result.status === "LOCKED_OUT") {
-    return {
-      status: result.status,
-      _links: {
-        next: postLink(`${base}/recovery/unlock`, "unlock"),
-      },
-    };
+    return { status: result.status };
   }
   if (result.status === "SUCCESS") {
     return {
@@ -355,7 +383,7 @@ const renderResult = (result: OktaAuthnResult, request: Request) => {
     };
   }
   if (result.status === "MFA_REQUIRED") {
-    const factorId = `mfa_${result.user.id}`;
+    const factorId = oktaAuthnFactorId(result.user.id);
     return {
       stateToken: result.stateToken,
       expiresAt: result.expiresAt,
@@ -399,7 +427,6 @@ const renderResult = (result: OktaAuthnResult, request: Request) => {
       },
     },
     _links: {
-      next: postLink(`${base}/credentials/change_password`, "changePassword"),
       cancel: postLink(`${base}/cancel`),
     },
   };
@@ -437,6 +464,14 @@ export const createOktaAuthnApi = ({
     return context.body(null, 200, noStoreHeaders);
   });
 
+  app.post("/api/v1/authn/factors/:factorId/verify", async (context) => {
+    const body = await boundedJsonObject(context.req.raw);
+    const result = await engine.verifyFactor(
+      factorInputFrom(context.req.param("factorId"), body)
+    );
+    return context.json(renderResult(result, context.req.raw), 200, noStoreHeaders);
+  });
+
   const methodNotAllowed = (allow: string) => () => {
     const response = errorResponse(
       new OktaAuthnHttpError(
@@ -451,6 +486,7 @@ export const createOktaAuthnApi = ({
   };
   app.all("/api/v1/authn", methodNotAllowed("POST"));
   app.all("/api/v1/authn/cancel", methodNotAllowed("POST"));
+  app.all("/api/v1/authn/factors/:factorId/verify", methodNotAllowed("POST"));
 
   app.notFound(() =>
     errorResponse(

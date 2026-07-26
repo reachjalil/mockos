@@ -68,8 +68,8 @@ describe("conformance fixtures", () => {
       .map((file) => join(directory, file));
     const fixtures = await loadFixtures(files);
 
-    expect(fixtures).toHaveLength(5);
-    expect(new Set(fixtures.map(({ name }) => name)).size).toBe(5);
+    expect(fixtures).toHaveLength(7);
+    expect(new Set(fixtures.map(({ name }) => name)).size).toBe(7);
     expect(fixtures.every(({ provider }) => provider === "okta")).toBe(true);
     expect(fixtures.every(({ area }) => area === "authn")).toBe(true);
     expect(fixtures.every(({ status }) => status === "implemented")).toBe(true);

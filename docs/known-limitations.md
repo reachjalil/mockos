@@ -2,17 +2,17 @@
 
 Status: Accepted M3/M5 boundaries, sampled M6 deployment, source-only M7, locally
 source-qualified F0/F1, partial OpenAI/Anthropic F2 with bounded metadata observation,
-bounded MSAL Node and Okta Auth JS local X/Q, and remaining limits; deliberately
-candid
+bounded MSAL Node and Okta Auth JS Classic factor-to-OIDC local X/Q,
+and remaining limits; deliberately candid
 Last reviewed: 2026-07-26
 
 Designed (D), implemented (I), source-tested (S), integration-tested (X), pinned
 SDK/client-qualified (Q), hosted-smoke (H), verified-live (V), and production-ready
 (P) are separate levels. Hosted CI is source execution; H requires an exact remote
 serving version and recorded smoke; V requires sanitized, reviewed real-provider
-comparison. The bounded MSAL Node and Okta Auth JS slices are each D/I/S/X/Q yes and
-H/V/P no. The bounded M6 slice has sampled H evidence, but no current fixture is V or
-P.
+comparison. The bounded MSAL Node and dedicated Okta Auth JS Classic factor-to-OIDC
+slices are D/I/S/X/Q yes and H/V/P no. The bounded M6 slice has sampled H evidence,
+but no current fixture is V or P.
 
 - The Entra OIDC corpus has 25 source-reviewed expectations marked `documented` and
   13 marked `implemented`. Five device fixtures execute through a core-backed HTTP
@@ -57,16 +57,18 @@ P.
   `authorization_code`, including a mixed authorization-code/device client, still
   requires at least one real, exact callback URI. This does not add native-app loopback
   discovery, custom-URI policy, or browser redirect qualification.
-- The only official Okta identity-client qualification is
-  `@okta/okta-auth-js` 8.0.1 for one public application, custom authorization server,
-  authorization code with S256 PKCE, Node `parseFromUrl` using the exact
-  SDK-exposed `_getLocation` seam, JWKS-backed ID-token verification, refresh rotation,
-  owner-bound public access-token revocation, and refresh rejection after `suspend`.
-  It passes through local Wrangler HTTPS and uses
-  `@modelcontextprotocol/sdk` 1.29.0 for management. This is local X/Q evidence, not
-  workers.dev, hosted Cloud, custom-domain H, or real-organization V. It does not
-  qualify browser callback UX, Sign-In Widget, IDX, other Auth JS versions, UserInfo,
-  device flow, Classic Authn, Sessions, Factors, access-token signature validation,
+- The dedicated Okta identity-client qualification pins `@okta/okta-auth-js` 8.0.1 for one
+  public application and custom authorization server. It starts Classic Authn with
+  `signInWithCredentials`, follows the returned factor-verification function with the
+  static synthetic passcode `000000`, passes the one-use `sessionToken` to
+  `getWithRedirect`, and continues through S256 PKCE, Node `parseFromUrl` using the
+  exact SDK-exposed `_getLocation` seam, JWKS-backed ID-token verification, refresh
+  rotation, owner-bound public access-token revocation, and refresh rejection after
+  `suspend`. `@modelcontextprotocol/sdk` 1.29.0 remains the management client. This is
+  bounded local D/I/S/X/Q evidence; H/V/P are no. It does not qualify RFC 6238/TOTP
+  verification, MFA
+  assurance claims, browser callback UX, Sign-In Widget, IDX, other Auth JS versions,
+  UserInfo, device flow, Sessions API/cookies, access-token signature validation,
   distributed transaction storage, or P.
 - Public OAuth registration is explicit, not a general anonymous-client mode. Public
   clients store and receive no secret and cannot request `client_credentials`.
@@ -101,13 +103,33 @@ P.
   Okta Group-member listing is currently unpaginated and can return up to the directory
   membership cap. Neither surface claims broad provider API parity. The bounded M6
   implementation adds Okta Classic `/api/v1/authn` primary states, transaction
-  retrieval, and cancellation, but not factor verification, password-change
-  execution, recovery/unlock execution, or Sessions API exchange.
+  retrieval, cancellation, and one synthetic TOTP-shaped factor-verification route.
+  It does not implement password-change execution, recovery/unlock execution, or the
+  Sessions API. Unsupported password-change and unlock links are omitted rather than
+  advertised.
 - Classic Authn state retrieval renews its five-minute expiry from each successful
   read; this is sliding state, not an unlimited transaction, because idle state still
   expires. The one-time session capability keeps its original fixed five-minute
-  expiry. Both are stored only as hashes. Lifecycle changes and SCIM password changes
-  revoke both kinds, and a stale post-verification User snapshot cannot issue one.
+  expiry. Both are stored only as hashes. The bounded Okta authorize route can consume
+  a session capability once after validating the client, callback, scope, response
+  type, and S256 request; replay is `invalid_grant`. This direct bridge is not the
+  Sessions API and creates no Okta or application cookie. Lifecycle changes and SCIM
+  password changes revoke both kinds, and a stale post-verification User snapshot
+  cannot issue one.
+- Classic factor verification requires the returned factor, live `MFA_REQUIRED`
+  state, and exact fixed passcode `000000`. A wrong factor or passcode returns
+  `E0000068` without consuming state; invalid, expired, cancelled, or replayed state
+  returns `E0000011`. The fixed value is deterministic mock input, not RFC 6238/TOTP,
+  shared-secret, clock-step, drift, enrollment, or authenticator behavior.
+- When the User is both MFA-required and password-expired, correct factor verification
+  advances the same live transaction to `PASSWORD_EXPIRED`, refreshes its bounded
+  expiry, returns the same `stateToken`, keeps cancel mounted, and issues no session
+  capability. Repeating factor verification returns `E0000011` without deleting that
+  password-expired transaction; retrieval and cancellation still work. Password
+  change remains unavailable and no change-password link is emitted.
+- Tokens issued after session-token authorization still contain
+  `acr: "urn:okta:loa:1fa:any"` and `amr: ["pwd"]`. Factor chaining must not be
+  presented as MFA-assurance token parity.
 - Classic Authn retention is bounded independently per table: 10,000 retained state
   rows and 10,000 retained session rows per environment, plus 32 retained rows per
   User per kind.
@@ -118,30 +140,35 @@ P.
   the `accept`/`content-type` request headers, never emits
   `Access-Control-Allow-Credentials`, and returns `403` for cross-origin requests.
   Provider-shaped MFA uses the singular `_embedded.factor` key containing an array,
-  and embedded Users omit `passwordChanged`. Authn request/response bodies are
-  recursively redacted by secret-like field name; malformed or primitive bodies are
-  wholly replaced, and sensitive headers including authorization, proxy authorization,
-  cookies, and token/secret-like headers are redacted. The deployed smoke sampled the
-  public state, CORS, privacy, and redaction behavior; deeper retention/revocation/race
-  tests remain source evidence, and neither tier is a general log-security audit.
+  and embedded Users omit `passwordChanged`. Authn and factor request/response bodies
+  are recursively redacted by secret-like field name; malformed or primitive bodies
+  are wholly replaced, and sensitive headers including authorization, proxy
+  authorization, cookies, and token/secret-like headers are redacted. The deployed M6
+  smoke sampled the original primary-state, CORS, privacy, and redaction behavior; it
+  did not run factor verification or the session-token OIDC bridge. Deeper
+  retention/revocation/race tests remain source evidence, and neither tier is a
+  general log-security audit.
 - Structured provider request-log capture now redacts secret-bearing form and JSON
   keys across routes, sensitive request/response header families, and secret query or
   fragment fields in redirect `Location` values before persistence. The MSAL and Okta
   Auth JS actual-network flows plus focused Worker coverage protect each named
-  exercised password, authorization code, PKCE verifier, and issued token field; the
-  confidential MSAL flow additionally checks its client secret. The Auth JS flow
-  parses its named fields as `[REDACTED]` and rejects raw, `encodeURIComponent`, and
-  URL-form-encoded representations of every exercised value. Safe request sequences
-  remain assertable. This is not arbitrary-encoding classification or a general
-  log-security audit: non-secret structured protocol fields and non-JSON response
-  bodies may still be retained. Malformed form/JSON, primitive JSON request, and
-  unsupported-media request bodies are replaced rather than stored, but production
-  credentials and personal data remain prohibited.
-- The MSAL and Auth JS wrappers share one local official-client parent and one cleanup
-  verifier. Each has focused normal-completion and ready-Worker `SIGTERM` cleanup
-  evidence: its signal probe observes exit `143`, provider and inspector port release,
-  Wrangler process-group exit, and temporary-state removal. Distinct explicit
-  inspector ports let both qualifications and cleanup probes pass concurrently. The
+  exercised password, Authn state/passcode/session capability, authorization code,
+  PKCE verifier, and issued token field; the
+  confidential MSAL flow additionally checks its client secret. The dedicated Auth JS
+  run parses its named fields as `[REDACTED]` and rejects raw,
+  `encodeURIComponent`, and URL-form-encoded representations of every exercised
+  value. Safe request sequences remain assertable.
+  This is not arbitrary-encoding classification or a general log-security audit:
+  non-secret structured protocol fields and non-JSON response bodies may still be
+  retained. Malformed form/JSON, primitive JSON request, and unsupported-media request
+  bodies are replaced rather than stored, but production credentials and personal
+  data remain prohibited.
+- The MSAL, original Auth JS, and dedicated Classic-factor Auth JS wrappers share one
+  local official-client parent and one cleanup verifier. The accepted MSAL, original
+  Auth JS, and dedicated Auth JS runs have focused normal-completion and ready-Worker
+  `SIGTERM` cleanup evidence.
+  Distinct provider/inspector pairs are `8794`/`18794`, `8795`/`18795`, and
+  `8796`/`18796`, so the qualifications can run concurrently. The
   parent and cleanup verifier reject inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` and
   strip it from children. This does not qualify uncatchable `SIGKILL`, Windows
   process-tree behavior, abrupt machine loss, or every interruption point while either

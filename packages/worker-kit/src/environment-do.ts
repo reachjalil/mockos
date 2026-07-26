@@ -62,6 +62,7 @@ import {
   MAX_REQUEST_LOG_BODY_BYTES,
   MockLlmRepository,
   MockMcpRepository,
+  OktaAuthnError,
   OAuthError,
   type RenderedProviderError,
   ScimService,
@@ -393,6 +394,31 @@ const createOktaHttpEngine = (engine: Engine): OktaHttpEngine => {
       validateAuthorizationRequest(input);
       const user = await authenticate(input);
       return engine.oauth.createAuthorizationCode({
+        clientId: input.clientId,
+        redirectUri: input.redirectUri,
+        userId: user.id,
+        scope: input.scope,
+        codeChallenge: input.codeChallenge,
+        codeChallengeMethod: "S256",
+        ...(input.nonce ? { nonce: input.nonce } : {}),
+      });
+    },
+    async authorizeWithSessionToken(input) {
+      validateAuthorizationRequest(input);
+      let user: UserRecord;
+      try {
+        user = await engine.authn.consumeSessionToken(input.sessionToken);
+      } catch (error) {
+        if (error instanceof OktaAuthnError) {
+          throw new OAuthProtocolError(
+            "INVALID_GRANT",
+            "The session token is invalid or expired."
+          );
+        }
+        throw error;
+      }
+      return engine.oauth.createAuthorizationCode({
+        authenticationMode: "session_token",
         clientId: input.clientId,
         redirectUri: input.redirectUri,
         userId: user.id,

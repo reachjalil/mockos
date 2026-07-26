@@ -22,6 +22,10 @@ export type OktaAuthorizationResult = {
   code: string;
 };
 
+export type OktaSessionAuthorization = OktaAuthorizationRequest & {
+  sessionToken: string;
+};
+
 export type OktaAuthorizationCodeTokenRequest = {
   clientId: string;
   clientSecret?: string;
@@ -120,6 +124,9 @@ export type OktaRenderedError = {
 export interface OktaHttpEngine {
   activateDeviceAuthorization(input: OktaDeviceActivationRequest): OktaAwaitable<void>;
   authorize(input: OktaAuthorizationLogin): OktaAwaitable<OktaAuthorizationResult>;
+  authorizeWithSessionToken(
+    input: OktaSessionAuthorization
+  ): OktaAwaitable<OktaAuthorizationResult>;
   createDeviceAuthorization(
     input: OktaDeviceAuthorizationRequest
   ): OktaAwaitable<OktaDeviceAuthorizationResult>;

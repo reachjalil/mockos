@@ -1,5 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type ApplicationRecord,
   type CreatedApplication,
@@ -232,6 +232,44 @@ describe("Okta OIDC profile", () => {
       code: "INVALID_GRANT",
       oauthError: "invalid_grant",
     });
+  });
+
+  it("rechecks user lifecycle after asynchronous code hashing", async () => {
+    const { engine, store, user, application } = await setup(
+      ["authorization_code"],
+      "confidential"
+    );
+    const findById = engine.users.findById.bind(engine.users);
+    let reads = 0;
+    vi.spyOn(engine.users, "findById").mockImplementation((id) => {
+      const current = findById(id);
+      if (id !== user.id || !current) return current;
+      reads += 1;
+      return reads === 2
+        ? {
+            ...current,
+            accountEnabled: false,
+            lifecycleState: "disabled",
+            resourceVersion: current.resourceVersion + 1,
+          }
+        : current;
+    });
+
+    await expect(
+      engine.oauth.createAuthorizationCode({
+        clientId: application.clientId,
+        redirectUri: "https://client.example/callback",
+        userId: user.id,
+        scope: "openid",
+        codeChallenge: await pkceS256(
+          "okta-lifecycle-race-verifier-abcdefghijklmnopqrstuvwxyz-0123456789"
+        ),
+        codeChallengeMethod: "S256",
+      })
+    ).rejects.toMatchObject({ code: "USER_DISABLED" });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM oauth_codes")?.count
+    ).toBe(0);
   });
 
   it("renders request-derived discovery, scope-aware claims, and native errors", async () => {

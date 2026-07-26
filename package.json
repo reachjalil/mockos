@@ -20,6 +20,9 @@
     "e2e:entra-msal-cleanup": "node scripts/e2e-entra-msal-cleanup.mjs",
     "e2e:okta-authjs": "node scripts/e2e-okta-authjs.mjs",
     "e2e:okta-authjs-cleanup": "node scripts/e2e-okta-authjs-cleanup.mjs",
+    "e2e:okta-mfa-authjs": "node scripts/e2e-okta-mfa-authjs.mjs",
+    "e2e:okta-mfa-authjs-cleanup": "node scripts/e2e-okta-mfa-authjs-cleanup.mjs",
+    "e2e:okta-mfa-authjs:test": "node --test scripts/e2e-okta-mfa-authjs.test.mjs",
     "e2e:provisioning": "node scripts/e2e-provisioning.mjs",
     "f0:drift:check": "tsx scripts/generate-f0-artifacts.ts --check",
     "f0:generate": "tsx scripts/generate-f0-artifacts.ts",
@@ -32,7 +35,7 @@
     "m6:parity:test": "node --test scripts/generate-m6-parity.test.mjs",
     "public-boundary:check": "node scripts/check-public-dependencies.mjs",
     "smoke:test": "node --test scripts/smoke-worker-helpers.test.mjs",
-    "test": "pnpm m6:parity:test && pnpm smoke:test && turbo run test",
+    "test": "pnpm m6:parity:test && pnpm smoke:test && pnpm e2e:okta-mfa-authjs:test && turbo run test",
     "types": "turbo run types",
     "worker:check": "node scripts/check-worker-wrangler.mjs --allow-workers-dev",
     "worker:dry-run": "pnpm --filter @mockos/worker exec wrangler deploy --dry-run --env= --outdir .wrangler/dry-run"

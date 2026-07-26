@@ -1,4 +1,4 @@
 interface:
   display_name: "🥸 mockOS Testing"
-  short_description: "Test identity and mock LLM integrations"
-  default_prompt: "Use $mockos-testing to test my app against deterministic identity, mock OpenAI, or mock Anthropic scenarios."
+  short_description: "Test identity, MCP, and LLM integrations"
+  default_prompt: "Use $mockos-testing to qualify my app against deterministic identity, mock MCP, or mock LLM workflows."

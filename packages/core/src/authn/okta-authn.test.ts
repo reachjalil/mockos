@@ -8,8 +8,10 @@ import {
   OKTA_AUTHN_MAX_CAPABILITIES_PER_USER_PER_KIND,
   OKTA_AUTHN_SESSION_TOKEN_TTL_MS,
   OKTA_AUTHN_STATE_TOKEN_TTL_MS,
+  OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
   OktaAuthnError,
   OktaAuthnService,
+  oktaAuthnFactorId,
 } from "./okta-authn";
 
 class MemorySqlStore implements SqlStore {
@@ -236,6 +238,195 @@ describe("Okta Classic Authn core", () => {
         code: "INVALID_STATE_TOKEN",
       }
     );
+  });
+
+  it("binds factor verification to one live MFA transaction and issues one session", async () => {
+    const { engine, store } = await setup("authn-factor-verification");
+    const user = await engine.users.create({
+      userName: "mfa@example.test",
+      displayName: "MFA User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const other = await engine.users.create({
+      userName: "other-mfa@example.test",
+      displayName: "Other MFA User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const pending = await engine.authn.authenticate({
+      userName: user.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    const { engine: isolatedEngine } = await setup(
+      "authn-factor-verification-other-tenant"
+    );
+    await expect(
+      isolatedEngine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: pending.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
+
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(other.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: pending.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PASSCODE" });
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: "999999",
+        stateToken: pending.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PASSCODE" });
+    await expect(
+      engine.authn.getTransaction(pending.stateToken)
+    ).resolves.toMatchObject({
+      status: "MFA_REQUIRED",
+      user: { id: user.id },
+    });
+
+    const success = await engine.authn.verifyFactor({
+      factorId: oktaAuthnFactorId(user.id),
+      passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+      stateToken: pending.stateToken,
+    });
+    expect(success).toMatchObject({
+      status: "SUCCESS",
+      user: { id: user.id },
+    });
+    if (success.status !== "SUCCESS") throw new Error("Expected success state.");
+    expect(success.sessionToken).toMatch(/^session_[a-f0-9]{48}$/);
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM authn_transactions")
+        ?.count
+    ).toBe(0);
+    const persisted = JSON.stringify(store.all("SELECT * FROM web_sessions"));
+    expect(persisted).not.toContain(success.sessionToken);
+    expect(persisted).not.toContain(OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE);
+
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: pending.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
+    await expect(
+      engine.authn.consumeSessionToken(success.sessionToken)
+    ).resolves.toMatchObject({ id: user.id });
+    await expect(
+      engine.authn.consumeSessionToken(success.sessionToken)
+    ).rejects.toMatchObject({ code: "INVALID_SESSION_TOKEN" });
+  });
+
+  it("transitions MFA to password expiry without deleting the live wrong-state transaction", async () => {
+    const { engine, store } = await setup("authn-factor-password-expired");
+    const user = await engine.users.create({
+      userName: "mfa-expired@example.test",
+      displayName: "MFA Expired User",
+      password: "SyntheticPassw0rd!",
+      passwordState: "expired",
+      mfaState: "required",
+    });
+    const pending = await engine.authn.authenticate({
+      userName: user.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (pending.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+
+    const passwordExpired = await engine.authn.verifyFactor({
+      factorId: oktaAuthnFactorId(user.id),
+      passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+      stateToken: pending.stateToken,
+    });
+    expect(passwordExpired).toMatchObject({
+      stateToken: pending.stateToken,
+      status: "PASSWORD_EXPIRED",
+      user: { id: user.id },
+    });
+    expect(
+      store.get<{ count: number }>("SELECT COUNT(*) AS count FROM web_sessions")?.count
+    ).toBe(0);
+
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: pending.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
+    await expect(
+      engine.authn.getTransaction(pending.stateToken)
+    ).resolves.toMatchObject({
+      stateToken: pending.stateToken,
+      status: "PASSWORD_EXPIRED",
+    });
+    await engine.authn.cancel(pending.stateToken);
+    await expect(engine.authn.getTransaction(pending.stateToken)).rejects.toMatchObject(
+      {
+        code: "INVALID_STATE_TOKEN",
+      }
+    );
+  });
+
+  it("serializes competing factor verification and rejects expired or revoked state", async () => {
+    const { clock, engine } = await setup("authn-factor-lifecycle");
+    const user = await engine.users.create({
+      userName: "mfa@example.test",
+      displayName: "MFA User",
+      password: "SyntheticPassw0rd!",
+      mfaState: "required",
+    });
+    const concurrent = await engine.authn.authenticate({
+      userName: user.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (concurrent.status !== "MFA_REQUIRED") {
+      throw new Error("Expected MFA state.");
+    }
+    const verify = () =>
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: concurrent.stateToken,
+      });
+    const competing = await Promise.allSettled([verify(), verify()]);
+    expect(competing.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(competing.filter(({ status }) => status === "rejected")).toHaveLength(1);
+
+    const expired = await engine.authn.authenticate({
+      userName: user.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (expired.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    clock.set(expired.expiresAt);
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: expired.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
+
+    const revoked = await engine.authn.authenticate({
+      userName: user.userName,
+      password: "SyntheticPassw0rd!",
+    });
+    if (revoked.status !== "MFA_REQUIRED") throw new Error("Expected MFA state.");
+    engine.lifecycle.apply(user.id, "suspend");
+    await expect(
+      engine.authn.verifyFactor({
+        factorId: oktaAuthnFactorId(user.id),
+        passCode: OKTA_AUTHN_SYNTHETIC_TOTP_PASSCODE,
+        stateToken: revoked.stateToken,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_STATE_TOKEN" });
   });
 
   it("stores session capabilities as hashes and consumes each exactly once", async () => {

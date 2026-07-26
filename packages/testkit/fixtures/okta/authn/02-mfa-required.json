@@ -25,15 +25,29 @@
           {
             "factorType": "token:software:totp",
             "provider": "OKTA",
-            "profile": {}
+            "profile": {},
+            "_links": {
+              "verify": {
+                "hints": {
+                  "allow": ["POST"]
+                }
+              }
+            }
           }
         ]
+      },
+      "_links": {
+        "cancel": {
+          "hints": {
+            "allow": ["POST"]
+          }
+        }
       }
     }
   },
   "provenance": "official-docs",
   "sourceUrl": "https://developer.okta.com/docs/reference/api/authn/#response-example-for-primary-authentication-with-public-application-factor-challenge",
-  "lastVerified": "2026-07-22",
+  "lastVerified": "2026-07-26",
   "status": "implemented",
-  "notes": "A state token is returned but omitted from the stable subset because it is a generated bearer capability."
+  "notes": "A state token and exact verification/cancel hrefs are returned but omitted from the stable subset because they contain generated bearer or identity-bound values. Focused adapter and Worker tests assert that every emitted action resolves to its mounted public route."
 }

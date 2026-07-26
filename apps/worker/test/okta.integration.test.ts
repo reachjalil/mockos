@@ -8,6 +8,7 @@ const clientId = "0oaOktaIntegrationClient";
 const clientSecret = "okta-integration-secret";
 const redirectUri = "https://client.example/callback";
 const userName = "ada.okta@example.test";
+const deviceUserName = "device.okta@example.test";
 const password = "Passw0rd!";
 const worker = (exports as unknown as { default: Fetcher }).default;
 
@@ -217,7 +218,7 @@ describe("Okta public identity surface", () => {
             userName: "mfa.authn@example.test",
             displayName: "MFA Authn",
             password: authnPassword,
-            passwordState: "expired",
+            passwordState: "valid",
             active: true,
             mfaState: "required",
             roles: [],
@@ -318,22 +319,106 @@ describe("Okta public identity surface", () => {
       const mfaBody = await mfaResponse.json<{
         stateToken: string;
         status: string;
+        _embedded: {
+          factor: Array<{
+            id: string;
+            _links: { verify: { href: string; hints: { allow: string[] } } };
+          }>;
+        };
+        _links: { cancel: { href: string; hints: { allow: string[] } } };
       }>();
       expect(mfaBody.status).toBe("MFA_REQUIRED");
       expect(mfaBody.stateToken).toMatch(/^state_[a-f0-9]{48}$/);
+      const factor = mfaBody._embedded.factor[0];
+      expect(factor).toBeDefined();
+      expect(factor?._links.verify.hints.allow).toEqual(["POST"]);
+      expect(mfaBody._links.cancel.hints.allow).toEqual(["POST"]);
 
       const currentState = await authenticate({ stateToken: mfaBody.stateToken });
       expect(await currentState.json()).toMatchObject({
         stateToken: mfaBody.stateToken,
         status: "MFA_REQUIRED",
       });
-      const cancelled = await worker.fetch(`${urls.oktaAuthnEndpoint}/cancel`, {
+
+      const wrongFactorUrl = new URL(factor?._links.verify.href ?? "");
+      wrongFactorUrl.pathname = wrongFactorUrl.pathname.replace(
+        factor?.id ?? "",
+        "mfa_usr_other"
+      );
+      const wrongFactor = await worker.fetch(wrongFactorUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stateToken: mfaBody.stateToken }),
+        body: JSON.stringify({
+          stateToken: mfaBody.stateToken,
+          passCode: "000000",
+        }),
+      });
+      expect(wrongFactor.status).toBe(403);
+      expect(await wrongFactor.json()).toMatchObject({
+        errorCode: "E0000068",
+        errorSummary: "Invalid Passcode/Answer",
+      });
+
+      const invalidPasscode = "111111";
+      const wrongPasscode = await worker.fetch(factor?._links.verify.href ?? "", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stateToken: mfaBody.stateToken,
+          passCode: invalidPasscode,
+        }),
+      });
+      expect(wrongPasscode.status).toBe(403);
+      expect(await wrongPasscode.json()).toEqual({
+        errorCode: "E0000068",
+        errorSummary: "Invalid Passcode/Answer",
+        errorLink: "E0000068",
+        errorId: expect.any(String),
+        errorCauses: [],
+      });
+
+      const verified = await worker.fetch(factor?._links.verify.href ?? "", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stateToken: mfaBody.stateToken,
+          passCode: "000000",
+        }),
+      });
+      expect(verified.status).toBe(200);
+      const verifiedBody = await verified.json<{
+        sessionToken: string;
+        status: string;
+      }>();
+      expect(verifiedBody.status).toBe("SUCCESS");
+      expect(verifiedBody.sessionToken).toMatch(/^session_[a-f0-9]{48}$/);
+
+      const verifyReplay = await worker.fetch(factor?._links.verify.href ?? "", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stateToken: mfaBody.stateToken,
+          passCode: "000000",
+        }),
+      });
+      expect(verifyReplay.status).toBe(401);
+      expect(await verifyReplay.json()).toMatchObject({ errorCode: "E0000011" });
+
+      const cancellableResponse = await authenticate({
+        username: "mfa.authn@example.test",
+        password: authnPassword,
+      });
+      const cancellable = await cancellableResponse.json<{
+        stateToken: string;
+        _links: { cancel: { href: string } };
+      }>();
+      const cancelled = await worker.fetch(cancellable._links.cancel.href, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stateToken: cancellable.stateToken }),
       });
       expect(cancelled.status).toBe(200);
-      const replay = await authenticate({ stateToken: mfaBody.stateToken });
+      const replay = await authenticate({ stateToken: cancellable.stateToken });
       expect(replay.status).toBe(401);
       expect(await replay.json()).toMatchObject({ errorCode: "E0000011" });
 
@@ -341,19 +426,18 @@ describe("Okta public identity surface", () => {
         username: "expired.authn@example.test",
         password: authnPassword,
       });
-      expect(await expiredResponse.json()).toMatchObject({
+      const expiredBody = await expiredResponse.json();
+      expect(expiredBody).toMatchObject({
         status: "PASSWORD_EXPIRED",
-        _links: { next: { name: "changePassword" } },
+        _links: { cancel: { hints: { allow: ["POST"] } } },
       });
+      expect(expiredBody).not.toHaveProperty("_links.next");
 
       const lockedResponse = await authenticate({
         username: "locked.authn@example.test",
         password: authnPassword,
       });
-      expect(await lockedResponse.json()).toMatchObject({
-        status: "LOCKED_OUT",
-        _links: { next: { name: "unlock" } },
-      });
+      expect(await lockedResponse.json()).toEqual({ status: "LOCKED_OUT" });
 
       const cookieSecret = "AuthnCookieSecret";
       const proxySecret = "AuthnProxySecret";
@@ -419,6 +503,9 @@ describe("Okta public identity surface", () => {
       expect(captured).not.toContain(malformedSecret);
       expect(captured).not.toContain(primitiveSecret);
       expect(captured).not.toContain(mfaBody.stateToken);
+      expect(captured).not.toContain(cancellable.stateToken);
+      expect(captured).not.toContain(verifiedBody.sessionToken);
+      expect(captured).not.toContain(invalidPasscode);
       expect(captured).not.toContain(successBody.sessionToken);
       expect(captured).not.toContain(cookieSecret);
       expect(captured).not.toContain(proxySecret);
@@ -426,6 +513,28 @@ describe("Okta public identity surface", () => {
       expect(captured).toContain("E0000004");
       expect(captured).toContain(preservedPasswordChanged);
       expect(captured).toContain("[REDACTED]");
+
+      const factorLog = await callTool<{
+        entries: Array<{
+          requestBody: string | null;
+          responseBody: string | null;
+        }>;
+      }>(sessionId, "get_request_log", {
+        environmentId: environment.id,
+        source: "inbound",
+        method: "POST",
+        path: new URL(factor?._links.verify.href ?? "").pathname,
+        limit: 10,
+      });
+      expect(factorLog.entries).toHaveLength(3);
+      const capturedFactors = JSON.stringify(factorLog.entries);
+      expect(capturedFactors).not.toContain(mfaBody.stateToken);
+      expect(capturedFactors).not.toContain(verifiedBody.sessionToken);
+      expect(capturedFactors).not.toContain("000000");
+      expect(capturedFactors).not.toContain(invalidPasscode);
+      expect(capturedFactors).toContain("E0000068");
+      expect(capturedFactors).toContain("E0000011");
+      expect(capturedFactors).toContain("[REDACTED]");
 
       const malformedScimSecret = "MalformedScimPasswordSecret";
       const malformedScim = await worker.fetch(`${urls.scimBaseUrl}/Users`, {
@@ -577,13 +686,21 @@ describe("Okta public identity surface", () => {
           familyName: "Lovelace",
           password,
           active: true,
+          mfaState: "required",
+          roles: [],
+        },
+        {
+          userName: deviceUserName,
+          displayName: "Device User",
+          password,
+          active: true,
           mfaState: "none",
           roles: [],
         },
       ],
       groups: [],
     });
-    const userId = seeded.users[0]?.id;
+    const userId = seeded.users.find(({ userName: value }) => value === userName)?.id;
     expect(userId).toBeTruthy();
 
     await callTool(sessionId, "create_application", {
@@ -672,7 +789,7 @@ describe("Okta public identity surface", () => {
     const loginAction = /<form method="post" action="([^"]+)">/.exec(loginHtml)?.[1];
     expect(loginAction).toBe(`/e/${environment.id}/oauth2/default/v1/authorize`);
 
-    const login = await worker.fetch(new URL(loginAction ?? "", publicOrigin), {
+    const passwordLogin = await worker.fetch(new URL(loginAction ?? "", publicOrigin), {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -690,12 +807,117 @@ describe("Okta public identity surface", () => {
       }).toString(),
       redirect: "manual",
     });
+    expect(passwordLogin.status).toBe(400);
+    expect(await passwordLogin.text()).toContain(
+      "Multi-factor authentication is required."
+    );
+
+    const createMfaSession = async (): Promise<string> => {
+      const primary = await worker.fetch(urls.oktaAuthnEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: userName, password }),
+      });
+      expect(primary.status).toBe(200);
+      const transaction = await primary.json<{
+        stateToken: string;
+        status: string;
+        _embedded: {
+          factor: Array<{ _links: { verify: { href: string } } }>;
+        };
+      }>();
+      expect(transaction.status).toBe("MFA_REQUIRED");
+      const verifyHref = transaction._embedded.factor[0]?._links.verify.href;
+      expect(verifyHref).toBeTruthy();
+      const verified = await worker.fetch(verifyHref ?? "", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stateToken: transaction.stateToken,
+          passCode: "000000",
+        }),
+      });
+      expect(verified.status, await verified.clone().text()).toBe(200);
+      const result = await verified.json<{
+        sessionToken: string;
+        status: string;
+      }>();
+      expect(result.status).toBe("SUCCESS");
+      return result.sessionToken;
+    };
+
+    const sessionToken = await createMfaSession();
+    const sessionAuthorizeUrl = new URL(authorizeUrl);
+    sessionAuthorizeUrl.searchParams.set("sessionToken", sessionToken);
+
+    const badRedirectUrl = new URL(sessionAuthorizeUrl);
+    badRedirectUrl.searchParams.set(
+      "redirect_uri",
+      "https://unregistered.example/callback"
+    );
+    const badRedirect = await worker.fetch(badRedirectUrl, {
+      redirect: "manual",
+    });
+    expect(badRedirect.status).toBe(400);
+    expect(await badRedirect.json()).toMatchObject({ error: "invalid_grant" });
+
+    const badPkceUrl = new URL(sessionAuthorizeUrl);
+    badPkceUrl.searchParams.set("code_challenge", "too-short");
+    const badPkce = await worker.fetch(badPkceUrl, { redirect: "manual" });
+    expect(badPkce.status).toBe(400);
+    expect(await badPkce.json()).toMatchObject({ error: "invalid_request" });
+
+    const login = await worker.fetch(sessionAuthorizeUrl, {
+      redirect: "manual",
+    });
     expect(login.status, await login.clone().text()).toBe(302);
     const callback = new URL(login.headers.get("location") ?? "");
     expect(callback.origin + callback.pathname).toBe(redirectUri);
     expect(callback.searchParams.get("state")).toBe("okta-integration-state");
+    expect(callback.toString()).not.toContain(sessionToken);
     const code = callback.searchParams.get("code");
     expect(code).toBeTruthy();
+
+    const sessionReplay = await worker.fetch(sessionAuthorizeUrl, {
+      redirect: "manual",
+    });
+    expect(sessionReplay.status).toBe(400);
+    expect(await sessionReplay.json()).toMatchObject({
+      error: "invalid_grant",
+      error_description: "The session token is invalid or expired.",
+    });
+
+    const concurrentSessionToken = await createMfaSession();
+    const concurrentUrl = new URL(authorizeUrl);
+    concurrentUrl.searchParams.set("sessionToken", concurrentSessionToken);
+    concurrentUrl.searchParams.set("state", "okta-concurrent-state");
+    const concurrent = await Promise.all([
+      worker.fetch(concurrentUrl, { redirect: "manual" }),
+      worker.fetch(concurrentUrl, { redirect: "manual" }),
+    ]);
+    expect(concurrent.map(({ status }) => status).sort()).toEqual([302, 400]);
+    const concurrentFailure = concurrent.find(({ status }) => status === 400);
+    expect(await concurrentFailure?.json()).toMatchObject({
+      error: "invalid_grant",
+    });
+
+    const authorizationLog = await callTool<{
+      entries: Array<{
+        requestBody: string | null;
+        requestHeaders: Record<string, string>;
+        responseBody: string | null;
+        responseHeaders: Record<string, string>;
+      }>;
+    }>(sessionId, "get_request_log", {
+      environmentId: environment.id,
+      source: "inbound",
+      path: `/e/${environment.id}/oauth2/default/v1/authorize`,
+      limit: 20,
+    });
+    const capturedAuthorization = JSON.stringify(authorizationLog.entries);
+    expect(capturedAuthorization).not.toContain(sessionToken);
+    expect(capturedAuthorization).not.toContain(concurrentSessionToken);
+    expect(capturedAuthorization).not.toContain(password);
 
     const badClient = await formRequest(urls.tokenEndpoint, {
       grant_type: "authorization_code",
@@ -742,12 +964,10 @@ describe("Okta public identity surface", () => {
     const jwksResponse = await worker.fetch(urls.jwksUri);
     expect(jwksResponse.status).toBe(200);
     expect(jwksResponse.headers.get("cache-control")).toBe("public, max-age=300");
-    const claims = await verifyJwt(
-      token.id_token,
-      await jwksResponse.json<{
-        keys: Array<JsonWebKey & { kid?: string }>;
-      }>()
-    );
+    const jwks = await jwksResponse.json<{
+      keys: Array<JsonWebKey & { kid?: string }>;
+    }>();
+    const claims = await verifyJwt(token.id_token, jwks);
     expect(claims).toMatchObject({
       iss: issuer,
       aud: clientId,
@@ -755,7 +975,12 @@ describe("Okta public identity surface", () => {
       preferred_username: userName,
       email: userName,
       nonce: "okta-integration-nonce",
+      amr: ["pwd"],
       ver: 1,
+    });
+    expect(await verifyJwt(token.access_token, jwks)).toMatchObject({
+      acr: "urn:okta:loa:1fa:any",
+      sub: userId,
     });
 
     const active = await formRequest(urls.introspectionEndpoint, {
@@ -839,7 +1064,7 @@ describe("Okta public identity surface", () => {
 
     const activation = await formRequest(approvedDevice.verification_uri, {
       user_code: approvedDevice.user_code,
-      username: userName,
+      username: deviceUserName,
       password,
     });
     expect(activation.status, await activation.clone().text()).toBe(200);
@@ -857,6 +1082,24 @@ describe("Okta public identity surface", () => {
       expires_in: 3600,
       scope: "openid profile offline_access",
       token_type: "Bearer",
+    });
+
+    const lifecycleSessionToken = await createMfaSession();
+    await callTool(sessionId, "simulate_lifecycle", {
+      environmentId: environment.id,
+      userId,
+      action: "suspend",
+    });
+    const lifecycleAuthorizeUrl = new URL(authorizeUrl);
+    lifecycleAuthorizeUrl.searchParams.set("sessionToken", lifecycleSessionToken);
+    lifecycleAuthorizeUrl.searchParams.set("state", "okta-lifecycle-state");
+    const lifecycleRejected = await worker.fetch(lifecycleAuthorizeUrl, {
+      redirect: "manual",
+    });
+    expect(lifecycleRejected.status).toBe(400);
+    expect(await lifecycleRejected.json()).toMatchObject({
+      error: "invalid_grant",
+      error_description: "The session token is invalid or expired.",
     });
 
     const unknownServer = await worker.fetch(

@@ -1,10 +1,15 @@
 import type { SemanticErrorCode } from "@mockos/contracts";
 import type { Clock, Rng } from "../determinism";
-import type { ApplicationRepository, UserRepository } from "../directory";
+import type { ApplicationRepository, UserRecord, UserRepository } from "../directory";
 import { hashSecret, randomId, verifyPkceS256 } from "../security";
 import type { SqlRow, SqlStore } from "../store";
 
 export interface CreateAuthorizationCodeInput {
+  /**
+   * A one-use Okta Authn session token already satisfied the user's configured
+   * Authn transaction. This does not elevate the assurance claims in tokens.
+   */
+  readonly authenticationMode?: "session_token";
   readonly clientId: string;
   readonly redirectUri: string;
   readonly userId: string;
@@ -124,17 +129,7 @@ export class AuthorizationCodeService {
     if (!application.redirectUris.includes(input.redirectUri)) {
       throw new OAuthError("BAD_REDIRECT_URI", "Redirect URI is not registered.");
     }
-    const user = this.#users.findById(input.userId);
-    if (!user) throw new OAuthError("INVALID_REQUEST", "User is unknown.");
-    if (!user.accountEnabled || user.softDeletedAt) {
-      throw new OAuthError("USER_DISABLED", "User account is disabled.");
-    }
-    if (user.passwordState === "expired") {
-      throw new OAuthError("PASSWORD_EXPIRED", "User password is expired.");
-    }
-    if (user.mfaState === "required") {
-      throw new OAuthError("MFA_REQUIRED", "Multi-factor authentication is required.");
-    }
+    const user = this.#requireAuthorizationUser(input);
     if (
       input.codeChallengeMethod !== "S256" ||
       !/^[A-Za-z0-9_-]{43}$/.test(input.codeChallenge)
@@ -151,12 +146,17 @@ export class AuthorizationCodeService {
     const code = randomId("code", this.#rng);
     const issuedAt = this.#clock.now();
     const expiresAt = new Date(issuedAt.getTime() + this.#lifetimeSeconds * 1_000);
+    const codeHash = await hashSecret(code);
+    const currentUser = this.#requireAuthorizationUser(input);
+    if (currentUser.resourceVersion !== user.resourceVersion) {
+      throw new OAuthError("INVALID_GRANT", "User state changed during authorization.");
+    }
     this.#store.run(
       `INSERT INTO oauth_codes (
         code_hash, client_id, redirect_uri, user_id, scope, code_challenge,
         code_challenge_method, nonce, issued_at, expires_at
       ) VALUES (?, ?, ?, ?, ?, ?, 'S256', ?, ?, ?)`,
-      await hashSecret(code),
+      codeHash,
       input.clientId,
       input.redirectUri,
       input.userId,
@@ -167,6 +167,21 @@ export class AuthorizationCodeService {
       expiresAt.toISOString()
     );
     return { code, expiresAt: expiresAt.toISOString() };
+  }
+
+  #requireAuthorizationUser(input: CreateAuthorizationCodeInput): UserRecord {
+    const user = this.#users.findById(input.userId);
+    if (!user) throw new OAuthError("INVALID_REQUEST", "User is unknown.");
+    if (!user.accountEnabled || user.softDeletedAt) {
+      throw new OAuthError("USER_DISABLED", "User account is disabled.");
+    }
+    if (user.passwordState === "expired") {
+      throw new OAuthError("PASSWORD_EXPIRED", "User password is expired.");
+    }
+    if (user.mfaState === "required" && input.authenticationMode !== "session_token") {
+      throw new OAuthError("MFA_REQUIRED", "Multi-factor authentication is required.");
+    }
+    return user;
   }
 
   async redeemAuthorizationCode(
