@@ -38,6 +38,7 @@ support, deployment, or provider-parity claim.
 | I want to… | Start here |
 | --- | --- |
 | Let an agent configure and test an integration | [MCP-first quickstart](./getting-started/mcp-first.md) |
+| Use the release-ready command line | [CLI quickstart](./getting-started/cli.md) |
 | Test an agent or MCP client against deterministic tools, resources, and prompts | [Environment-hosted mock MCP](./mock-mcp.md) |
 | Install a secret-free Salesforce-shaped six-tool MCP fixture | [Salesforce SObject Reads blueprint](./blueprints/salesforce-sobject-reads.md) |
 | Test an application against deterministic OpenAI model and JSON/SSE Chat Completions behavior | [OpenAI SDK quickstart](./quickstarts/openai-sdk.md) |
@@ -57,6 +58,7 @@ support, deployment, or provider-parity claim.
 ## Management and agent interfaces
 
 - [MCP-first quickstart](./getting-started/mcp-first.md)
+- [CLI quickstart](./getting-started/cli.md)
 - [Interface model](./concepts/interface-model.md)
 - [Management MCP behavior](./mcp.md)
 - [Generated 27-tool reference](./reference/management-tools.md)
@@ -66,7 +68,8 @@ support, deployment, or provider-parity claim.
 - [Machine-readable mock OpenAI provider manifest](./reference/mock-llm-openai.v1.json)
 - [Machine-readable mock Anthropic provider manifest](./reference/mock-llm-anthropic.v1.json)
 - [Self-hosted HTTP reference](./reference/self-hosted-http.md)
-- [Source-built CLI](../packages/cli/README.md)
+- [CLI quickstart and publication boundary](./getting-started/cli.md)
+- [Complete CLI reference](../packages/cli/README.md)
 - [Agent testing skill](./skill.md)
 
 The management MCP server at `/mcp` is the primary control interface. The current

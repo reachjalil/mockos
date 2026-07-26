@@ -70,7 +70,8 @@ and clean up. Start
 with the
 [MCP-first quickstart](./docs/getting-started/mcp-first.md) and use the
 [generated tool reference](./docs/reference/management-tools.md) for the exact
-registry in this source.
+registry in this source. The [CLI quickstart](./docs/getting-started/cli.md) records
+the exact npm publication boundary and the direct Cloud create/inspect/delete loop.
 
 Applications under test do not call management MCP. They connect to the OIDC, OAuth,
 SCIM, Graph-shaped, or Okta-shaped endpoints returned for an environment. The
@@ -224,9 +225,10 @@ private control plane, licensing, billing, or a hosted mockOS account.
   device client, plus Okta Auth JS 8.0.1 as an Okta public client. Both use MCP for
   setup, observation, lifecycle, and cleanup and traverse an owned local Wrangler
   HTTPS process; each named slice is D/I/S/X/Q evidence only
-- The unpublished `@mockos/cli` 0.1.0 source command surface, including
+- The release-ready `@mockos/cli` 0.1.0 source command surface, including
   `lifecycle simulate`, the M5 candidate's secret-safe `provision run`, and capability
-  negotiation
+  negotiation. The registry's historical 0.0.1 package has no executable; 0.1.0
+  publication remains pending
 - A tested M5 implementation for deterministic Entra/Okta outbound SCIM planning and
   interpretation, batched Cloudflare Workflow execution, bounded/redacted HTTP
   capture, SSRF policy enforcement, and environment-scoped target credentials; the
